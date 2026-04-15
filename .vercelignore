@@ -1,0 +1,13 @@
+# Solo sito statico in public/ — escludi modelli ML e cartelle non necessarie al deploy web
+GigiNLU_Transformer.mlpackage
+**/*.mlpackage
+**/*.mlmodel
+**/*.mlproj
+02_GIGI_APP
+01_SERVER_MDM
+00_DOCS
+web
+scripts
+gigi_labels.json
+**/.DS_Store
+**/*.ipa

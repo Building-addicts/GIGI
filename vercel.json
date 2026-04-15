@@ -1,0 +1,35 @@
+{
+  "headers": [
+    {
+      "source": "/(.*)\\.mobileconfig",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/x-apple-aspen-config"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"gigi_access_pro.mobileconfig\""
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.plist",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/xml; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.ipa",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/octet-stream"
+        }
+      ]
+    }
+  ]
+}

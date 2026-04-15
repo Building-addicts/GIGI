@@ -1,0 +1,6 @@
+.vercel
+.DS_Store
+**/xcuserdata/
+*.xcuserstate
+**/DerivedData/
+.swiftpm/

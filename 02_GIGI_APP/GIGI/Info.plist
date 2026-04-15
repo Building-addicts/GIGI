@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignIn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.828342254195-dnrgigjogy3veckt6ef177baie3vdrek</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>spotify</string>
+		<string>instagram</string>
+		<string>whatsapp</string>
+		<string>telegram</string>
+		<string>tg</string>
+		<string>maps</string>
+		<string>googlemaps</string>
+		<string>comgooglemaps</string>
+		<string>waze</string>
+		<string>uber</string>
+		<string>lyft</string>
+		<string>doordash</string>
+		<string>ubereats</string>
+		<string>youtube</string>
+		<string>tiktok</string>
+		<string>twitter</string>
+		<string>fb</string>
+		<string>snapchat</string>
+		<string>linkedin</string>
+		<string>reddit</string>
+		<string>netflix</string>
+		<string>nflx</string>
+		<string>googlechrome</string>
+		<string>googlegmail</string>
+		<string>photos-redirect</string>
+		<string>camera</string>
+		<string>facetime</string>
+		<string>music</string>
+		<string>podcasts</string>
+		<string>clock-alarm</string>
+		<string>calshow</string>
+		<string>mobilenotes</string>
+		<string>x-apple-reminderkit</string>
+		<string>message</string>
+		<string>weather</string>
+		<string>applenews</string>
+		<string>x-apple-health</string>
+		<string>x-apple-fitness</string>
+		<string>shoebox</string>
+		<string>shareddocuments</string>
+		<string>shortcuts</string>
+		<string>translate</string>
+		<string>shazam</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>voip</string>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GIGI needs screen capture for automatic actions</string>
+	<key>NSSiriUsageDescription</key>
+	<string>GIGi usa Siri per inviare messaggi e chiamare i tuoi contatti automaticamente.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.killsiri.GIGI.call</string>
+	</array>
+</dict>
+</plist>
