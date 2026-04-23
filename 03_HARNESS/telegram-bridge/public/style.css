@@ -1,0 +1,78 @@
+:root{
+  --bg:#0a0e14; --panel:#121822; --card:#1a2230; --border:#2a3447;
+  --text:#d8dfe8; --sub:#7e8a9c; --accent:#5eb1ff; --ok:#22c55e;
+  --err:#ef4444; --warn:#f59e0b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);
+  font-family:-apple-system,"Segoe UI",Roboto,Inter,sans-serif;font-size:14px}
+.app{max-width:1100px;margin:0 auto;padding:24px}
+
+header{display:flex;justify-content:space-between;align-items:center;
+  padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:20px;gap:16px;flex-wrap:wrap}
+.brand{display:flex;gap:14px;align-items:center}
+.logo{width:40px;height:40px;border-radius:10px;
+  background:linear-gradient(135deg,#5eb1ff,#22c55e)}
+h1{font-size:22px;font-weight:600}
+.sub{color:var(--sub);font-size:12px;display:block;margin-top:2px}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.status{padding:5px 12px;border-radius:999px;font-size:12px;
+  background:var(--card);border:1px solid var(--border)}
+.status.on{background:rgba(34,197,94,.15);color:var(--ok);border-color:rgba(34,197,94,.3)}
+.status.off{background:rgba(239,68,68,.15);color:var(--err);border-color:rgba(239,68,68,.3)}
+
+.btn{background:var(--card);color:var(--text);border:1px solid var(--border);
+  padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:.15s}
+.btn:hover{background:var(--border)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#06111f;font-weight:600}
+.btn.primary:hover{filter:brightness(1.1)}
+
+.tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--border)}
+.tab{background:transparent;border:none;color:var(--sub);padding:10px 16px;
+  cursor:pointer;font-size:13px;border-bottom:2px solid transparent;transition:.15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-color:var(--accent)}
+
+.panel{display:none}
+.panel.active{display:block}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
+.card h3{font-size:13px;color:var(--sub);font-weight:500;
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.stat{font-size:28px;font-weight:600}
+.stat.err{color:var(--err)}
+
+label{display:block;font-size:12px;color:var(--sub);margin:12px 0 6px}
+input,textarea,select{width:100%;background:var(--panel);color:var(--text);
+  border:1px solid var(--border);border-radius:8px;padding:9px 12px;
+  font-family:inherit;font-size:13px}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px;font-family:ui-monospace,Consolas,monospace}
+.row{display:flex;gap:12px;align-items:flex-end}
+.actions{margin-top:18px;display:flex;align-items:center;gap:14px}
+
+table.shortcuts{width:100%;margin-top:14px;border-collapse:collapse}
+table.shortcuts th,table.shortcuts td{
+  text-align:left;padding:10px;border-bottom:1px solid var(--border);font-size:13px}
+table.shortcuts th{color:var(--sub);font-weight:500;font-size:11px;text-transform:uppercase}
+table.shortcuts td code{background:var(--panel);padding:2px 8px;border-radius:4px;color:var(--accent)}
+.sc-del{background:transparent;border:none;color:var(--err);cursor:pointer;font-size:16px}
+.sc-del:hover{opacity:.7}
+
+pre#log-box{background:#050810;border:1px solid var(--border);border-radius:8px;
+  padding:14px;margin-top:12px;max-height:60vh;overflow:auto;
+  font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.55;
+  white-space:pre-wrap;word-break:break-all;color:#9fb0c8}
+
+.switch{position:relative;display:inline-block;width:52px;height:28px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:var(--border);
+  border-radius:999px;transition:.2s}
+.slider:before{position:absolute;content:"";height:22px;width:22px;left:3px;top:3px;
+  background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked + .slider{background:var(--ok)}
+.switch input:checked + .slider:before{transform:translateX(24px)}
+.switch input:disabled + .slider{opacity:.5;cursor:not-allowed}
+
+@media(max-width:720px){.grid{grid-template-columns:1fr}}

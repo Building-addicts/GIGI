@@ -1,0 +1,47 @@
+# === Segreti ===
+telegram-bridge/config.json
+telegram-bridge/.env
+.env
+.env.*
+!.env.example
+
+# === Dump browser MCP ===
+telegram-bridge/.playwright-mcp/
+.playwright-mcp/
+
+# === Profili Chrome (cookie, sessioni loggate, cronologia) ===
+browser-profile/
+browser-profile-slot1/
+browser-profile-slot2/
+
+# === Dipendenze ===
+node_modules/
+
+# === Modelli e binari pesanti ===
+telegram-bridge/whisper-models/
+
+# === Stato runtime / log ===
+telegram-bridge/logs/
+*.log
+*.log.err
+*.lock
+
+# === Output operativo ===
+downloads/
+screenshots/
+
+# === Memoria conversazioni private ===
+docs/memory/memory.md
+
+# === Sistema ===
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.swp
+.vscode/
+.idea/
+
+# === Lock file di processo ===
+bridge.lock
+panel.lock

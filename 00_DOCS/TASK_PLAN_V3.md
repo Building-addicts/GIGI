@@ -434,6 +434,62 @@
 
 ---
 
+## FASE 9 — Integrazione Harness (`03_HARNESS/`)
+
+Il sottosistema Node è stato assorbito nel repo GIGI. Vedi `ARCHITETTURA_V3.md` §9.BIS per contesto.
+
+### 9.0 — Git / layout
+
+- [x] **9.0.1** Rimuovere `.git` nested di `03_HARNESS/` (1 commit, in sync, zero lavoro locale) ✅
+- [x] **9.0.2** Aggiornare path refs stale (`Harness/` → `03_HARNESS/`) in docs harness ✅
+- [x] **9.0.3** Aggiungere sezione 9.BIS ad `ARCHITETTURA_V3.md` ✅
+- [x] **9.0.4** Aggiornare `INVENTARIO_COMPLETO.md` con contenuto harness ✅
+
+### 9.1 — Bootstrap Mac
+
+- [ ] **9.1.1** Creare `03_HARNESS/telegram-bridge/config.example.mac.json` con path Unix (`~/.local/bin/claude`, `/Applications/Google Chrome.app/...`)
+- [ ] **9.1.2** Creare `03_HARNESS/telegram-bridge/kill.sh` equivalente a `kill.ps1`
+- [ ] **9.1.3** Creare `03_HARNESS/telegram-bridge/start.sh` equivalente a `start.bat`
+- [ ] **9.1.4** `cd 03_HARNESS/telegram-bridge && npm install` — verifica zero errori
+- [ ] **9.1.5** `cd 03_HARNESS/browser-mcp && npm install` — verifica zero errori
+- [ ] **9.1.6** Smoke test: `node bridge.js` parte, panel raggiungibile `http://localhost:7777`
+
+### 9.2 — Decisione use case integrazione (BLOCCANTE)
+
+Prima di qualsiasi codice runtime: scegliere lo use case tra:
+- **A** Zero-code (repo/docs unificati, nessuna chiamata HTTP incrociata) — già coperto da 9.0
+- **B** Telegram-only (harness canale autonomo, iOS non lo chiama mai)
+- **C** Shared memory (`POST /api/memory/*` da iOS)
+- **D** Delegated browser (`POST /api/computer-use` da iOS — richiede restructure harness perché oggi usa CLI claude, non Anthropic SDK)
+- **E** Confirm push (harness → APNS → iOS)
+
+Task 9.3–9.5 sotto si attivano solo se C/D/E scelti. Se A o B: chiudere fase 9 qui.
+
+### 9.3 — (condizionale C/D/E) Spec API iOS ↔ Harness
+
+- [ ] **9.3.1** Scrivere `03_HARNESS/docs/api/ios-integration.md` (endpoint, payload, auth, errori)
+- [ ] **9.3.2** Validare spec con mapping 1:1 ai tool iOS coinvolti
+
+### 9.4 — (condizionale) Client iOS
+
+- [ ] **9.4.1** `GigiHarnessClient.swift` — HTTP via URLSession
+- [ ] **9.4.2** `HARNESS_BASE_URL` + secret da Keychain
+- [ ] **9.4.3** Aggiornare tool coinvolti (`GigiComputerUse` per D, `GigiMemory` per C, ecc.)
+
+### 9.5 — (condizionale) Endpoint server
+
+- [ ] **9.5.1** Estendere `panel-routes.js` con endpoint scelti
+- [ ] **9.5.2** Middleware auth Bearer
+- [ ] **9.5.3** Integrazione con browser-mcp (se D) / storage memoria (se C)
+
+### 9.6 — (condizionale) E2E test
+
+- [ ] **9.6.1** Scenario completo iOS → harness → risposta
+- [ ] **9.6.2** Latenza end-to-end
+- [ ] **9.6.3** Cleanup/no leak
+
+---
+
 ## Metriche di accettazione finale
 
 | Metrica | Target | Test |

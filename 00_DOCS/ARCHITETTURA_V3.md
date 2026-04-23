@@ -18,6 +18,7 @@
 7. [Layer audio — VAD, Live, Earcons, Ducking](#7-layer-audio--vad-live-earcons-ducking)
 8. [Web Automation — architettura ibrida](#8-web-automation--architettura-ibrida)
 9. [Backend: Claude Computer Use](#9-backend-claude-computer-use)
+9.BIS. [Harness — Implementazione layer Node](#9bis-harness--implementazione-layer-operativo-node)
 10. [Sicurezza e Trust (Confirm Mode + Keychain)](#10-sicurezza-e-trust-confirm-mode--keychain)
 11. [Memoria persistente — RAG locale e tipi](#11-memoria-persistente--rag-locale-e-tipi)
 12. [Conversazione multi-turn — token budget](#12-conversazione-multi-turn--token-budget)
@@ -795,6 +796,8 @@ func application(_ app: UIApplication, didReceiveRemoteNotification userInfo: [A
 ---
 
 ## 9. Backend: Claude Computer Use
+
+> **Nota**: questa sezione descrive un backend **Anthropic-SDK-diretto** (BullMQ + Redis, `anthropic.messages.create` con `computer_20241022` tool). Il sottosistema `03_HARNESS/` (§9.BIS) non è l'implementazione di questo backend — è infrastruttura adiacente che condivide il pool browser Chrome loggato. L'overlap funzionale è parziale.
 
 ### Stack
 
@@ -1708,6 +1711,70 @@ GIGI/
 | Battery (wake word 8h) | < 3% overhead | Instruments Energy |
 | Costo medio sessione Pro | < $0.30 | costEstimate aggregato |
 | Uptime backend Computer Use | > 99.5% | Monitoring server |
+
+---
+
+## 9.BIS. Harness — Sottosistema Node adiacente
+
+Il sottosistema `03_HARNESS/` è parte dell'architettura GIGI: repo unificato, docs condivise, browser pool condivisibile. **Non** è l'implementazione del backend di §9 (che userebbe Anthropic SDK + BullMQ). Harness invece:
+- Spawna il CLI `claude` (Claude Code) per gestire conversazioni Telegram, non chiama `anthropic.messages.create` direttamente
+- È costruito attorno a un flusso utente → Telegram → CLI Claude, non iOS → HTTP → browser
+- Condivide però il **pool browser Chrome loggato** (profile_dir + CDP port) che può essere riutilizzato da un eventuale backend §9 o dal `GigiWebAgent` iOS lato remoto
+
+Il ruolo nell'architettura GIGI complessiva è quindi:
+- **Canale alternativo** all'app iOS (Leonardo parla a GIGI via Telegram quando non ha l'iPhone in mano)
+- **Infrastruttura operativa** (watcher WhatsApp, memoria cross-session, browser loggati)
+- **Progettazione memoria futura** (`memory-upgrade/` — stack SOTA candidato per §11)
+
+L'integrazione runtime app iOS ↔ harness è **opzionale** e dipende da use case specifici da definire.
+
+### Struttura
+
+```
+03_HARNESS/
+├── telegram-bridge/      ← gateway Telegram ↔ Claude Code (porta 7777 panel)
+│   ├── bridge.js         ← processo principale
+│   ├── panel.js          ← HTTP server control panel
+│   ├── panel-routes.js   ← route HTTP del panel
+│   ├── bridge-rpc.js     ← RPC verso bridge
+│   ├── watchers.js/json  ← worker periodici (monitor WhatsApp, terminali remoti)
+│   └── transcribe.js     ← whisper.cpp per voice note Telegram
+├── browser-mcp/          ← server MCP pool browser Chrome loggati
+│   ├── server.js         ← MCP server Puppeteer
+│   └── server-playwright.js ← variante Playwright
+├── memory-upgrade/       ← progettazione nuovo sistema memoria (v4 + multi-user)
+└── docs/memory/          ← context.md + memory.md (stato statico + riassunti AI)
+```
+
+### Capability Harness
+
+| Capability | Componente | Stato runtime |
+|---|---|---|
+| Remote brain via Telegram | `bridge.js` | Attivo (CLI claude spawned per turno) |
+| Browser pool Chrome loggato | `browser-mcp/server.js` + profili | Attivo (3 istanze CDP 9224-26) |
+| Watcher autonomi (cron-like) | `watchers.js` | Attivo (es. leo-wa-terminal, tommy-wa-assistant) |
+| Voice note transcription | `transcribe.js` | Interno al bridge |
+| Progettazione memoria v4 | `memory-upgrade/` | Solo design, no codice |
+| Pannello controllo HTTP | `panel.js` + `panel-routes.js` | Porta 7777 localhost |
+
+### Integrazione app iOS ↔ Harness
+
+**Attualmente nessuna.** Zero chiamate HTTP incrociate. Opzioni future da decidere:
+- **Shared memory backend** — iOS `POST /api/memory/*` su harness (richiede spec + endpoint)
+- **Delegated browser tasks** — iOS `POST /api/computer-use` su harness per task che richiedono browser loggato (richiede restructure perché harness usa CLI claude, non Anthropic SDK diretto)
+- **Confirm push** — harness notifica iOS via APNS quando serve conferma utente (richiede entrambi: APNS + endpoint)
+- **Nessuna** — harness rimane canale parallelo autonomo, utente sceglie interfaccia (Telegram vs app)
+
+Decisione pendente. Quando definita → spec in `03_HARNESS/docs/api/ios-integration.md`.
+
+### Piattaforma
+
+Il codice harness è stato sviluppato originariamente su Windows 11 (path hardcoded in `config.example.json`, script `.bat`/`.ps1`). Per il deploy GIGI serve:
+- Config.example macOS/Linux parallelo
+- Script shell equivalenti a `kill.ps1`/`watchdog.ps1`
+- `claude` CLI Unix al posto di `claude.exe`
+
+Vedi `03_HARNESS/CLAUDE.md` per dettagli operativi e regole critiche (non killare il bridge, pool browser pre-loggati, watcher budget).
 
 ---
 

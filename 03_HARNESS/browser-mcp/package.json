@@ -1,0 +1,12 @@
+{
+  "name": "harness-browser-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "main": "server.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "playwright-core": "^1.59.1",
+    "puppeteer-core": "^23.0.0"
+  }
+}

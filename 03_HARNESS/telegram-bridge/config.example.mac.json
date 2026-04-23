@@ -1,0 +1,55 @@
+{
+  "telegram": {
+    "bot_token": "INSERISCI_IL_TUO_BOT_TOKEN_TELEGRAM",
+    "allowed_chat_ids": [
+      "INSERISCI_IL_TUO_CHAT_ID"
+    ]
+  },
+  "claude": {
+    "bin": "/Users/TUO_USER/.local/bin/claude",
+    "timeout_ms": 600000,
+    "session_timeout_minutes": 60,
+    "show_live_window": false,
+    "permission_mode": "bypassPermissions",
+    "model": "claude-opus-4-7",
+    "system_prompt": "Sei l'assistente operativo dell'utente, raggiungibile via Telegram, con pieno accesso al Mac.\n\nPersonalizza qui il system prompt per il tuo bot."
+  },
+  "shortcuts": {
+    "/status": "Esempio shortcut: dammi stato del sistema."
+  },
+  "ui": {
+    "port": 7777
+  },
+  "browser": {
+    "enabled": true,
+    "chrome_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "profile_dir": "/Users/TUO_USER/Desktop/GIGI-harness/03_HARNESS/browser-profile",
+    "cdp_port": 9224,
+    "visible": true,
+    "auto_restart": true,
+    "extra_args": [
+      "--no-first-run",
+      "--no-default-browser-check"
+    ],
+    "instances": [
+      {
+        "name": "main",
+        "profile_dir": "/Users/TUO_USER/Desktop/GIGI-harness/03_HARNESS/browser-profile",
+        "cdp_port": 9224,
+        "autostart": true
+      },
+      {
+        "name": "slot1",
+        "profile_dir": "/Users/TUO_USER/Desktop/GIGI-harness/03_HARNESS/browser-profile-slot1",
+        "cdp_port": 9225,
+        "autostart": true
+      },
+      {
+        "name": "slot2",
+        "profile_dir": "/Users/TUO_USER/Desktop/GIGI-harness/03_HARNESS/browser-profile-slot2",
+        "cdp_port": 9226,
+        "autostart": true
+      }
+    ]
+  }
+}
