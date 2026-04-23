@@ -47,16 +47,8 @@ final class GigiAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         GigiDebugLogger.log("APNS token ricevuto: \(token.prefix(16))…")
         Task { @MainActor in
-            guard GigiHarnessClient.shared.isConfigured else {
-                GigiDebugLogger.log("APNS: Harness non configurato — skip register")
-                return
-            }
-            let bundleId = Bundle.main.bundleIdentifier
-            let r = await GigiHarnessClient.shared.pushRegister(apnsToken: token, bundleId: bundleId)
-            switch r {
-            case .success: GigiDebugLogger.log("APNS: registrato su backend Harness")
-            case .failure(let e): GigiDebugLogger.log("APNS: register fallito — \(e)")
-            }
+            GigiAPNSSync.shared.setToken(token)
+            await GigiAPNSSync.shared.sync(reason: "token-received")
         }
     }
 

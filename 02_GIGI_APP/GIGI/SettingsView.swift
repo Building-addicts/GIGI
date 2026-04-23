@@ -394,6 +394,7 @@ struct SettingsView: View {
         case .success(let h): harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
         case .failure(let e): harnessStatus = "✗ \(e)"
         }
+        await GigiAPNSSync.shared.sync(reason: "config-changed")
         isTestingHarness = false
     }
 
