@@ -30,10 +30,12 @@ async function captureInstanceScreenshot(name, cdpPort) {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = path.join(__dirname, 'config.json');
-const LOG_FILE = path.join(__dirname, 'logs', 'bridge.log');
-const STATE_FILE = path.join(__dirname, 'logs', 'state.json');
+const LOGS_DIR = process.env.HARNESS_LOGS_DIR || path.join(__dirname, 'logs');
+const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, 'config.json');
+const LOG_FILE = path.join(LOGS_DIR, 'bridge.log');
+const STATE_FILE = path.join(LOGS_DIR, 'state.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
 const TASK_NAME = 'HarnessTelegramBridge';
 const STARTUP_DIR = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
 const STARTUP_FILE = path.join(STARTUP_DIR, 'HarnessBridge.vbs');
@@ -44,7 +46,7 @@ function autostartEnabled() {
 
 function enableAutostart() {
   const panelJs = path.join(__dirname, 'panel.js').replace(/\\/g, '\\\\');
-  const logFile = path.join(__dirname, 'logs', 'panel.log').replace(/\\/g, '\\\\');
+  const logFile = path.join(LOGS_DIR, 'panel.log').replace(/\\/g, '\\\\');
   const workDir = __dirname.replace(/\\/g, '\\\\');
   const vbs = `Set WshShell = CreateObject("WScript.Shell")\r\nWshShell.CurrentDirectory = "${workDir}"\r\nWshShell.Run "cmd /c node ""${panelJs}"" >> ""${logFile}"" 2>&1", 0, False\r\n`;
   fs.writeFileSync(STARTUP_FILE, vbs);
@@ -86,7 +88,7 @@ function findInstance(cfg, name) {
 
 function startTerminal() {
   if (termProc) return { ok: false, msg: 'già aperto' };
-  const logPath = path.join(__dirname, 'logs', 'bridge.log');
+  const logPath = path.join(LOGS_DIR, 'bridge.log');
   const psCmd = `$Host.UI.RawUI.WindowTitle='Harness — Live Bridge Log'; Write-Host 'Tail di bridge.log. Chiudi questa finestra per fermare il terminale live.' -ForegroundColor Cyan; Get-Content -Path '${logPath}' -Wait -Tail 30`;
   termProc = spawn('cmd.exe', ['/c', 'start', 'Harness Live Log', 'powershell.exe', '-NoProfile', '-NoExit', '-Command', psCmd], {
     detached: true, windowsHide: false, stdio: 'ignore'
@@ -194,7 +196,7 @@ async function chromeStatusAll() {
 
 function startBridge() {
   if (bridge) return { ok: false, msg: 'già attivo' };
-  bridge = spawn(process.execPath, [path.join(__dirname, 'bridge.js')], {
+  bridge = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
     cwd: __dirname,
     windowsHide: true,
     detached: false,

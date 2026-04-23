@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, '..', 'telegram-bridge', 'config.json');
+const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, '..', 'server', 'config.json');
 
 function loadInstances() {
   const result = new Map();
@@ -50,7 +50,7 @@ const browsers = new Map(); // name -> { browser, context }
 // Logica identica alla versione puppeteer.
 // ═══════════════════════════════════════════════════════════════════
 
-const LEASES_DIR = path.join(__dirname, '..', 'telegram-bridge', 'logs');
+const LEASES_DIR = process.env.HARNESS_LOGS_DIR || path.join(__dirname, '..', 'server', 'logs');
 const LEASES_FILE = path.join(LEASES_DIR, 'browser_leases.json');
 const LOCK_FILE = LEASES_FILE + '.lock';
 const LEASE_TTL_MS = 10 * 60 * 1000;

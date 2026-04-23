@@ -285,7 +285,7 @@ async function refreshWorkers() {
   const rlActive = data?.rate_limit_active || false;
   const rlUntil = data?.rate_limit_paused_until || null;
   if (!list.length) {
-    box.innerHTML = '<div class="sub">Nessun watcher configurato. Aggiungili in <code>telegram-bridge/watchers.json</code>.</div>';
+    box.innerHTML = '<div class="sub">Nessun watcher configurato. Aggiungili in <code>server/watchers.json</code>.</div>';
     return;
   }
   const rlBanner = rlActive && rlUntil

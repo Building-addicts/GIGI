@@ -9,11 +9,15 @@ import { startRpc } from './bridge-rpc.js';
 import { transcribeTelegramVoice, modelExists as whisperModelExists } from './transcribe.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = path.join(__dirname, 'config.json');
-const LOG_FILE = path.join(__dirname, 'logs', 'bridge.log');
-const STATE_FILE = path.join(__dirname, 'logs', 'state.json');
-const SESSIONS_FILE = path.join(__dirname, 'logs', 'sessions.json');
-const LOCK_FILE = path.join(__dirname, 'logs', 'bridge.lock');
+const LOGS_DIR = process.env.HARNESS_LOGS_DIR || LOGS_DIR;
+const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, 'config.json');
+const LOG_FILE = path.join(LOGS_DIR, 'bridge.log');
+const STATE_FILE = path.join(LOGS_DIR, 'state.json');
+const SESSIONS_FILE = path.join(LOGS_DIR, 'sessions.json');
+const LOCK_FILE = path.join(LOGS_DIR, 'bridge.lock');
+
+// Assicura LOGS_DIR esista prima del lockfile
+try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
 
 // Lock file: evita istanze duplicate
 (function acquireLock() {
@@ -197,10 +201,10 @@ async function deleteMessage(token, chatId, messageId) {
   try { return await tg(token, 'deleteMessage', { chat_id: chatId, message_id: messageId }); } catch { return null; }
 }
 
-const INTERRUPTED_FILE = path.join(__dirname, 'logs', 'interrupted.json');
-const REBOOT_FLAG_FILE = path.join(__dirname, 'logs', 'reboot_pending.json');
-const CHAT_MESSAGES_FILE = path.join(__dirname, 'logs', 'chat_messages.json');
-const TRANSCRIPTS_DIR = path.join(__dirname, 'logs', 'transcripts');
+const INTERRUPTED_FILE = path.join(LOGS_DIR, 'interrupted.json');
+const REBOOT_FLAG_FILE = path.join(LOGS_DIR, 'reboot_pending.json');
+const CHAT_MESSAGES_FILE = path.join(LOGS_DIR, 'chat_messages.json');
+const TRANSCRIPTS_DIR = path.join(LOGS_DIR, 'transcripts');
 
 try { fs.mkdirSync(TRANSCRIPTS_DIR, { recursive: true }); } catch {}
 
@@ -216,7 +220,7 @@ function claudeSessionJsonlPath(sessionId) {
 }
 
 // Copia (overwrite idempotente) il JSONL della sessione dentro logs/transcripts/<chatId>.jsonl.
-// Così lo storico completo viaggia con la cartella del bot anche se sposti telegram-bridge altrove
+// Così lo storico completo viaggia con la cartella del server anche se sposti 03_HARNESS altrove
 // o se ~/.claude/ viene ripulita.
 function mirrorTranscript(chatId, sessionId) {
   if (!chatId || !sessionId) return;
@@ -452,7 +456,7 @@ function resetLiveWindow() { liveWindowOpenedAt = 0; }
 function spawnClaude(cfg, args, onEvent, onSpawn) {
   const showLive = !!cfg.claude.show_live_window;
   const wantStream = showLive || typeof onEvent === 'function';
-  const runLog = path.join(__dirname, 'logs', 'current-run.log');
+  const runLog = path.join(LOGS_DIR, 'current-run.log');
 
   return new Promise((resolve) => {
     if (showLive) {
@@ -1357,7 +1361,7 @@ async function handleCallbackQuery(cfg, u) {
   }
   if (action === 'log' && id) {
     try {
-      const logPath = path.join(__dirname, 'logs', 'watchers.log');
+      const logPath = path.join(LOGS_DIR, 'watchers.log');
       const content = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean) : [];
       const lines = content.filter(l => l.includes(`[${id}]`));
       const groups = [];
@@ -1738,7 +1742,7 @@ async function handleUpdate(cfg, u, presetStatusMsgId = null) {
     const msg = mSay[2].trim();
     const list = watchers.getStatus().watchers;
     if (!list.some(w => w.id === id)) { await reply(`Watcher "${id}" non trovato.`); return; }
-    const instructionsFile = path.join(__dirname, 'logs', `${id}-instructions.md`);
+    const instructionsFile = path.join(LOGS_DIR, `${id}-instructions.md`);
     try {
       const stamp = new Date().toISOString();
       fs.appendFileSync(instructionsFile, `\n\n--- ${stamp} ---\n${msg}\n`);
@@ -1794,7 +1798,7 @@ async function handleUpdate(cfg, u, presetStatusMsgId = null) {
   if (mL) {
     const id = mL[1];
     try {
-      const logPath = path.join(__dirname, 'logs', 'watchers.log');
+      const logPath = path.join(LOGS_DIR, 'watchers.log');
       const content = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean) : [];
       const lines = id ? content.filter(l => l.includes(`[${id}]`)) : content;
       const groups = [];
@@ -1849,7 +1853,7 @@ async function handleUpdate(cfg, u, presetStatusMsgId = null) {
       await reply('Modalità live disattivata. Attivala dal panel (Configurazione → Finestra sessione Claude live).');
     } else {
       resetLiveWindow();
-      const runLog = path.join(__dirname, 'logs', 'current-run.log');
+      const runLog = path.join(LOGS_DIR, 'current-run.log');
       openLiveWindow(runLog);
       await reply('Finestra live riaperta.');
     }

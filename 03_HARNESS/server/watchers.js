@@ -8,10 +8,12 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WATCHERS_FILE = path.join(__dirname, 'watchers.json');
-const STATE_FILE = path.join(__dirname, 'logs', 'watchers_state.json');
-const RUNTIME_FILE = path.join(__dirname, 'logs', 'watchers_runtime.json');
-const LOG_FILE = path.join(__dirname, 'logs', 'watchers.log');
+const LOGS_DIR = process.env.HARNESS_LOGS_DIR || path.join(__dirname, 'logs');
+try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
+const WATCHERS_FILE = process.env.HARNESS_WATCHERS || path.join(__dirname, 'watchers.json');
+const STATE_FILE = path.join(LOGS_DIR, 'watchers_state.json');
+const RUNTIME_FILE = path.join(LOGS_DIR, 'watchers_runtime.json');
+const LOG_FILE = path.join(LOGS_DIR, 'watchers.log');
 
 const timers = new Map();     // id -> NodeJS.Timeout
 const running = new Map();    // id -> true se fire in corso
@@ -149,7 +151,7 @@ async function fireWatcher(w, cfg) {
 
   // Istruzioni one-shot iniettate via /watcher <id> say <testo>.
   // File append-only: accumula più istruzioni fino al prossimo fire, poi viene cancellato.
-  const instructionsFile = path.join(__dirname, 'logs', `${w.id}-instructions.md`);
+  const instructionsFile = path.join(LOGS_DIR, `${w.id}-instructions.md`);
   let injectedPrompt = w.prompt || '';
   try {
     if (fs.existsSync(instructionsFile)) {
@@ -280,7 +282,7 @@ async function fireWatcher(w, cfg) {
   // Debug log per-fire: se il fire è andato male (exitCode non 0 o empty), dump completo su file separato
   if (exitCode !== 0 || !resultText) {
     try {
-      const dbgPath = path.join(__dirname, 'logs', `watcher-${w.id}-debug.log`);
+      const dbgPath = path.join(LOGS_DIR, `watcher-${w.id}-debug.log`);
       const block = `\n\n═══ ${new Date().toISOString()} code=${exitCode} dur=${dur}ms ═══\n--- STDOUT (${stdout.length} bytes) ---\n${stdout.slice(0, 4000)}\n--- STDERR (${stderr.length} bytes) ---\n${stderr.slice(0, 4000)}\n`;
       fs.appendFileSync(dbgPath, block);
     } catch {}
