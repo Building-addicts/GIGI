@@ -7,57 +7,56 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5E7C00122F9B010000EC9B5 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E7C00102F9B010000EC9B5 /* AVFoundation.framework */; };
-		5E7C00132F9B010000EC9B5 /* CallKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E7C00112F9B010000EC9B5 /* CallKit.framework */; };
+		2524021E0C5E54DBA8C22459 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 60110DABFAEE1C020001D23D /* WidgetKit.framework */; };
+		36B909F0BE3E656E3FA32929 /* GIGIWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DB30B66E68F6172E8C220129 /* GIGIWidgetExtension.appex */; };
+		46754470277A6B755EBF14B0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A8BF2AB3264B944A9E5C6C57 /* Foundation.framework */; };
 		4EA05B712F8EA72A008954D8 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4EA05B702F8EA72A008954D8 /* UserNotifications.framework */; };
 		4ECB0A462F8D84C9009066DD /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 4ECB0A452F8D84C9009066DD /* GoogleSignIn */; };
-		4EDB520A2F8FA12E003DC578 /* Intents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4EDB52092F8FA12E003DC578 /* Intents.framework */; };
-		4EDB52112F8FA12E003DC578 /* GigiIntents.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4EDB52082F8FA12E003DC578 /* GigiIntents.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4ED54BE32F95D29100017360 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4ED54BE22F95D29000017360 /* ActivityKit.framework */; };
+		5E7C00122F9B010000EC9B5 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E7C00102F9B010000EC9B5 /* AVFoundation.framework */; };
+		5E7C00132F9B010000EC9B5 /* CallKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E7C00112F9B010000EC9B5 /* CallKit.framework */; };
+		DC17B58DA246025F140EE3FD /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4ED54BE22F95D29000017360 /* ActivityKit.framework */; };
+		FDF6DDFF243AFF312564E818 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BFB07C35C3B0F53A582C7B48 /* SwiftUI.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		4EDB520F2F8FA12E003DC578 /* PBXContainerItemProxy */ = {
+		8C18DDE1867C9C54F39602E9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4E4F37872F898626005EC9B5 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 4EDB52072F8FA12E003DC578;
-			remoteInfo = GigiIntents;
+			remoteGlobalIDString = E0D953023C4404E8BCF0FFEC;
+			remoteInfo = GIGIWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		4ECB0A112F8D17A0009066DD /* Embed Foundation Extensions */ = {
+		C47B86801E62B809D2033245 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				4EDB52112F8FA12E003DC578 /* GigiIntents.appex in Embed Foundation Extensions */,
+				36B909F0BE3E656E3FA32929 /* GIGIWidgetExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		4EDB52012F8F9272003DC578 /* Embed ExtensionKit Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
-			dstSubfolderSpec = 16;
-			files = (
-			);
-			name = "Embed ExtensionKit Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		5E7C00102F9B010000EC9B5 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
-		5E7C00112F9B010000EC9B5 /* CallKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CallKit.framework; path = System/Library/Frameworks/CallKit.framework; sourceTree = SDKROOT; };
 		4E4F378F2F898626005EC9B5 /* GIGI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GIGI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4EA05B702F8EA72A008954D8 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		4ECB09FF2F8D179F009066DD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		4ECB0A012F8D179F009066DD /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		4EDB52082F8FA12E003DC578 /* GigiIntents.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GigiIntents.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		4ED54BE22F95D29000017360 /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		4EDB52092F8FA12E003DC578 /* Intents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Intents.framework; path = System/Library/Frameworks/Intents.framework; sourceTree = SDKROOT; };
+		5E7C00102F9B010000EC9B5 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		5E7C00112F9B010000EC9B5 /* CallKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CallKit.framework; path = System/Library/Frameworks/CallKit.framework; sourceTree = SDKROOT; };
+		60110DABFAEE1C020001D23D /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
+		A8BF2AB3264B944A9E5C6C57 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		B5E4D3C22FAA4001005EC9B5 /* GIGIApp.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = GIGIApp.xcconfig; sourceTree = "<group>"; };
+		BFB07C35C3B0F53A582C7B48 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
+		DB30B66E68F6172E8C220129 /* GIGIWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GIGIWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -68,30 +67,41 @@
 			);
 			target = 4E4F378E2F898626005EC9B5 /* GIGI */;
 		};
-		4EDB52152F8FA12E003DC578 /* Exceptions for "GigiIntents" folder in "GigiIntents" target */ = {
+		E986A306AEC423D7F2A1553D /* Exceptions for "GIGIWidget" folder in "GIGIWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				AppIntent.swift,
+				GIGIWidget.swift,
+				GIGIWidgetControl.swift,
 				Info.plist,
 			);
-			target = 4EDB52072F8FA12E003DC578 /* GigiIntents */;
+			target = E0D953023C4404E8BCF0FFEC /* GIGIWidgetExtension */;
+		};
+		FA1B2C3D4E5F6A7B8C9D0E1F /* Exceptions for "GIGI" folder in "GIGIWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				GigiActivityAttributes.swift,
+			);
+			target = E0D953023C4404E8BCF0FFEC /* GIGIWidgetExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		012BB105FAE1C98CBC505CF5 /* GIGIWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E986A306AEC423D7F2A1553D /* Exceptions for "GIGIWidget" folder in "GIGIWidgetExtension" target */,
+			);
+			path = GIGIWidget;
+			sourceTree = "<group>";
+		};
 		4E4F37912F898626005EC9B5 /* GIGI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				4ECB09F92F8BE38A009066DD /* Exceptions for "GIGI" folder in "GIGI" target */,
+				FA1B2C3D4E5F6A7B8C9D0E1F /* Exceptions for "GIGI" folder in "GIGIWidgetExtension" target */,
 			);
 			path = GIGI;
-			sourceTree = "<group>";
-		};
-		4EDB520B2F8FA12E003DC578 /* GigiIntents */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				4EDB52152F8FA12E003DC578 /* Exceptions for "GigiIntents" folder in "GigiIntents" target */,
-			);
-			path = GigiIntents;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -108,11 +118,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		4EDB52052F8FA12E003DC578 /* Frameworks */ = {
+		AD2556093C92B6B22A5D08F1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4EDB520A2F8FA12E003DC578 /* Intents.framework in Frameworks */,
+				4ED54BE32F95D29100017360 /* ActivityKit.framework in Frameworks */,
+				46754470277A6B755EBF14B0 /* Foundation.framework in Frameworks */,
+				FDF6DDFF243AFF312564E818 /* SwiftUI.framework in Frameworks */,
+				2524021E0C5E54DBA8C22459 /* WidgetKit.framework in Frameworks */,
+				DC17B58DA246025F140EE3FD /* ActivityKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -122,8 +136,9 @@
 		4E4F37862F898626005EC9B5 = {
 			isa = PBXGroup;
 			children = (
+				B5E4D3C22FAA4001005EC9B5 /* GIGIApp.xcconfig */,
 				4E4F37912F898626005EC9B5 /* GIGI */,
-				4EDB520B2F8FA12E003DC578 /* GigiIntents */,
+				012BB105FAE1C98CBC505CF5 /* GIGIWidget */,
 				4E4F37A22F898FCA005EC9B5 /* Frameworks */,
 				4E4F37902F898626005EC9B5 /* Products */,
 			);
@@ -133,7 +148,7 @@
 			isa = PBXGroup;
 			children = (
 				4E4F378F2F898626005EC9B5 /* GIGI.app */,
-				4EDB52082F8FA12E003DC578 /* GigiIntents.appex */,
+				DB30B66E68F6172E8C220129 /* GIGIWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -141,14 +156,26 @@
 		4E4F37A22F898FCA005EC9B5 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				4ED54BE22F95D29000017360 /* ActivityKit.framework */,
 				5E7C00102F9B010000EC9B5 /* AVFoundation.framework */,
 				5E7C00112F9B010000EC9B5 /* CallKit.framework */,
 				4EA05B702F8EA72A008954D8 /* UserNotifications.framework */,
 				4ECB09FF2F8D179F009066DD /* WidgetKit.framework */,
 				4ECB0A012F8D179F009066DD /* SwiftUI.framework */,
 				4EDB52092F8FA12E003DC578 /* Intents.framework */,
+				DD18931633A8F0A536EF0B98 /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		DD18931633A8F0A536EF0B98 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				A8BF2AB3264B944A9E5C6C57 /* Foundation.framework */,
+				BFB07C35C3B0F53A582C7B48 /* SwiftUI.framework */,
+				60110DABFAEE1C020001D23D /* WidgetKit.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -161,13 +188,12 @@
 				4E4F378B2F898626005EC9B5 /* Sources */,
 				4E4F378C2F898626005EC9B5 /* Frameworks */,
 				4E4F378D2F898626005EC9B5 /* Resources */,
-				4ECB0A112F8D17A0009066DD /* Embed Foundation Extensions */,
-				4EDB52012F8F9272003DC578 /* Embed ExtensionKit Extensions */,
+				C47B86801E62B809D2033245 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				4EDB52102F8FA12E003DC578 /* PBXTargetDependency */,
+				829CA5356447410FD4D8312D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				4E4F37912F898626005EC9B5 /* GIGI */,
@@ -180,26 +206,24 @@
 			productReference = 4E4F378F2F898626005EC9B5 /* GIGI.app */;
 			productType = "com.apple.product-type.application";
 		};
-		4EDB52072F8FA12E003DC578 /* GigiIntents */ = {
+		E0D953023C4404E8BCF0FFEC /* GIGIWidgetExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 4EDB52122F8FA12E003DC578 /* Build configuration list for PBXNativeTarget "GigiIntents" */;
+			buildConfigurationList = B42CD089CB92E8FC2B29A1C3 /* Build configuration list for PBXNativeTarget "GIGIWidgetExtension" */;
 			buildPhases = (
-				4EDB52042F8FA12E003DC578 /* Sources */,
-				4EDB52052F8FA12E003DC578 /* Frameworks */,
-				4EDB52062F8FA12E003DC578 /* Resources */,
+				F43AE51CEB3107CEFB4BA6C7 /* Sources */,
+				AD2556093C92B6B22A5D08F1 /* Frameworks */,
+				6CF06479242127FDF4811187 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				4EDB520B2F8FA12E003DC578 /* GigiIntents */,
+				012BB105FAE1C98CBC505CF5 /* GIGIWidget */,
 			);
-			name = GigiIntents;
-			packageProductDependencies = (
-			);
-			productName = GigiIntents;
-			productReference = 4EDB52082F8FA12E003DC578 /* GigiIntents.appex */;
+			name = GIGIWidgetExtension;
+			productName = GIGIWidgetExtension;
+			productReference = DB30B66E68F6172E8C220129 /* GIGIWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -215,7 +239,7 @@
 					4E4F378E2F898626005EC9B5 = {
 						CreatedOnToolsVersion = 26.2;
 					};
-					4EDB52072F8FA12E003DC578 = {
+					E0D953023C4404E8BCF0FFEC = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -238,7 +262,7 @@
 			projectRoot = "";
 			targets = (
 				4E4F378E2F898626005EC9B5 /* GIGI */,
-				4EDB52072F8FA12E003DC578 /* GigiIntents */,
+				E0D953023C4404E8BCF0FFEC /* GIGIWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -251,7 +275,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		4EDB52062F8FA12E003DC578 /* Resources */ = {
+		6CF06479242127FDF4811187 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -268,7 +292,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		4EDB52042F8FA12E003DC578 /* Sources */ = {
+		F43AE51CEB3107CEFB4BA6C7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -278,10 +302,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		4EDB52102F8FA12E003DC578 /* PBXTargetDependency */ = {
+		829CA5356447410FD4D8312D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 4EDB52072F8FA12E003DC578 /* GigiIntents */;
-			targetProxy = 4EDB520F2F8FA12E003DC578 /* PBXContainerItemProxy */;
+			name = GIGIWidgetExtension;
+			target = E0D953023C4404E8BCF0FFEC /* GIGIWidgetExtension */;
+			targetProxy = 8C18DDE1867C9C54F39602E9 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -409,6 +434,7 @@
 		};
 		4E4F379B2F898627005EC9B5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B5E4D3C22FAA4001005EC9B5 /* GIGIApp.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -446,6 +472,7 @@
 		};
 		4E4F379C2F898627005EC9B5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B5E4D3C22FAA4001005EC9B5 /* GIGIApp.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -481,61 +508,66 @@
 			};
 			name = Release;
 		};
-		4EDB52132F8FA12E003DC578 /* Debug */ = {
+		570E627BE5939B6B2BA60116 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R5N92QSPQ6;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = GigiIntents/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = GigiIntents;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_FILE = GIGIWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.killsiri.GIGI.GigiIntents;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.killsiri.GIGI.GIGIWidgetExtension;
+				PRODUCT_NAME = GIGIWidgetExtension;
+				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		74830FF6763D228F928D7504 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R5N92QSPQ6;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GIGIWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.killsiri.GIGI.GIGIWidgetExtension;
+				PRODUCT_NAME = GIGIWidgetExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
-		};
-		4EDB52142F8FA12E003DC578 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R5N92QSPQ6;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = GigiIntents/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = GigiIntents;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.killsiri.GIGI.GigiIntents;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -558,11 +590,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		4EDB52122F8FA12E003DC578 /* Build configuration list for PBXNativeTarget "GigiIntents" */ = {
+		B42CD089CB92E8FC2B29A1C3 /* Build configuration list for PBXNativeTarget "GIGIWidgetExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4EDB52132F8FA12E003DC578 /* Debug */,
-				4EDB52142F8FA12E003DC578 /* Release */,
+				570E627BE5939B6B2BA60116 /* Release */,
+				74830FF6763D228F928D7504 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

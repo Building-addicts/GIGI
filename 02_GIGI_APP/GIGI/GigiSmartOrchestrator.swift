@@ -1,322 +1,317 @@
+import Combine
 import Foundation
 import SwiftUI
-import Combine
+import UIKit
 
 // MARK: - GigiSmartOrchestrator
-// Il vero cervello di GIGI — capisce linguaggio naturale,
-// deduce azioni implicite, esegue tutto in sequenza
+//
+// Conversation coordinator. Owns the high-level turn lifecycle:
+//   receive text → brain pipeline → TTS → action → reset
+//
+// Heavy logic lives in dedicated classes:
+//   GigiBrainPipeline    — 4-level AI response cascade
+//   GigiActionDispatcher — intent execution + realtime tool calls
+
 @MainActor
 class GigiSmartOrchestrator: ObservableObject {
     static let shared = GigiSmartOrchestrator()
 
-    @Published var status       = "GIGI: Ready"
-    @Published var lastResponse = ""
-    @Published var isListening  = false
-    @Published var isThinking   = false
-    @Published var executedActions: [String] = []
+    // MARK: - Published state
 
-    private let nlu        = GigiNLUEngine.shared
-    private let extractor  = GigiEntityExtractor.shared
-    private let implication = GigiImplicationEngine.shared
-    private let bridge     = GigiActionBridge.shared
-    private let dialogue   = GigiDialogueEngine.shared
+    @Published var status          = "GIGI: Ready"
+    @Published var isListening     = false
+    @Published var isThinking      = false
+    @Published var bannerMessage   = ""
+    @Published var showGatewayInstallPrompt = false
 
-    // Soglia confidenza per esecuzione diretta
-    private let directThreshold = 0.70
+    // MARK: - Dependencies
 
-    // MARK: - Entry point
-    func process(text: String) async {
-        guard !text.isEmpty else { return }
-        isListening  = false
-        isThinking   = true
-        status       = "GIGI: Understanding..."
-        executedActions = []
+    private let agentEngine  = GigiAgentEngine.shared
+    private let dispatcher   = GigiActionDispatcher.shared
+    private let speech       = GigiSpeechService.shared
+    private let memory       = GigiConversationMemory.shared
 
-        // ── Step 1: Classifica intent ──────────────────────────────────────
-        let intent = nlu.classify(text)
-        print("GIGI Smart: '\(text)' → \(intent.label) (\(Int(intent.confidence * 100))%)")
+    private var usingRealtimeMic   = false
+    private var pendingCallContact = ""
 
-        // ── Step 2: Estrai entità ──────────────────────────────────────────
-        let entities = extractor.extract(from: text)
-
-        // ── Step 3: Dialogo se necessario ─────────────────────────────────
-        if dialogue.isInDialogue {
-            let response = await dialogue.process(text: text, intent: intent)
-            await handleDialogueResponse(response)
-            isThinking = false
-            return
+    private init() {
+        GigiAudioManager.shared.onTranscription = { [weak self] text in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isListening = false
+                await self.process(text: text)
+            }
+        }
+        GigiAudioManager.shared.onSilenceDetected = { [weak self] in
+            Task { @MainActor [weak self] in self?.isListening = false }
+        }
+        GigiAudioManager.shared.onListeningFailed = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.stopMicCapture()
+                self.status     = "GIGI: Ready"
+                self.isThinking = false
+                GigiAudioManager.shared.startWakeWordListening()
+            }
+        }
+        GigiRealtimeEngine.shared.onStreamingUtteranceComplete = { [weak self] text in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isListening = false
+                await self.process(text: text)
+            }
         }
 
-        // ── Step 4: Domanda al cloud? ──────────────────────────────────────
-        if shouldAskCloud(text: text, intent: intent, entities: entities) {
-            isThinking = false
-            await GigiOrchestrator.shared.process(text: text)
-            return
+        // Barge-in: user spoke while Gemini Live was playing audio → stop TTS, listen
+        GigiRealtimeEngine.shared.onBargein = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.speech.stopSpeaking()
+                SoundEngine.play(.wakeWord)
+                self.isListening = true
+                self.status = "GIGI: Listening..."
+            }
         }
 
-        // ── Step 5: Azioni implicite dal contesto ──────────────────────────
-        let impliedActions = implication.inferActions(from: entities, intent: intent)
-
-        // ── Step 6: Costruisci piano di esecuzione ─────────────────────────
-        let plan = buildExecutionPlan(
-            primaryIntent: intent,
-            entities: entities,
-            impliedActions: impliedActions,
-            originalText: text
-        )
-
-        // ── Step 7: Esegui il piano ────────────────────────────────────────
-        await executePlan(plan, originalText: text)
-        isThinking = false
-    }
-
-    // MARK: - Costruisci piano
-    private func buildExecutionPlan(
-        primaryIntent: GigiIntent,
-        entities: GigiEntities,
-        impliedActions: [ImpliedAction],
-        originalText: String
-    ) -> [GigiIntent] {
-
-        var plan: [GigiIntent] = []
-
-        // Azione primaria
-        let primary = enrichIntent(primaryIntent, with: entities, text: originalText)
-        plan.append(primary)
-
-        // Azioni implicite → converti in GigiIntent
-        for implied in impliedActions {
-            let impliedIntent = GigiIntent(
-                label: implied.type,
-                confidence: 0.95,
-                params: implied.params
-            )
-            plan.append(impliedIntent)
-            print("GIGI Smart: Implied action → \(implied.type) [\(implied.reason)]")
-        }
-
-        return plan
-    }
-
-    // MARK: - Esegui piano
-    private func executePlan(_ plan: [GigiIntent], originalText: String) async {
-        var responses: [String] = []
-
-        for (index, intent) in plan.enumerated() {
-            status = index == 0
-                ? "GIGI: Executing..."
-                : "GIGI: Also doing \(intent.label.replacingOccurrences(of: "_", with: " "))..."
-
-            // Gestione dialogo per azioni che richiedono conferma
-            if requiresDialogue(intent) {
-                let response = await dialogue.process(text: originalText, intent: intent)
-                if case .execute(let execIntent) = response.action {
-                    let result = await bridge.execute(execIntent)
-                    if !result.isEmpty { responses.append(result) }
-                } else if case .askFollowUp(_) = response.action {
-                    // Interrompi il piano — aspetta risposta utente
-                    lastResponse = response.text
-                    GigiOrchestrator.shared.speak(response.text)
-                    executedActions = responses
-                    status = "GIGI: Waiting..."
-                    return
+        // Wire interim events from agent loop → status bar + sound/haptics
+        agentEngine.onInterimEvent = { [weak self] event in
+            guard let self else { return }
+            switch event {
+            case .thinking(let i):
+                if i > 0 {
+                    self.status = "GIGI: ancora un momento..."
+                    SoundEngine.play(.thinking)   // haptic-only pulse
                 }
-                continue
-            }
-
-            // Esegui direttamente
-            let result = await bridge.execute(intent)
-
-            if !result.isEmpty && result != "Connecting to AI..." {
-                responses.append(formatResult(result, for: intent))
-                executedActions.append(intent.label)
-            }
-
-            // Pausa tra azioni per non sovraccaricare iOS
-            if plan.count > 1 && index < plan.count - 1 {
-                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
+            case .toolStarted(let name):
+                self.status = "GIGI: \(self.toolCaption(name))..."
+                SoundEngine.impact(.light)
+            case .toolCompleted:
+                SoundEngine.impact(.soft)
+            case .waitingForConfirmation(let req):
+                self.status = "GIGI: in attesa di conferma..."
+                self.showBanner("⚠️ \(req.summary)", autoHideAfter: 5)
             }
         }
-
-        // Componi risposta finale
-        let finalResponse = composeFinalResponse(responses, plan: plan)
-        lastResponse = finalResponse
-        GigiOrchestrator.shared.speak(finalResponse)
-        status = "GIGI: Ready"
     }
 
-    // MARK: - Arricchisci intent con entità
-    private func enrichIntent(_ intent: GigiIntent, with entities: GigiEntities, text: String) -> GigiIntent {
-        var params = intent.params
-        params["raw"] = text
+    // MARK: - Gateway helpers
 
-        // Aggiungi contatto se trovato
-        if params["contact"] == nil, let contact = entities.contacts.first {
-            params["contact"] = contact
+    func refreshGatewayInstallPrompt() {
+        showGatewayInstallPrompt = !UserDefaults.standard.bool(forKey: GigiGateway.isInstalledUserDefaultsKey)
+    }
+    func markGatewayShortcutInstalled() {
+        UserDefaults.standard.set(true, forKey: GigiGateway.isInstalledUserDefaultsKey)
+        showGatewayInstallPrompt = false
+    }
+    func openGatewayShortcutDownloadPage() {
+        // Open Shortcuts app directly. The iCloud link is user-specific — guide them to
+        // create a shortcut named "GIGI_Gateway" that accepts text and runs a Phone call action.
+        let shortcutsApp = URL(string: "shortcuts://")!
+        if UIApplication.shared.canOpenURL(shortcutsApp) {
+            UIApplication.shared.open(shortcutsApp)
+            showBanner("Create a shortcut named \"GIGI_Gateway\" that accepts text input and calls the contact.", autoHideAfter: 6)
+        } else if let icloud = GigiGateway.iCloudDownloadURL {
+            UIApplication.shared.open(icloud)
         }
-
-        // Aggiungi data
-        if params["date"] == nil, let date = entities.dates.first {
-            params["date"] = date
-        }
-
-        // Aggiungi ora
-        if params["time"] == nil, let time = entities.times.first {
-            params["time"] = time
-        }
-
-        // Aggiungi app
-        if params["app"] == nil, let app = entities.apps.first {
-            params["app"] = app
-        }
-
-        // Aggiungi destinazione
-        if params["destination"] == nil, let place = entities.places.first {
-            params["destination"] = place
-        }
-
-        // Aggiungi titolo evento per calendario
-        if intent.label == "create_event" && params["title"] == nil {
-            let topic = entities.topics.first ?? "Event"
-            params["title"] = topic.capitalized
-        }
-
-        return GigiIntent(label: intent.label, confidence: intent.confidence, params: params)
+    }
+    func setPendingCallAction(contact: String, prompt: String) {
+        pendingCallContact = contact
     }
 
-    // MARK: - Deve andare al cloud?
-    private func shouldAskCloud(text: String, intent: GigiIntent, entities: GigiEntities) -> Bool {
-        // Domande fattuali → cloud
-        if intent.label == "ask_cloud" { return true }
-
-        let factualPatterns = [
-            "what happened", "who is", "what is", "explain",
-            "tell me about", "history of", "why did", "when did",
-            "how many", "what year", "who won", "what was",
-            "news about", "latest on", "what's the score"
-        ]
-        let lower = text.lowercased()
-        return factualPatterns.contains(where: { lower.contains($0) })
+    func showBanner(_ message: String, autoHideAfter seconds: Double = 2.5) {
+        bannerMessage = message
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if self?.bannerMessage == message { self?.bannerMessage = "" }
+        }
     }
 
-    // MARK: - Richiede dialogo?
-    private func requiresDialogue(_ intent: GigiIntent) -> Bool {
-        // Solo send_message senza body completo richiede dialogo
-        if intent.label == "send_message" {
-            let hasContact = !(intent.params["contact"]?.isEmpty ?? true)
-            let hasBody    = !(intent.params["body"]?.isEmpty ?? true)
-            let hasPlatform = !(intent.params["platform"]?.isEmpty ?? true)
-            return !hasContact || !hasBody || !hasPlatform
-        }
-        return false
-    }
+    // MARK: - Main entry point
 
-    // MARK: - Formatta risultato
-    private func formatResult(_ result: String, for intent: GigiIntent) -> String {
-        // Rimuovi risposte banali
-        let banalities = ["Done.", "Opening", "Got it"]
-        if banalities.contains(where: { result.hasPrefix($0) }) && result.count < 15 {
-            return ""
-        }
-        return result
-    }
+    func process(text: String) async {
+        isThinking = true
+        stopMicCapture()
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { isThinking = false; return }
 
-    // MARK: - Componi risposta finale intelligente
-    private func composeFinalResponse(_ responses: [String], plan: [GigiIntent]) -> String {
-        let filtered = responses.filter { !$0.isEmpty }
+        await GigiLiveActivityController.shared.transitionToThinking()
+        status = "GIGI: Sto pensando..."
 
-        if filtered.isEmpty {
-            return "Done."
-        }
+        // Update UI message list
+        memory.addUser(trimmed)
+        let thinkingID = memory.addThinking()
 
-        if filtered.count == 1 {
-            return filtered[0]
-        }
-
-        // Multiple azioni → risposta composta
-        let actionNames = plan.map { intentToReadable($0.label) }
-
-        if plan.count == 2 {
-            return "\(filtered[0]) I've also \(intentToVerb(plan[1].label))."
-        }
-
-        if plan.count == 3 {
-            return "\(filtered[0]) I've also set a reminder and an alarm for you."
-        }
-
-        // Più di 3 azioni
-        let count = plan.count
-        return "\(filtered[0]) Done \(count) things for you: \(actionNames.prefix(3).joined(separator: ", "))."
-    }
-
-    // MARK: - Gestisci risposta dialogo
-    private func handleDialogueResponse(_ response: DialogueResponse) async {
-        switch response.action {
-        case .execute(let intent):
-            if !response.text.isEmpty {
-                lastResponse = response.text
-                GigiOrchestrator.shared.speak(response.text)
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
-            if intent.label == "ask_cloud" {
-                await GigiOrchestrator.shared.process(text: intent.params["raw"] ?? "")
+        // --- Pending confirmation turn ---
+        // If a destructive/payment action is waiting for user approval, check intent.
+        // Tolerant: anything that isn't a clear "yes" cancels the confirm and processes normally.
+        if agentEngine.pendingConfirmRequest != nil {
+            if isConfirmation(trimmed) {
+                let result = await agentEngine.confirmAndContinue()
+                handleResult(result, thinkingID: thinkingID)
+                return
             } else {
-                let result = await bridge.execute(intent)
-                lastResponse = result
-                GigiOrchestrator.shared.speak(result)
+                agentEngine.cancelConfirmation()
+                // Fall through — treat as new request
             }
-        case .speak(let text):
-            lastResponse = text
-            GigiOrchestrator.shared.speak(text)
-        case .askFollowUp(let prompt):
-            let full = response.text.isEmpty ? prompt : response.text
-            lastResponse = full
-            GigiOrchestrator.shared.speak(full)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                GigiOrchestrator.shared.startListening()
-            }
-        case .none:
-            break
         }
-        status = "GIGI: Ready"
+
+        // Passively learn user profile data from natural speech (non-blocking)
+        Task { await GigiUserProfile.shared.learnFromText(trimmed) }
+
+        // --- V3 agent loop ---
+        let result = await agentEngine.process(text: trimmed)
+        handleResult(result, thinkingID: thinkingID)
     }
 
-    // MARK: - Helpers
-    private func intentToReadable(_ label: String) -> String {
-        let map: [String: String] = [
-            "create_event": "added event",
-            "set_alarm": "set alarm",
-            "set_reminder": "set reminder",
-            "set_timer": "started timer",
-            "make_call": "calling",
-            "send_message": "sending message",
-            "navigation": "navigation ready",
-            "open_app": "opened app",
-            "play_music": "playing music"
-        ]
-        return map[label] ?? label.replacingOccurrences(of: "_", with: " ")
+    // MARK: - Result handling (shared by normal turn + confirmation)
+
+    private func handleResult(_ result: AgentResult, thinkingID: UUID) {
+        // Memory order: UI update → speak (GigiAgentEngine already updated contentsArray)
+        memory.resolveThinking(id: thinkingID, with: result.speech)
+
+        if let confirm = result.requiresConfirm {
+            // Awaiting confirmation: speak summary, stay in "thinking" state until user replies
+            SoundEngine.play(.confirmRequired)
+            speech.speak(confirm.summary)
+            status = "GIGI: In attesa di conferma..."
+            isThinking = false
+            GigiAudioManager.shared.startWakeWordListening()
+            Task { await GigiLiveActivityController.shared.completeWithDone(message: "Conferma?") }
+            return
+        }
+
+        SoundEngine.play(result.isError ? .error : .taskDone)
+        speech.speak(result.speech)
+
+        let banner = result.speech.trimmingCharacters(in: .whitespacesAndNewlines)
+        finishTurn(message: banner.isEmpty ? "Fatto." : (banner.count <= 100 ? banner : String(banner.prefix(97)) + "…"))
     }
 
-    private func intentToVerb(_ label: String) -> String {
-        let map: [String: String] = [
-            "set_alarm": "set an alarm for you",
-            "set_reminder": "set a reminder",
-            "create_event": "added it to your calendar",
-            "navigation": "set up navigation",
-            "set_timer": "started a timer"
-        ]
-        return map[label] ?? "done \(label.replacingOccurrences(of: "_", with: " "))"
+    // MARK: - Confirmation detection
+
+    private func isConfirmation(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let yes: [String] = ["sì", "si", "ok", "okay", "vai", "procedi", "conferma",
+                             "yes", "sure", "go ahead", "do it", "absolutely"]
+        return yes.contains { lower.contains($0) }
     }
 
-    // MARK: - VAD passthrough
+    // MARK: - Tool caption (tool name → Italian UI string)
+
+    private func toolCaption(_ name: String) -> String {
+        switch name {
+        case "make_call":             return "Sto chiamando"
+        case "send_message",
+             "send_whatsapp":         return "Sto inviando il messaggio"
+        case "web_whatsapp":          return "Connessione a WhatsApp Web"
+        case "navigate":              return "Apro Maps"
+        case "play_music":            return "Cerco la musica"
+        case "set_reminder":          return "Imposto il promemoria"
+        case "create_event":          return "Aggiungo all'agenda"
+        case "set_alarm":             return "Imposto la sveglia"
+        case "set_timer":             return "Avvio il timer"
+        case "weather":               return "Controllo il meteo"
+        case "search_web",
+             "web_search_and_read":   return "Sto cercando online"
+        case "find_free_slot":        return "Guardo i tuoi impegni"
+        case "read_calendar",
+             "read_week_calendar":    return "Leggo il calendario"
+        case "web_book_restaurant":   return "Controllo disponibilità su TheFork"
+        case "web_order_food":        return "Apro Deliveroo"
+        case "computer_use":          return "Lavoro nel browser remoto"
+        case "homekit_on",
+             "homekit_off":           return "Controllo la luce"
+        case "homekit_scene":         return "Attivo la scena"
+        case "homekit_temp":          return "Regolo il termostato"
+        case "homekit_lock",
+             "homekit_unlock":        return "Agisco sulla serratura"
+        case "remember":              return "Salvo in memoria"
+        case "recall":                return "Cerco in memoria"
+        default:                      return "Sto lavorando"
+        }
+    }
+
+    // MARK: - Gemini Live tool execution (called by GigiRealtimeEngine)
+
+    func executeRealtimeToolCall(_ call: GigiToolCall) async -> String {
+        await dispatcher.executeRealtimeTool(call)
+    }
+
+    // MARK: - Listening control
+
     func startListening() {
-        GigiOrchestrator.shared.startListening()
+        GigiDebugLogger.log("startListening called")
+        speech.stopSpeaking()
         isListening = true
-        status = "GIGI: Listening..."
+        status      = "GIGI: Listening..."
+        usingRealtimeMic = false
+        GigiAudioManager.shared.startRecording()
+        Task { await GigiLiveActivityController.shared.beginListening() }
+    }
+
+    func stopMicCapture() {
+        speech.stopSpeaking()
+        isListening = false
+        GigiAudioManager.shared.stopRecording()
     }
 
     func stopListening() {
-        GigiOrchestrator.shared.stopListening()
-        isListening = false
+        stopMicCapture()
+        Task { await GigiLiveActivityController.shared.endImmediately() }
+    }
+
+    // MARK: - Helpers
+
+    private func finishTurn(message: String) {
+        status     = "GIGI: Ready"
+        isThinking = false
+        SoundEngine.releaseSession()   // un-duck Spotify / other apps
+        GigiAudioManager.shared.startWakeWordListening()
+        Task { await GigiLiveActivityController.shared.completeWithDone(message: message) }
+    }
+
+    /// Splits a text containing multiple sequential commands into individual parts.
+    /// Returns nil if only one command is detected (avoids false splits like "call mom and dad").
+    static func splitMultipleIntents(_ text: String) -> [String]? {
+        let lower = text.lowercased()
+
+        // Explicit sequential connectors — must separate two complete action phrases
+        let separators = [
+            ", and then ", " and then ", ", then ",
+            ", and also ", " and also ",
+            "; ", ", also ",
+        ]
+
+        var splitParts: [String] = []
+        for sep in separators {
+            if lower.contains(sep) {
+                splitParts = text.components(separatedBy: sep)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if splitParts.count >= 2 { break }
+            }
+        }
+
+        guard splitParts.count >= 2 else { return nil }
+
+        // Each part must look like an independent actionable command
+        let actionKeywords: [String] = [
+            "call", "text", "message", "send",
+            "play", "listen", "queue",
+            "navigate", "directions", "take me to",
+            "open", "launch",
+            "timer", "create event", "set a reminder",
+            "remind", "weather", "forecast",
+            "search", "google", "look up",
+            "alarm", "email", "read email",
+            "turn on", "turn off", "news",
+        ]
+
+        let validParts = splitParts.filter { part in
+            let pl = part.lowercased()
+            return actionKeywords.contains { pl.contains($0) }
+        }
+
+        return validParts.count >= 2 ? validParts : nil
     }
 }

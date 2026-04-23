@@ -1,0 +1,1740 @@
+# GIGI v3 — Architettura "True Agent"
+### Paper tecnico completo — Aprile 2026 (rev. 2 — peer reviewed)
+
+> **Paradigma v3**: GIGI non è un command parser. È un agente AI che ragiona, pianifica,
+> chiama tool, vede i risultati, e decide autonomamente il passo successivo — esattamente
+> come un essere umano con accesso illimitato a tutti i tuoi dispositivi, app, e servizi web.
+
+---
+
+## Indice
+
+1. [Visione e obiettivo](#1-visione-e-obiettivo)
+2. [Perché la v2 non basta](#2-perche-la-v2-non-basta)
+3. [Il cuore del cambiamento: l'Agent Loop](#3-il-cuore-del-cambiamento-lagent-loop)
+4. [Stack tecnologico completo](#4-stack-tecnologico-completo)
+5. [GigiAgentEngine — il cervello](#5-gigiagentengine--il-cervello)
+6. [GigiToolRegistry — i 38 tool](#6-gigitoolregistry--i-38-tool)
+7. [Layer audio — VAD, Live, Earcons, Ducking](#7-layer-audio--vad-live-earcons-ducking)
+8. [Web Automation — architettura ibrida](#8-web-automation--architettura-ibrida)
+9. [Backend: Claude Computer Use](#9-backend-claude-computer-use)
+10. [Sicurezza e Trust (Confirm Mode + Keychain)](#10-sicurezza-e-trust-confirm-mode--keychain)
+11. [Memoria persistente — RAG locale e tipi](#11-memoria-persistente--rag-locale-e-tipi)
+12. [Conversazione multi-turn — token budget](#12-conversazione-multi-turn--token-budget)
+13. [Gemini Live WebSocket — Barge-in e streaming](#13-gemini-live-websocket--barge-in-e-streaming)
+14. [Capability map completa](#14-capability-map-completa)
+15. [Flussi end-to-end — esempi reali](#15-flussi-end-to-end--esempi-reali)
+16. [Limiti iOS — workaround e deep link](#16-limiti-ios--workaround-e-deep-link)
+17. [Modello di costo e Freemium](#17-modello-di-costo-e-freemium)
+18. [Struttura file del progetto](#18-struttura-file-del-progetto)
+19. [Roadmap implementativa](#19-roadmap-implementativa)
+20. [Metriche di successo](#20-metriche-di-successo)
+
+---
+
+## 1. Visione e obiettivo
+
+**GIGI deve essere Jarvis. Non Siri.**
+
+| Capacità | Siri | GIGI v2 | GIGI v3 |
+|---|---|---|---|
+| "Chiama Marco" | ✅ con conferma | ✅ senza conferma | ✅ senza conferma |
+| "Manda WhatsApp a Marco" | ⚠️ apre app | ⚠️ apre app | ✅ manda senza tap |
+| "Prenota da Sakura stasera alle 8" | ❌ | ⚠️ tenta via web | ✅ prenota autonomamente |
+| "Ordinami una pizza" | ❌ | ⚠️ apre Deliveroo | ✅ naviga il sito e ordina (con confirm) |
+| "Trova slot domani mattina e invita Marco" | ❌ | ❌ | ✅ legge cal → trova → crea evento → manda invite |
+| Ricorda chi è Marco | ❌ | ✅ | ✅ + iniettato automaticamente nel contesto |
+| Mantiene contesto conversazione | ❌ | ⚠️ testo piatto | ✅ LLM multi-turn strutturato |
+| Concatena azioni autonomamente | ❌ | ⚠️ GigiPlanner limitato | ✅ agent loop con parallel execution |
+| Vede risultato tool → decide next step | ❌ | ❌ | ✅ functionResponse nel loop |
+| Conferma prima di spendere soldi | ❌ | ❌ | ✅ Confirm Mode obbligatorio |
+
+**Obiettivo quantitativo:**
+- Latenza voice-to-action: < 800ms per azioni native (local NLU), < 4s per REST, < 200ms per Live
+- Zero tap per il 99% dei comandi comuni (escluse conferme di pagamento — deliberate)
+- Contesto mantenuto per tutta la durata di una conversazione (budget: 8.000 token)
+- Costo medio per sessione: < $0.05 per comandi nativi, < $0.30 per web automation complessa
+
+---
+
+## 2. Perché la v2 non basta
+
+### Il problema fondamentale: one-shot NLU
+
+La v2 funziona così:
+
+```
+User speech → NLU (classifica intent) → 1 azione → esegui → parla
+```
+
+Questo ha tre problemi critici:
+
+**Problema 1: Nessun feedback loop**
+Dopo che un tool viene eseguito, il risultato non torna mai all'LLM. GIGI non
+sa se l'azione è riuscita, fallita, o ha prodotto un risultato che richiede
+un'azione successiva. Risponde sempre con il messaggio pre-programmato del bridge.
+
+**Problema 2: Nessun ragionamento multi-step autonomo**
+`GigiPlanner` esiste ma viene triggerato solo da parole chiave rigide ("organizza", "pianifica").
+Il piano è costruito prima dell'esecuzione — se un passo fallisce, non si adatta.
+→ **GigiPlanner è deprecato in v3.** L'intelligenza si sposta tutta in GigiAgentEngine.
+
+**Problema 3: History come testo piatto**
+```
+"--- Conversation history ---
+[User] chiama marco
+[GIGI] Calling Marco.
+Current message: e mandagli anche un messaggio"
+```
+Gemini non può ragionare su coreference ("lui", "lì", "quello") con la stessa
+potenza di un sistema che usa il formato nativo `contents[]` multi-turn.
+
+### La soluzione: Agent Loop con Gemini Function Calling nativo
+
+```
+User speech
+    → Gemini (con 38 tool dichiarati nativamente)
+         ↓ se functionCall (singolo o parallelo)
+      esegui tool(s) → risultato reale
+         ↓ functionResponse → Gemini vede il risultato
+      Gemini decide: altro tool? risposta finale?
+         ↓ se altro functionCall → loop (max 5 iterazioni)
+         ↓ se testo → TTS in streaming
+    → GIGI parla
+```
+
+---
+
+## 3. Il cuore del cambiamento: l'Agent Loop
+
+### Gemini Function Calling nativo
+
+Invece di parsare JSON da testo, si dichiarano i tool come schemi strutturati.
+Gemini risponde con `functionCall` formali, e si risponde con `functionResponse`.
+
+**Formato richiesta:**
+```json
+{
+  "contents": [
+    { "role": "user", "parts": [{ "text": "ordinami una pizza da Domino's" }] }
+  ],
+  "tools": [{
+    "functionDeclarations": [{
+      "name": "web_order_food",
+      "description": "Ordina cibo da un ristorante via web. USA SOLO se i tool nativi non bastano.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "restaurant": { "type": "string" },
+          "items":      { "type": "string" },
+          "platform":   { "type": "string", "enum": ["deliveroo","ubereats","doordash","grubhub","justeat","glovo","auto"] }
+        },
+        "required": ["restaurant"]
+      }
+    }]
+  }]
+}
+```
+
+**Risposta functionCall:**
+```json
+{ "candidates": [{ "content": { "role": "model",
+  "parts": [{ "functionCall": { "name": "web_order_food",
+    "args": { "restaurant": "Domino's", "platform": "deliveroo" } } }] } }] }
+```
+
+**Dopo esecuzione → functionResponse:**
+```json
+{ "contents": [
+    { "role": "user",  "parts": [{ "text": "ordinami una pizza da Domino's" }] },
+    { "role": "model", "parts": [{ "functionCall": { "name": "web_order_food", "args": {...} } }] },
+    { "role": "user",  "parts": [{ "functionResponse": { "name": "web_order_food",
+        "response": { "result": "CONFIRM_REQUIRED: Margherita €8.50 su Deliveroo. Procedo?" } } }] }
+] }
+```
+
+### Parallel Function Calling
+
+Gemini 2.0 Flash supporta l'emissione di **più functionCall nello stesso turno**.
+GigiAgentEngine le esegue tutte in parallelo con `TaskGroup`:
+
+```swift
+// Se Gemini emette 3 tool call nello stesso turno → TaskGroup
+let results = await withTaskGroup(of: ToolResult.self) { group in
+    for call in functionCalls {
+        group.addTask { await self.executeToolCall(call) }
+    }
+    return await group.reduce(into: []) { $0.append($1) }
+}
+// Tutti i risultati tornano a Gemini in un unico turno
+```
+
+**Esempio reale:** "Buonanotte Gigi" → Gemini chiama in parallelo:
+- `homekit_scene(scene: "Notte")`
+- `set_alarm(time: "7:30", date: "tomorrow")`
+- `media_play_pause()`
+
+Tutte e tre partono contemporaneamente → risultato in 1 secondo invece di 3.
+
+### Il loop con safety lock
+
+```swift
+func agentLoop(userText: String, history: [GigiContent]) async -> AgentResult {
+    var contents = history + [userContent(userText)]
+    var executedTools: [String] = []
+    let deadline = Date().addingTimeInterval(15.0)  // timeout globale
+
+    for iteration in 0..<5 {  // maxIterations = 5
+        guard Date() < deadline else { break }
+
+        let response = await callGeminiWithTools(contents: contents)
+
+        if let calls = response.functionCalls, !calls.isEmpty {
+            // Feedback aptico/sonoro ogni iterazione
+            emitCognitiveConfirmation(iteration: iteration)
+
+            // Esecuzione parallela
+            let results = await executeParallel(calls)
+            executedTools.append(contentsOf: calls.map(\.name))
+
+            // Controlla se qualcuno richiede conferma pagamento
+            if let confirmNeeded = results.first(where: { $0.requiresConfirm }) {
+                return .pendingConfirmation(confirmNeeded)
+            }
+
+            contents.append(modelContent(calls: calls))
+            contents.append(toolResultsContent(results))
+
+        } else if let text = response.text {
+            return AgentResult(speech: text, tools: executedTools, followUp: response.followUp)
+        } else {
+            break
+        }
+    }
+
+    // Safety lock: superato maxIterations
+    return AgentResult(
+        speech: "Sto avendo difficoltà con questo compito — vuoi che provi in un altro modo?",
+        tools: executedTools, followUp: false
+    )
+}
+```
+
+### Meta-classifier: tool routing efficiente
+
+Con 38 tool, mandare tutti gli schemi ogni volta costa troppo in token.
+Un **Meta-classifier locale** (CoreML o regex leggero) seleziona i **10 tool più probabili**
+per la richiesta dell'utente prima di chiamare Gemini:
+
+```swift
+func selectRelevantTools(for text: String) -> [FunctionDeclaration] {
+    let lower = text.lowercased()
+    var selected: [FunctionDeclaration] = []
+
+    // Sempre inclusi (basso costo, alta frequenza)
+    selected += [.makeCall, .sendMessage, .askTime, .askDate, .weather]
+
+    // Aggiungi per categoria rilevata
+    if lower.contains("music") || lower.contains("play") || lower.contains("spotify") {
+        selected += [.playMusic, .mediaPlayPause, .mediaNext]
+    }
+    if lower.contains("order") || lower.contains("pizza") || lower.contains("food") {
+        selected += [.webOrderFood, .computerUse]
+    }
+    if lower.contains("calendar") || lower.contains("meeting") || lower.contains("slot") {
+        selected += [.readCalendar, .readWeekCalendar, .findFreeSlot, .createEvent]
+    }
+    if lower.contains("home") || lower.contains("light") || lower.contains("goodnight") {
+        selected += [.homekitOn, .homekitOff, .homekitScene]
+    }
+    // ... altri cluster
+
+    return Array(Set(selected)).prefix(10).map { $0 }
+}
+```
+
+### Streaming della risposta finale
+
+Invece di aspettare il testo completo da Gemini, **inizia lo streaming verso TTS**
+non appena arrivano i primi token. L'utente sente GIGI che parla mentre ancora
+"pensa" le ultime parole:
+
+```swift
+// Gemini REST supporta streaming via SSE
+// GigiSpeechService.streamSpeak() accumula token e li pronuncia a chunk
+func handleStreamingResponse(_ stream: AsyncThrowingStream<String, Error>) async {
+    var buffer = ""
+    for try await token in stream {
+        buffer += token
+        if let boundary = findSentenceBoundary(in: buffer) {
+            let sentence = String(buffer[..<boundary])
+            buffer = String(buffer[boundary...])
+            speech.streamSpeak(sentence)
+        }
+    }
+    if !buffer.isEmpty { speech.streamSpeak(buffer) }
+}
+```
+
+### Context Caching (Gemini)
+
+La definizione dei 38 tool e il system prompt di GIGI sono **identici in ogni chiamata**.
+Gemini supporta il **Context Caching**: si "congela" questa parte nel database Google,
+pagando molto meno per i token di input ricorrenti e riducendo il TTFT:
+
+```swift
+// Setup (una volta per sessione)
+let cacheId = await cloud.createContextCache(
+    systemPrompt: GigiFoundationAgent.systemPrompt,
+    tools: GigiToolRegistry.all
+)
+
+// Ogni chiamata usa il cache_id invece di ritrasmettere tutto
+await cloud.callWithFunctions(
+    contents: contents,
+    cacheId: cacheId   // risparmia ~3000 token per chiamata
+)
+```
+
+---
+
+## 4. Stack tecnologico completo
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                               UTENTE                                         │
+│                    Voce naturale in qualsiasi lingua                         │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    LAYER AUDIO (GigiAudioManager)                            │
+│                                                                               │
+│   idle ←→ wakeWordListening ←→ recording ←→ speaking                        │
+│                                                                               │
+│   Porcupine (on-device wake word "Hey GIGI", multi-intonazione)             │
+│   GigiVADEngine (VAD + SFSpeechRecognizer Locale.current, Dynamic Silence)  │
+│   GigiRealtimeEngine (Gemini Live WebSocket — full-duplex, barge-in)        │
+│   GigiSpeechService (AVSpeechSynthesizer + streaming TTS)                   │
+│   Earcons (blip per wake/done/error) + Audio Ducking                        │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │ testo trascritto
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    GIGI AGENT ENGINE — CUORE V3                              │
+│                                                                               │
+│   Meta-classifier locale → seleziona 10 tool rilevanti                      │
+│   Gemini 2.0 Flash + Function Calling nativo (Context Cache)                │
+│   Agent loop: tool_call(s) → executeParallel → tool_result(s) → loop       │
+│   Parallel execution: TaskGroup per functionCall multipli                    │
+│   Safety lock: maxIterations = 5, globalTimeout = 15s                       │
+│   Confirm Mode: blocca su pagamento, attende "Sì" vocale                    │
+│   Streaming response: token → TTS in pipeline                               │
+│   Interim Thoughts: feedback aptico/sonoro ogni iterazione                  │
+│                                                                               │
+│   Fallback: L1 Apple Foundation Models → L2 Gemini REST → L3 NLU locale    │
+└─────────┬──────────────────────────────────────┬───────────────────────────┘
+          │                                       │
+   tool call nativo                        tool call web
+          │                                       │
+          ▼                                       ▼
+┌────────────────────────┐        ┌──────────────────────────────────────────┐
+│   DEVICE EXECUTOR       │        │          WEB AUTOMATION LAYER            │
+│   GigiActionBridge      │        │                                          │
+│                         │        │  GigiWebAgent (on-device, WKWebView)     │
+│  • make_call (CallKit)  │        │  User-Agent forzato Desktop              │
+│  • send_message         │        │  → WhatsApp Web (sessione cookie)        │
+│  • navigate (Maps)      │        │  → TheFork / OpenTable / Resy            │
+│  • play_music           │        │  → form semplici + scraping              │
+│  • set_reminder         │        │                                          │
+│  • create_event         │        │  GigiComputerUse (server-side)           │
+│  • set_alarm / timer    │        │  → POST /api/computer-use backend        │
+│  • open_app             │        │  → Claude claude-sonnet-4-6 Computer Use │
+│  • torch on/off         │        │  → Playwright headless Chromium          │
+│  • HomeKit devices      │        │  → Deliveroo / DoorDash / Grubhub       │
+│  • weather (wttr.in)    │        │  → UberEats / OpenTable / Resy           │
+│  • read/write calendar  │        │  → qualsiasi sito complesso              │
+│  • read_news            │        │  → Step finale: SEMPRE confirm_required  │
+│  • search_web           │        │                                          │
+│  • send_email           │        │  Async Mode: se task > 8s →             │
+│  • FaceTime             │        │  "Ci sto lavorando, ti avviso"          │
+│  • media controls       │        │  + Silent Push Notification al completamento │
+│  • find_free_slot       │        └──────────────────────────────────────────┘
+│  • remember / recall    │
+└────────────────────────┘        ┌──────────────────────────────────────────┐
+                                   │           MEMORIA PERSISTENTE            │
+                                   │           GigiMemory (CloudKit)          │
+                                   │                                          │
+                                   │  RAG locale: NaturalLanguage framework   │
+                                   │  → iniezione selettiva (max 5 record)    │
+                                   │  Namespace: contact, pref, place,        │
+                                   │    routine, context, profile, opinion     │
+                                   │  TTL su record context:                  │
+                                   │  Relazioni: wife, boss, dog_sitter       │
+                                   │  Memoria emotiva: opinion:               │
+                                   └──────────────────────────────────────────┘
+```
+
+---
+
+## 5. GigiAgentEngine — il cervello
+
+### Struttura principale
+
+```swift
+@MainActor
+final class GigiAgentEngine {
+    static let shared = GigiAgentEngine()
+
+    private let maxIterations = 5
+    private let globalTimeout: TimeInterval = 15.0
+
+    struct AgentResult {
+        let speech: String
+        let executedTools: [String]
+        let isFollowUp: Bool
+        let costEstimate: Double   // monitoraggio budget API
+        let requiresConfirm: ConfirmRequest?
+    }
+
+    struct ConfirmRequest {
+        let type: ConfirmType       // .payment, .destructive, .sensitive
+        let summary: String         // "Margherita €8.50 su Deliveroo"
+        let action: String          // tool name da eseguire dopo conferma
+        let args: [String: Any]
+    }
+
+    enum ConfirmType { case payment, destructive, sensitive }
+
+    func process(text: String) async -> AgentResult
+    func confirmAndContinue(_ request: ConfirmRequest) async -> AgentResult
+}
+```
+
+### GigiTool protocol — Dependency Injection
+
+Ogni tool è un oggetto che conforma a un protocollo, **non** un `switch-case` monolitico.
+Aggiungere un nuovo tool = creare un nuovo file, zero modifiche al motore:
+
+```swift
+protocol GigiTool {
+    var name: String { get }
+    var declaration: FunctionDeclaration { get }
+    var requiresConfirmation: Bool { get }
+    func execute(args: [String: Any]) async -> ToolResult
+}
+
+struct ToolResult {
+    let value: String
+    let requiresConfirm: ConfirmRequest?
+    let tokenEstimate: Int   // per budget tracking
+}
+
+// Esempio: tool nativo
+struct MakeCallTool: GigiTool {
+    let name = "make_call"
+    let requiresConfirmation = false
+    func execute(args: [String: Any]) async -> ToolResult {
+        let contact = args["contact"] as? String ?? ""
+        let result  = await GigiActionBridge.shared.execute(
+            GigiIntent(label: "make_call", confidence: 0.99, params: ["contact": contact])
+        )
+        return ToolResult(value: result, requiresConfirm: nil, tokenEstimate: 10)
+    }
+}
+
+// Esempio: tool con conferma obbligatoria
+struct WebOrderFoodTool: GigiTool {
+    let name = "web_order_food"
+    let requiresConfirmation = true   // sempre conferma prima di pagare
+    func execute(args: [String: Any]) async -> ToolResult { ... }
+}
+```
+
+### find_free_slot — Semantic Aware
+
+`find_free_slot` non passa tutti gli eventi a Gemini (troppi token).
+Gira un algoritmo Swift locale, e restituisce solo le opzioni disponibili
+filtrate per contesto semantico:
+
+```swift
+struct FindFreeSlotTool: GigiTool {
+    func execute(args: [String: Any]) async -> ToolResult {
+        let duration  = Int(args["duration"] as? String ?? "60") ?? 60
+        let preferred = args["preferred_time"] as? String ?? ""
+        let date      = args["date"] as? String ?? "today"
+        let context   = args["context"] as? String ?? ""  // "pranzo", "cena", "riunione"
+
+        // Fetch eventi (EventKit locale)
+        let events = await CalendarReader.fetchEvents(for: date)
+
+        // Filtro semantico: se "pranzo" → solo 12:00-14:30
+        let allowedRange = semanticRange(for: context, preferred: preferred)
+
+        // Trova gap
+        let slots = findGaps(in: events, duration: duration, range: allowedRange)
+
+        // Restituisce sommario compatto — non tutti gli eventi raw
+        let summary = slots.isEmpty
+            ? "Nessuno slot disponibile per \(date) in fascia \(allowedRange)."
+            : "Slot disponibili: " + slots.map(\.formatted).joined(separator: ", ")
+
+        return ToolResult(value: summary, requiresConfirm: nil, tokenEstimate: 30)
+    }
+
+    private func semanticRange(for context: String, preferred: String) -> TimeRange {
+        switch context.lowercased() {
+        case let s where s.contains("pranzo") || s.contains("lunch"):
+            return TimeRange(start: "12:00", end: "14:30")
+        case let s where s.contains("cena") || s.contains("dinner"):
+            return TimeRange(start: "19:00", end: "21:30")
+        case let s where s.contains("mattina") || s.contains("morning"):
+            return TimeRange(start: "08:00", end: "12:00")
+        default:
+            return TimeRange(start: preferred.isEmpty ? "09:00" : preferred, end: "18:00")
+        }
+    }
+}
+```
+
+### Interim Thoughts — feedback mentre il loop gira
+
+Se il loop supera i 3 secondi (tool web lento), l'Engine emette eventi
+che l'UI e il sistema audio raccolgono:
+
+```swift
+// Emesso ogni iterazione > 3s
+enum InterimEvent {
+    case thinking(iteration: Int)       // leggero ping audio + haptic
+    case toolStarted(name: String)      // "Sto navigando su Deliveroo..."
+    case toolCompleted(name: String, result: String)
+    case waitingForConfirmation(ConfirmRequest)
+}
+
+// GigiSmartOrchestrator reagisce:
+agentEngine.onInterimEvent = { event in
+    switch event {
+    case .thinking(let i) where i > 0:
+        HapticEngine.impact(.light)
+        SoundEngine.play(.cognitiveConfirmation)
+    case .toolStarted(let name):
+        orchestrator.status = "GIGI: \(caption(for: name))..."
+    default: break
+    }
+}
+```
+
+---
+
+## 6. GigiToolRegistry — i 38 tool
+
+### Tool nativi iOS
+
+| Tool | Parametri chiave | Note |
+|---|---|---|
+| `make_call` | `contact, contact_id?` | contact_id per disambiguazione |
+| `send_message` | `contact, body, platform, contact_id?` | iMessage/WhatsApp/SMS/Telegram |
+| `navigate` | `destination` | Maps |
+| `play_music` | `query, app` | MediaPlayer o Spotify deeplink |
+| `set_reminder` | `text, date, time` | Reminders |
+| `create_event` | `title, date, time, contact` | Calendar |
+| `set_alarm` | `time, date` | Clock |
+| `set_timer` | `duration` | "10 minuti", "un'ora e mezza" |
+| `open_app` | `app` | URL scheme |
+| `ask_time` | — | |
+| `ask_date` | — | |
+| `weather` | `location` | wttr.in |
+| `torch_on` / `torch_off` | — | AVCaptureDevice |
+| `facetime` / `facetime_audio` | `contact` | |
+| `media_play_pause` / `media_next` / `media_previous` | — | |
+| `read_calendar` | — | EventKit oggi |
+| `read_week_calendar` | — | EventKit settimana (solo sommario, non raw) |
+| `find_free_slot` | `duration, preferred_time, date, context` | Algoritmo locale semantic-aware |
+| `search_web` | `query` | Safari |
+| `read_news` | `query` | RSS + scraping |
+| `send_email` | `contact, subject, body` | mailto: |
+| `toggle_wifi` | — | → prefs:root=WIFI (deep link Settings) |
+| `toggle_bluetooth` | — | → prefs:root=Bluetooth |
+| `homekit_on` / `homekit_off` | `accessory` | HMHomeManager |
+| `homekit_dim` | `accessory, brightness` | |
+| `homekit_temp` | `temperature` | |
+| `homekit_scene` | `scene` | |
+| `remember` | `key, value` | CloudKit |
+| `recall` | `query` | CloudKit + RAG locale |
+| `search_groups` | `name` | Cerca tra gruppi WhatsApp/iMessage |
+
+### Tool web automation
+
+| Tool | Parametri chiave | Note |
+|---|---|---|
+| `web_whatsapp` | `contact, message` | WKWebView Desktop UA |
+| `web_book_restaurant` | `restaurant, time, guests, date, platform?` | TheFork, OpenTable, Resy (US) |
+| `web_order_food` | `restaurant, items, platform` | Deliveroo, UberEats, DoorDash, Grubhub |
+| `web_search_and_read` | `query` | Scraping Google + lettura risultati |
+| `computer_use` | `task` | **ULTIMA ISTANZA**: solo se tool sopra non bastano |
+
+### Nota su `computer_use`
+
+La descrizione nel registry deve essere esplicita:
+```
+"description": "Usa il backend con Claude per controllare il browser.
+IMPORTANTE: usa questo tool SOLO se web_whatsapp, web_book_restaurant e
+web_order_food non sono applicabili o hanno fallito. È il tool più lento
+e costoso (~$0.20 per esecuzione)."
+```
+
+### contact_id — disambiguazione
+
+Quando esistono più contatti con lo stesso nome (es. 2 "Marco"), Gemini non deve
+inventarsi quale. Usa il campo opzionale `contact_id`:
+
+```
+Giro 1: make_call { contact: "Marco" }
+functionResponse: { error: "multiple_matches", matches: [
+    { id: "contact:marco_fratello", name: "Marco (fratello)" },
+    { id: "contact:marco_ufficio",  name: "Marco (ufficio)" }
+]}
+
+Giro 2: Gemini genera: "Ho trovato due Marco, quale vuoi chiamare?"
+User: "quello dell'ufficio"
+Giro 3: make_call { contact: "Marco", contact_id: "contact:marco_ufficio" }
+```
+
+---
+
+## 7. Layer audio — VAD, Live, Earcons, Ducking
+
+### GigiAudioManager — state machine (invariata da v2.1)
+
+```
+idle → wakeWordListening → recording → speaking → idle
+```
+
+### Dynamic Silence — timeout adattivo
+
+Il silence timeout non è fisso. Si adatta alla lunghezza del comando rilevato:
+
+```swift
+private func adaptiveSilenceThreshold(for partialTranscript: String) -> TimeInterval {
+    let wordCount = partialTranscript.split(separator: " ").count
+    switch wordCount {
+    case 0...2:  return 0.8   // "Torcia on", "Pausa" — risposta istantanea
+    case 3...8:  return 1.2   // comando medio
+    default:     return 1.8   // dettatura lunga, email, note
+    }
+}
+```
+
+### CoreML Instant Commands — bypass Gemini
+
+Per comandi binari ad altissima frequenza, un **classifier CoreML locale** risponde
+in < 50ms **senza toccare Gemini**:
+
+```swift
+// Comandi che non richiedono ragionamento
+let instantCommands: [String: () -> Void] = [
+    "torch_on":         { TorchTool().executeSync() },
+    "torch_off":        { TorchTool().executeSync() },
+    "media_play_pause": { MediaTool().executeSync() },
+    "media_next":       { MediaTool().nextSync() },
+]
+
+// CoreML classifica prima di tutto il resto
+if let instant = localClassifier.classify(text), let action = instantCommands[instant] {
+    action()
+    return AgentResult(speech: "", executedTools: [instant], isFollowUp: false)
+}
+// Altrimenti → GigiAgentEngine
+```
+
+### Earcons — feedback sonoro minimalista
+
+Invece di voci per ogni stato, **suoni sintetici** (earcon) per massima efficienza:
+
+| Evento | Suono | Durata |
+|---|---|---|
+| Wake word rilevata | Blip ascendente (440→880Hz) | 120ms |
+| Task completato con successo | Doppio blip (do-mi) | 200ms |
+| Errore / riprova | Blip discendente (880→440Hz) | 180ms |
+| Thinking (loop iteration) | Leggero pulse ogni 2s | 80ms |
+| Confirm richiesto | Trillo breve | 300ms |
+
+```swift
+enum EarconEvent { case wakeWord, taskDone, error, thinking, confirmRequired }
+
+final class SoundEngine {
+    static func play(_ event: EarconEvent) {
+        // AVAudioEngine con buffer sintetizzato — no file audio, zero storage
+    }
+    static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        UIImpactFeedbackGenerator(style: style).impactOccurred()
+    }
+}
+```
+
+### Audio Ducking
+
+Quando GIGI ascolta, il volume delle altre app (Spotify, YouTube) si abbassa:
+
+```swift
+// AVAudioSession con ducking abilitato
+try session.setCategory(.playAndRecord,
+    mode: .voiceChat,
+    options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
+```
+
+### AirPods — .allowBluetooth
+
+Critico per il mercato americano: senza `allowBluetooth`, GIGI cerca di parlare
+dall'altoparlante del telefono mentre l'utente ha le AirPods:
+
+```swift
+options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
+```
+
+### Downsampling 44.1kHz → 16kHz per Gemini Live
+
+Il microfono iOS cattura a 44.1kHz (o 48kHz). Gemini Live richiede 16.000 Hz Mono Linear PCM:
+
+```swift
+private func downsample(_ buffer: AVAudioPCMBuffer) -> Data {
+    let targetFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
+                                     sampleRate: 16000, channels: 1, interleaved: true)!
+    let converter = AVAudioConverter(from: buffer.format, to: targetFormat)!
+    // ... AVAudioConverter.convert() → Data PCM 16kHz
+}
+```
+
+Se il sample rate è sbagliato, Gemini non capisce nulla o trascrive rumore.
+
+---
+
+## 8. Web Automation — architettura ibrida
+
+### Strategia a due livelli
+
+```
+Tool call richiede web automation
+            │
+            ├── Sito con selettori stabili (WhatsApp Web, TheFork, OpenTable, Resy)?
+            │        └─ YES → GigiWebAgent on-device (WKWebView + JS)
+            │
+            └── Sito complesso (Deliveroo, DoorDash, UberEats, form dinamici)?
+                         └─ YES → GigiComputerUse (backend + Claude claude-sonnet-4-6)
+```
+
+### GigiWebAgent — Desktop User-Agent obbligatorio
+
+WhatsApp Web su mobile reindirizza alla versione mobile che blocca l'automazione.
+Il WKWebView deve fingersi un browser macOS:
+
+```swift
+webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+```
+
+Lo stesso UA viene passato al backend Playwright per evitare l'invalidazione dei cookie
+legati all'User-Agent del browser.
+
+### GigiWebAgent — sessione persistente
+
+```swift
+final class GigiWebAgent {
+    // WKWebView hidden (1x1pt) attachato alla window principale
+    // Cookie store persistente → login WhatsApp/TheFork sopravvive ai riavvii
+    private let webView: WKWebView
+    private let persistentDataStore = WKWebsiteDataStore.default()
+
+    func sendWhatsApp(contact: String, message: String) async -> String {
+        try await navigate("https://web.whatsapp.com")
+        try await waitForElement("div[title='\(contact)']", timeout: 5)
+        try await click("div[title='\(contact)']")
+        try await waitForElement("div[contenteditable='true'][data-tab='10']")
+        try await type("div[contenteditable='true'][data-tab='10']", text: message)
+        try await click("button[aria-label='Invia']")
+        return "Messaggio inviato a \(contact)."
+    }
+}
+```
+
+### Async Mode — task lunghi in background
+
+Se un task web supera gli 8 secondi, GIGI libera la sessione audio e continua
+a lavorare in background:
+
+```swift
+// Se task_time > 8s
+speech.speak("Ci sto lavorando, ti avviso quando ho finito.")
+GigiAudioManager.shared.startWakeWordListening()
+
+// Il task continua via URLSession background
+let session = URLSession(configuration: .background(withIdentifier: "gigi.computeruse"))
+// ... completamento → Silent Push → app si risveglia → GIGI parla il risultato
+```
+
+### Silent Push Notification per completamento background
+
+```javascript
+// Backend Node.js: quando il task finisce
+await sendSilentPush(userId, {
+    "aps": { "content-available": 1 },
+    "gigi_result": { "task_id": "...", "result": "Ordine confermato. Arriva in 30 min." }
+});
+```
+
+```swift
+// App iOS: riceve silent push
+func application(_ app: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                 fetchCompletionHandler handler: @escaping (UIBackgroundFetchResult) -> Void) {
+    if let result = userInfo["gigi_result"] as? [String: String] {
+        speech.speak(result["result"] ?? "Task completato.")
+        handler(.newData)
+    }
+}
+```
+
+---
+
+## 9. Backend: Claude Computer Use
+
+### Stack
+
+- **Runtime**: Node.js 20+
+- **Browser automation**: Playwright (Chromium headless)
+- **AI**: Anthropic API — `claude-sonnet-4-6` (**non** Opus — più veloce, meno costoso, stessa precisione spaziale per Computer Use)
+- **Job queue**: BullMQ + Redis (limita istanze browser concorrenti, evita OOM)
+- **Screenshot**: ridimensionati a 1280×800 (fatturazione Anthropic per pixel)
+- **Cookie store**: cifrati AES-256, chiave in AWS Secrets Manager (mai hardcoded)
+
+### Endpoint principale
+
+```javascript
+// POST /api/computer-use
+app.post('/api/computer-use', authenticate, async (req, res) => {
+    const { task, context, userAgent } = req.body;
+
+    // Aggiungi alla job queue (max 5 browser contemporanei)
+    const job = await computerUseQueue.add('task', { task, context, userAgent, userId: req.userId });
+
+    // Se il client aspetta → attendi (max 60s)
+    // Se supera 8s → risponde subito con job_id, task continua in background
+    const result = await Promise.race([
+        job.waitUntilFinished(queueEvents),
+        new Promise(resolve => setTimeout(() => resolve({ async: true, jobId: job.id }), 8000))
+    ]);
+
+    if (result.async) {
+        res.json({ status: 'processing', jobId: result.jobId });
+    } else {
+        res.json(result);
+    }
+});
+```
+
+### Il loop Claude Computer Use
+
+```javascript
+async function runComputerUseLoop({ page, task, context, userId }) {
+    const messages = [{ role: 'user', content: task }];
+    const CONFIRM_STEP_KEYWORDS = ['checkout', 'place order', 'confirm', 'pay', 'submit'];
+
+    for (let step = 0; step < 20; step++) {
+        // Screenshot scalato a 1280x800 (risparmio token)
+        const screenshot = await page.screenshot({ type: 'jpeg', quality: 70 });
+        const base64 = screenshot.toString('base64');
+
+        const response = await anthropic.messages.create({
+            model: 'claude-sonnet-4-6',   // veloce, economico, ottimo per Computer Use
+            max_tokens: 1024,
+            tools: [{ type: 'computer_20241022', name: 'computer',
+                       display_width_px: 1280, display_height_px: 800 }],
+            messages: [...messages, {
+                role: 'user',
+                content: [{ type: 'image', source: { type: 'base64',
+                    media_type: 'image/jpeg', data: base64 } }]
+            }],
+            system: `Controlli un browser per conto di GIGI (iOS voice assistant).
+                     Task: ${task}. Contesto: ${JSON.stringify(context)}.
+                     REGOLE:
+                     - Se appare un pop-up di upselling, chiudilo e procedi.
+                     - NON cliccare mai "Checkout", "Place Order", "Confirm Order", "Pay" —
+                       fermati e restituisci CONFIRM_REQUIRED con il totale e i dettagli.
+                     - Se incontri un CAPTCHA complesso, restituisci REQUIRES_HUMAN_INTERVENTION.
+                     - Preferisci click precisi su coordinate, non scrivi JavaScript.`
+        });
+
+        const toolUse = response.content.find(b => b.type === 'tool_use');
+        if (toolUse) {
+            // Invia aggiornamento progress (WebSocket o polling)
+            await sendProgressUpdate(userId, `Step ${step + 1}: ${describeAction(toolUse.input)}`);
+            await executeComputerAction(page, toolUse.input);
+            messages.push({ role: 'assistant', content: response.content });
+            messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: 'done' }] });
+        }
+
+        const textBlock = response.content.find(b => b.type === 'text');
+        if (textBlock?.text?.startsWith('CONFIRM_REQUIRED:')) {
+            return { success: false, requiresConfirm: true, summary: textBlock.text };
+        }
+        if (textBlock?.text?.startsWith('REQUIRES_HUMAN_INTERVENTION')) {
+            return { success: false, requiresHuman: true };
+        }
+        if (textBlock || response.stop_reason === 'end_turn') {
+            return { success: true, result: textBlock?.text ?? 'Completato.' };
+        }
+    }
+
+    return { success: false, result: 'Non sono riuscito a completare il task in 20 step.' };
+}
+```
+
+### CAPTCHA handling
+
+```javascript
+// Quando Claude incontra un CAPTCHA:
+// Backend → risponde con requiresHuman: true
+// iOS → GigiWebAgent apre la stessa URL in WKWebView visibile
+// Utente risolve il CAPTCHA manualmente
+// iOS → notifica al backend → task riprende da dove era
+```
+
+### User-Agent passthrough
+
+```javascript
+// Riceve l'UA dall'iPhone e lo imposta su Playwright
+// Evita invalidazione cookie legata all'UA diverso
+await page.setUserAgent(req.body.userAgent);
+await page.context().addCookies(await getUserCookies(req.userId, req.body.userAgent));
+```
+
+### BullMQ job queue — limita RAM
+
+```javascript
+const computerUseQueue = new Queue('computer-use', { connection: redis });
+const worker = new Worker('computer-use', processJob, {
+    connection: redis,
+    concurrency: 5,      // max 5 browser contemporanei (ogni istanza ~600MB RAM)
+    lockDuration: 120000 // task timeout 2 min
+});
+// Con 5 worker: ~3GB RAM → server da 4GB è sufficiente per early launch
+// Scala orizzontalmente con più worker Docker su demand
+```
+
+---
+
+## 10. Sicurezza e Trust (Confirm Mode + Keychain)
+
+### Il principio: "Mai spendere senza consenso"
+
+Qualsiasi azione che coinvolge denaro, invio di messaggi a terzi, o operazioni
+distruttive richiede **conferma vocale esplicita** da GIGI prima dell'esecuzione.
+
+```
+Tool result: CONFIRM_REQUIRED: "Margherita €8.50 su Deliveroo. Procedo?"
+    ↓
+GigiSpeechService: "Ho preparato la margherita su Deliveroo, sono €8.50. Procedo?"
+GigiAudioManager: speaking → recording
+    ↓
+User: "Sì" / "Vai" / "Procedi"
+    ↓
+GigiAgentEngine.confirmAndContinue() → esegui step finale
+```
+
+### Confirm Mode — categorie
+
+| Tipo | Esempi | Richiede conferma |
+|---|---|---|
+| `.payment` | ordini cibo, prenotazioni a pagamento | ✅ sempre |
+| `.destructive` | cancella evento, elimina promemoria | ✅ sempre |
+| `.sensitive` | manda messaggio a gruppo, manda email | ✅ se > 1 destinatario |
+| `.standard` | chiama, naviga, timer, musica | ❌ no conferma |
+
+### Keychain per dati sensibili
+
+Le credenziali (token OAuth, cookie cifrati) non vanno mai nei log, mai in UserDefaults:
+
+```swift
+final class GigiKeychain {
+    static func save(key: String, value: Data) throws {
+        let query: [String: Any] = [
+            kSecClass as String:            kSecClassGenericPassword,
+            kSecAttrAccount as String:      key,
+            kSecValueData as String:        value,
+            kSecAttrAccessible as String:   kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+        // SecItemAdd / SecItemUpdate
+    }
+    static func load(key: String) throws -> Data { ... }
+}
+
+// Cookie backend cifrati: chiave AES generata on-device, salvata in Keychain
+// Solo l'utente (Face ID / passcode) può sbloccarli
+```
+
+### Privacy by design
+
+- Cookie web salvati **solo su Keychain** dell'iPhone — mai trasmessi a terzi
+- Log GIGI: no dati personali (contatti, messaggi) — solo intent label + timestamp
+- GigiMemory CloudKit: cifrato da Apple end-to-end (iCloud E2E encryption)
+- Backend: API key Anthropic/Gemini solo in variabili d'ambiente del server
+
+### Trust UX — onboarding USA
+
+Nel materiale di marketing e nell'onboarding, i limiti iOS diventano punti di forza:
+
+> *"GIGI è potente ma sicuro. Grazie alla protezione di iOS, non può accedere
+> alle notifiche delle altre app, al filesystem, o alle tue password — senza il tuo
+> permesso esplicito. I tuoi dati restano sul tuo iPhone e su iCloud personale."*
+
+---
+
+## 11. Memoria persistente — RAG locale e tipi
+
+### Tipi di record
+
+```swift
+struct GigiMemoryRecord: Codable {
+    var key: String             // "contact:Marco", "pref:ristorante", "opinion:attesa"
+    var value: String           // contenuto
+    var namespace: Namespace
+    var lastUsed: Date
+    var useCount: Int
+    var source: MemorySource    // .user (esplicito) | .inferred | .routine
+    var confidence: Float       // 1.0 per .user, 0.0–1.0 per .inferred
+    var expiresAt: Date?        // TTL per namespace context:
+    var embedding: [Float]?     // vettore per RAG locale
+}
+
+enum Namespace: String, Codable {
+    case contact    // "Marco = fratello, +39 333 1234567"
+    case pref       // "ristorante_cucina = giapponese"
+    case place      // "casa = Via Roma 5, Milano"
+    case routine    // "sveglia = 7:30, feriali"
+    case context    // "ultimo_ristorante = Sakura" (TTL: 7 giorni)
+    case profile    // "nome = Leonardo, lingua = italiano"
+    case opinion    // "odio_attesa = >10 minuti per un tavolo"
+    case relation   // "wife = Sarah, boss = Marco Bianchi, dog_sitter = Giulia"
+}
+```
+
+### Namespace `opinion:` — memoria emotiva
+
+```
+User: "Odio aspettare più di 10 minuti per un tavolo"
+→ GigiMemory.remember(key: "opinion:attesa_ristorante", value: "massimo 10 minuti")
+
+Successivamente, web_book_restaurant vede:
+→ memory injection: "opinion:attesa_ristorante = massimo 10 minuti"
+→ Gemini: filtra solo ristoranti con disponibilità immediata
+→ GIGI: "Ho trovato un tavolo alle 20:15 da Sakura — dicono che siano veloci!"
+```
+
+### Namespace `relation:` — relazioni personali (mercato USA)
+
+```
+User: "My wife is Sarah"
+→ relation:wife = "Sarah"
+
+User: "What's the number of my dog sitter?"
+→ recall { query: "dog_sitter" } → "Giulia, +39 333 0000000"
+
+User: "Text my mechanic that I'll pick up the car tomorrow"
+→ recall { query: "mechanic" } → "Franco, +39 333 1111111"
+→ send_message { contact: "Franco", body: "I'll pick up the car tomorrow" }
+```
+
+### RAG locale — iniezione selettiva
+
+Con 500+ record di memoria, iniettare tutto nel prompt è impossibile.
+Si usa il **NaturalLanguage framework** di Apple per una **vector search locale**:
+
+```swift
+final class GigiVectorStore {
+    private let embedder = NLEmbedding.wordEmbedding(for: .english)!
+
+    // Trova i K record più rilevanti per il testo corrente
+    func relevantMemories(for text: String, topK: Int = 5) -> [GigiMemoryRecord] {
+        let queryEmbedding = embed(text)
+        return allRecords
+            .map { ($0, cosineSimilarity(queryEmbedding, $0.embedding ?? [])) }
+            .sorted { $0.1 > $1.1 }
+            .prefix(topK)
+            .map(\.0)
+    }
+}
+
+// Injection nel system prompt: max 5 record
+let relevantMemories = vectorStore.relevantMemories(for: userText)
+let memoryBlock = relevantMemories.map { "- \($0.key) = \($0.value)" }.joined(separator: "\n")
+systemPrompt += "\nUser memory (relevant):\n\(memoryBlock)"
+```
+
+### Soft Confirmation per memorie inferite
+
+Quando `confidence < 0.7` → GIGI non usa la memoria silenziosamente, la valida:
+
+```swift
+if memory.source == .inferred && memory.confidence < 0.7 {
+    speech.speak("Ho notato che chiami spesso Marco verso le 18 — è il tuo contatto di lavoro?")
+    // Se utente conferma → memory.source = .user, memory.confidence = 1.0
+}
+```
+
+### TTL per record context:
+
+```swift
+// Record "ultimo_ristorante" scade dopo 7 giorni
+record.expiresAt = Date().addingTimeInterval(7 * 24 * 3600)
+
+// Cleanup automatico all'avvio
+func cleanup() {
+    allRecords.removeAll { r in r.expiresAt.map { $0 < Date() } ?? false }
+}
+```
+
+### CloudKit Sharing (futuro)
+
+```swift
+// Condividi namespace place:casa con membri della famiglia
+// Utile per smart home: tutta la famiglia usa GIGI con stesse posizioni
+cloudKit.shareRecord(key: "place:casa", with: [familyMemberRecordID])
+```
+
+### GigiConversationMemory — persistenza su disco
+
+La history della sessione viene salvata su disco. Se l'utente riapre l'app
+entro 30-60 minuti, GIGI riprende la conversazione dal punto giusto:
+
+```swift
+final class GigiConversationMemory {
+    private let sessionTimeout: TimeInterval = 3600  // 1 ora
+
+    func loadIfRecentSession() -> [GigiContent]? {
+        guard let saved = UserDefaults.standard.data(forKey: "gigi_session"),
+              let timestamp = UserDefaults.standard.object(forKey: "gigi_session_time") as? Date,
+              Date().timeIntervalSince(timestamp) < sessionTimeout
+        else { return nil }
+        return try? JSONDecoder().decode([GigiContent].self, from: saved)
+    }
+
+    func saveSession(_ contents: [GigiContent]) {
+        let data = try? JSONEncoder().encode(contents)
+        UserDefaults.standard.set(data, forKey: "gigi_session")
+        UserDefaults.standard.set(Date(), forKey: "gigi_session_time")
+    }
+}
+```
+
+---
+
+## 12. Conversazione multi-turn — token budget
+
+### Formato `contents[]` strutturato
+
+La v3 usa il formato nativo Gemini multi-turn invece del testo concatenato:
+
+```json
+[
+  { "role": "user",  "parts": [{ "text": "chiama Marco" }] },
+  { "role": "model", "parts": [{ "functionCall": { "name": "make_call", "args": { "contact": "Marco" } } }] },
+  { "role": "user",  "parts": [{ "functionResponse": { "name": "make_call",
+      "response": { "result": "Chiamata avviata a Marco (+39 333 1234567)." } } }] },
+  { "role": "model", "parts": [{ "text": "Calling Marco." }] },
+  { "role": "user",  "parts": [{ "text": "e mandagli anche un whatsapp che arrivo tardi" }] }
+]
+```
+
+Gemini vede esattamente cosa è stato fatto, con quali parametri, e con quale risultato.
+Coreference ("mandagli") viene risolta correttamente su "Marco" del turno precedente.
+
+### Token Budget — non contare i turni, conta i token
+
+Il limite non è "20 turni" ma **8.000 token di history** (bilanciamento costo/qualità):
+
+```swift
+final class GigiConversationMemory {
+    private let maxHistoryTokens = 8000
+
+    func contents(pruningIfNeeded: Bool = true) -> [GigiContent] {
+        guard pruningIfNeeded else { return allContents }
+
+        var totalTokens = 0
+        var result: [GigiContent] = []
+
+        // Scorri dalla fine (turni più recenti prima)
+        for content in allContents.reversed() {
+            let tokens = estimateTokens(content)
+            if totalTokens + tokens > maxHistoryTokens { break }
+            totalTokens += tokens
+            result.insert(content, at: 0)
+        }
+
+        // Se abbiamo tagliato, aggiungi un sommario dei turni precedenti
+        if result.count < allContents.count {
+            let summary = await summarizeOldTurns(allContents.dropLast(result.count))
+            result.insert(systemContent("Conversazione precedente (riassunto): \(summary)"), at: 0)
+        }
+
+        return result
+    }
+
+    // I functionResponse lunghi vengono troncati
+    private func truncateLongToolResults(_ content: GigiContent) -> GigiContent {
+        // functionResponse con > 500 chars → tronca + "[troncato per brevità]"
+    }
+}
+```
+
+### Context Switching — cambio di intenzione
+
+```
+User: "Chiama Marco."
+User: "Anzi no, mandagli un messaggio."
+User: "E aggiungi un appuntamento per domani con lui."
+```
+
+Il formato `contents[]` strutturato permette a Gemini di scorrere le `functionCall`
+precedenti e identificare l'ultimo oggetto "Contatto" manipolato.
+La coreference ("lui") viene risolta senza ambiguità perché ogni tool call
+contiene i parametri esatti usati.
+
+### Predictive Tool Pre-warming
+
+Se la conversazione sta chiaramente andando verso una prenotazione, l'Engine
+pre-carica in background le memorie di pagamento e preferenze rilevanti:
+
+```swift
+func predictNextTool(from history: [GigiContent]) -> [String]? {
+    let recentText = history.last?.text?.lowercased() ?? ""
+    if recentText.contains("ristoran") || recentText.contains("mangia") {
+        // Pre-load memorie pref:ristorante, opinion:attesa, place:casa
+        Task { await vectorStore.preload(namespaces: [.pref, .opinion, .place]) }
+        return ["web_book_restaurant", "web_order_food"]
+    }
+    return nil
+}
+```
+
+---
+
+## 13. Gemini Live WebSocket — Barge-in e streaming
+
+### Architettura Live
+
+```
+AVAudioEngine
+  │ PCM 16kHz (downsampled da 44.1kHz via AVAudioConverter)
+  ├─→ WebSocket (wss://generativelanguage.googleapis.com/ws/...)
+  │      │
+  │      ├─ Setup: system prompt + tool declarations + Context Cache ID
+  │      │
+  │      ├─ Audio chunks in streaming (non aspetta silenzio VAD)
+  │      │
+  │      └─ Risposta Gemini:
+  │           ├─ functionCall → GigiAgentEngine.executeToolCall()
+  │           │                     → functionResponse → WebSocket
+  │           └─ audio TTS → AVAudioPlayerNode (jitter buffer 80ms)
+```
+
+### Full-Duplex — Bypass VAD
+
+Con Live non si aspetta il silenzio. I pacchetti audio vengono inviati in streaming
+mentre l'utente parla. Gemini inizia a processare l'intent **mentre l'utente sta ancora parlando**.
+
+```swift
+// Input tap: invia ogni buffer direttamente al WebSocket
+inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+    guard let self else { return }
+    let pcm16 = self.downsample(buffer)  // 44.1kHz → 16kHz
+    self.websocket.send(.data(pcm16))
+    // Nessuna analisi VAD — Gemini decide da solo quando l'utente ha finito
+}
+```
+
+### Barge-in — Interruzione istantanea
+
+Se GIGI sta parlando e l'utente riprende a parlare, il WebSocket invia un evento
+di interruzione. Il sistema reagisce in < 100ms:
+
+```swift
+// GigiRealtimeEngine riceve evento interruzione dal WebSocket
+func handleServerContent(_ message: LiveMessage) {
+    if message.isInterruption {
+        // 1. Ferma audio output istantaneamente
+        audioPlayerNode.stop()
+        audioPlayerNode.reset()
+        pendingAudioBuffers.removeAll()
+
+        // 2. Aggiorna UI
+        GigiAudioManager.shared.transitionTo(.recording)
+
+        // 3. Segnala all'orchestrator
+        onBargein?()
+    }
+}
+```
+
+### AVAudioPlayerNode con jitter buffer
+
+Per evitare scatti nell'audio streaming in arrivo, un buffer di 80ms:
+
+```swift
+class StreamingAudioPlayer {
+    private let playerNode = AVAudioPlayerNode()
+    private var jitterBuffer: [AVAudioPCMBuffer] = []
+    private let minBufferMs: Double = 80
+
+    func receiveChunk(_ data: Data) {
+        let buffer = decodeAudioChunk(data)
+        jitterBuffer.append(buffer)
+
+        if jitterBuffer.totalDurationMs >= minBufferMs {
+            scheduleFromBuffer()
+        }
+    }
+}
+```
+
+### Quando usare Live vs REST
+
+| Scenario | Tecnologia | Motivo |
+|---|---|---|
+| "Accendi la torcia" | L3 NLU locale | Istantaneo, zero costi |
+| "Chiama Marco" | L1/L2 Gemini REST | Singola azione, nessun loop |
+| Conversazione interattiva con AirPods | Gemini Live | Full-duplex, barge-in |
+| "Prenota, poi manda messaggio, poi..." | Gemini REST + Agent Loop | Controllo sequenza |
+
+### Nota costi Gemini Live
+
+Live costa di più (audio token + durata connessione). Strategia:
+- **Modalità Conversazione** (pulsante/AirPods): usa Live
+- **Comandi secchi**: usa REST o NLU locale
+
+---
+
+## 14. Capability map completa
+
+### Zero tap (nessun cambio app)
+
+| Comando | Stack | Latenza |
+|---|---|---|
+| "Torcia on" | CoreML locale | < 100ms |
+| "Timer 10 minuti" | NLU locale + UNUserNotificationCenter | < 300ms |
+| "Svegliami alle 7:30" | REST + EventKit | < 1s |
+| "Metti in pausa" | CoreML → MediaPlayer | < 100ms |
+| "Chiama Marco" | REST → CallKit | < 800ms |
+| "Manda WhatsApp a Marco: ci vediamo alle 8" | REST → GigiWebAgent (WhatsApp Web) | 3–5s |
+| "Meteo a Milano" | REST → wttr.in | < 1s |
+| "Leggi il mio calendario di oggi" | REST → EventKit | < 1s |
+| "Accendi le luci del salotto" | REST → HomeKit | < 1s |
+| "Buonanotte Gigi" | REST → HomeKit (parallelo) + Clock + MediaPlayer | 1–2s |
+| "Trova slot libero domani mattina" | REST → algoritmo locale | < 2s |
+| "Trova slot e crea evento con Marco" | REST loop (3 iter.) | 3–5s |
+
+### Un cambio app
+
+| Comando | Stack | Latenza |
+|---|---|---|
+| "Naviga a Piazza Duomo" | REST → maps:// | < 800ms |
+| "Apri Spotify" | NLU locale → URL scheme | < 300ms |
+| "FaceTime con Marco" | REST → facetime:// | < 800ms |
+| "Cerca su Google tiramisu recipe" | REST → Safari | < 500ms |
+| "Manda email a hr@azienda.com" | REST → mailto: | < 500ms |
+
+### Web automation
+
+| Comando | Stack | Latenza |
+|---|---|---|
+| "Prenota da Il Grill stasera alle 8 per 2" | REST → GigiWebAgent/Resy | 5–15s |
+| "Ordinami una pizza" (con confirm) | REST → GigiComputerUse | 20–40s + confirm |
+
+### Ragionamento e catene
+
+| Scenario | Iterazioni | Latenza |
+|---|---|---|
+| "Manda msg a tutti quelli nel calendario domani" | read_cal → N×send_msg (parallel) | 5–10s |
+| "Se piove domani ricordami ombrello" | weather → (if rain) set_reminder | 2 iter. |
+| "Chiama il mio ristorante preferito e prenota" | recall → web_book | 2 iter. |
+| "Prenota Uber per aeroporto basandoti sul mio volo" | search_email → maps → computer_use | 3–4 iter. |
+
+---
+
+## 15. Flussi end-to-end — esempi reali
+
+### Scenario A: "Ordinami un panino da Deliveroo" (con Confirm Mode)
+
+```
+1. WAKE WORD: "Hey GIGI" → Porcupine → GigiAudioManager: idle → recording
+
+2. STT: "ordinami un panino da Deliveroo" → 0.8s silence (comando corto)
+   → GigiAgentEngine.process()
+
+3. META-CLASSIFIER: seleziona tool: [web_order_food, computer_use, ...]
+
+4. AGENT LOOP — iter. 1:
+   Gemini: functionCall { name: "web_order_food", args: { restaurant: "Deliveroo", items: "panino" } }
+   SoundEngine.play(.thinking)
+   Interim: "GIGI: Sto navigando su Deliveroo..."
+
+5. ESECUZIONE: GigiComputerUse.execute(task: "Ordina panino su Deliveroo")
+   Claude naviga, trova panino prosciutto €8.50, si ferma PRIMA del checkout
+   → result: "CONFIRM_REQUIRED: Panino prosciutto e mozzarella €8.50. Procedo?"
+
+6. CONFIRM MODE:
+   GigiSpeechService: "Ho trovato un panino prosciutto e mozzarella per €8.50 su Deliveroo. Procedo?"
+   SoundEngine.play(.confirmRequired)
+   GigiAudioManager: speaking → recording
+
+7. USER: "Sì"
+
+8. AGENT LOOP — iter. 2:
+   GigiAgentEngine.confirmAndContinue() → Claude clicca Checkout → ordine confermato
+   functionResponse: "Ordine confermato. Arriva in 28 minuti. Numero ordine: #38291"
+
+9. AGENT LOOP — iter. 3:
+   Gemini (testo): "Fatto! Il tuo panino arriva in circa 28 minuti."
+
+10. TTS: "Fatto! Il tuo panino arriva in circa 28 minuti."
+    SoundEngine.play(.taskDone)
+    GigiAudioManager: speaking → idle → wakeWordListening
+```
+
+### Scenario B: "Trova slot domani mattina e invita Marco a pranzo"
+
+```
+Iter. 1: Gemini chiama in parallelo:
+  - read_week_calendar {} → ["9:00 Meeting", "11:30 Call Sara"]
+  - recall { query: "Marco contatto" } → "Marco Rossi, +39 333 1234567"
+
+Iter. 2: Gemini chiama:
+  - find_free_slot { duration: "60", date: "tomorrow", context: "pranzo" }
+    → algoritmo locale filtra per 12:00-14:30
+    → "Slot disponibili: 12:00-13:30"
+
+Iter. 3: Gemini chiama in parallelo:
+  - create_event { title: "Pranzo con Marco", date: "tomorrow", time: "12:30" }
+  - send_message { contact: "Marco Rossi", body: "Pranzo domani alle 12:30?", platform: "imessage" }
+
+Iter. 4: Gemini (testo):
+  "Perfetto! Ho creato 'Pranzo con Marco' per domani alle 12:30 e inviato un messaggio a Marco."
+
+TTS + SoundEngine.play(.taskDone)
+Durata totale: ~4 secondi
+```
+
+### Scenario C: Conversazione multi-turno con coreference
+
+```
+Turno 1:
+  User: "manda un messaggio a Marco che arrivo tardi"
+  Gemini: make_send_message { contact: "Marco", body: "Arrivo tardi" }
+  GIGI: "Messaggio inviato a Marco."
+
+Turno 2:
+  User: "e chiamalo anche"  ← "lo" = Marco (risolto da functionCall precedente)
+  Gemini vede history → make_call { contact: "Marco" }
+  GIGI: "Chiamo Marco."
+
+Turno 3:
+  User: "quand'è il suo compleanno?"
+  Gemini: recall { query: "compleanno Marco" }
+  → "18 marzo" (da memoria) → GIGI: "Il compleanno di Marco è il 18 marzo."
+  → se non trovato: "Non ho il compleanno di Marco. Vuoi che glielo chieda nel prossimo messaggio?"
+```
+
+### Scenario D: "Prenota un Uber per l'aeroporto basandoti sul mio volo" (Executive Assistant)
+
+```
+Iter. 1: Gemini: web_search_and_read { query: "my flight tomorrow in emails" }
+  → GigiWebAgent legge Gmail → "Volo AZ1234, Milano-Roma, ore 8:40 da Linate"
+
+Iter. 2: Gemini: navigate { destination: "Linate Airport" } (solo info distanza)
+  + recall { query: "casa" } → "Via Roma 5, Milano"
+  → Maps API stima: 35 minuti in auto, consiglia partenza ore 7:00
+
+Iter. 3: Gemini: computer_use { task: "Prenota Uber da Via Roma 5 Milano a Linate per le 7:00 di domani" }
+  → Claude naviga Uber web → trova corsa €18 → CONFIRM_REQUIRED
+
+Iter. 4: CONFIRM MODE
+  GIGI: "Ho trovato un Uber da casa tua a Linate per le 7:00 di mattina, €18. Procedo?"
+  User: "Sì" → conferma
+
+Iter. 5: Gemini: set_reminder { text: "Preparare borse", date: "tomorrow", time: "6:30" }
+
+Iter. 6: Gemini (testo): "Perfetto! Uber prenotato per le 7:00, arriverai a Linate con ampio anticipo.
+  Ho anche impostato un reminder alle 6:30 per prepararti."
+
+Durata totale: ~45 secondi (attesa utente inclusa)
+```
+
+---
+
+## 16. Limiti iOS — workaround e deep link
+
+Questi limiti sono imposti da Apple a livello kernel. Nessuna architettura li aggira.
+Ma si possono **comunicare come feature** e **workaroundare con eleganza**:
+
+| Funzione | Limite | Workaround GIGI |
+|---|---|---|
+| WiFi on/off programmatico | Rimosso iOS 13 | `prefs:root=WIFI` deep link + "Basta un tap" |
+| Bluetooth on/off | Solo Settings | `prefs:root=Bluetooth` deep link |
+| Screenshot da background | Solo foreground | — |
+| Rispondere automaticamente a chiamate | Nessuna API | — |
+| Controllare app di terze parti | Process isolation | Web automation via browser |
+| Ordine in app delivery | Sandbox | Web automation su sito delivery |
+| Notifiche di altre app | Nessuna API | Share Extension (v4) |
+| Luminosità/volume programmatico | API rimosse iOS 17+ | `prefs:root=DISPLAY` deep link |
+
+### Deep link Settings — "The Settings Bridge"
+
+```swift
+// Invece di fallire silenziosamente
+func handleUnsupportedAction(_ intent: String) {
+    switch intent {
+    case "toggle_wifi":
+        speech.speak("Apple non mi permette di farlo direttamente, ma ti ho aperto le impostazioni WiFi.")
+        UIApplication.shared.open(URL(string: "prefs:root=WIFI")!)
+    case "toggle_bluetooth":
+        speech.speak("Ti ho aperto Bluetooth nelle impostazioni.")
+        UIApplication.shared.open(URL(string: "prefs:root=Bluetooth")!)
+    }
+}
+```
+
+### Permessi mancanti — gestione elegante
+
+```swift
+// Se EventKit/Contacts non è autorizzato
+func requestPermissionIfNeeded(for tool: String) -> Bool {
+    guard !hasPermission(for: tool) else { return true }
+    speech.speak("Vorrei farlo, ma non ho accesso al tuo \(permissionName(for: tool)). Puoi darmelo nelle impostazioni?")
+    // Banner con pulsante "Apri impostazioni" che porta direttamente all'app
+    return false
+}
+```
+
+---
+
+## 17. Modello di costo e Freemium
+
+### Costo per categoria di operazione
+
+| Categoria | Costo computazionale | Costo API stimato |
+|---|---|---|
+| CoreML / NLU locale | Zero | $0.000 |
+| Apple Foundation Models L1 | Zero (on-device) | $0.000 |
+| Gemini REST (comando singolo) | Molto basso | ~$0.001–0.003 |
+| Gemini REST (agent loop 3-5 iter.) | Medio | ~$0.005–0.015 |
+| GigiWebAgent on-device | Zero API | $0.000 |
+| GigiComputerUse (Claude Sonnet) | Alto | ~$0.08–0.25 per task |
+
+### Strategia Freemium (mercato USA)
+
+```
+GIGI FREE (tutti gli utenti):
+  ✅ Tutte le azioni native iOS (chiamate, messaggi, calendario, timer, HomeKit, musica)
+  ✅ WhatsApp Web (GigiWebAgent on-device)
+  ✅ Gemini REST agent loop (fino a 3 iterazioni/giorno per web automation)
+  ✅ Memoria base (CloudKit, 100 record)
+  ✅ Gemini Live (10 min/giorno)
+
+GIGI PRO — $9.99/mese:
+  ✅ GigiComputerUse illimitato (ordini delivery, prenotazioni complesse)
+  ✅ Gemini Live illimitato
+  ✅ Agent loop senza limiti di iterazione
+  ✅ Memoria illimitata + RAG vettoriale
+  ✅ costEstimate visibile in app (trasparenza budget)
+```
+
+### Monitoraggio costi in-app
+
+```swift
+struct AgentResult {
+    // ...
+    let costEstimate: Double  // es. 0.023 per "prenota ristorante"
+}
+
+// Dashboard UI: "Sessione oggi: $0.08 | Mensile: $1.23"
+// Aiuta a calibrare il pricing Pro e identificare query costose
+```
+
+---
+
+## 18. Struttura file del progetto
+
+```
+GIGI/
+├── 00_DOCS/
+│   ├── ARCHITETTURA_V3.md       ← questo documento (rev. 2)
+│   └── ARCHITETTURA.md          ← v2 (storico)
+│
+├── 01_SERVER_MDM/               ← Node.js backend
+│   ├── server.js                ← esistente + /api/computer-use
+│   ├── computerUse.js           ← NUOVO: loop Claude claude-sonnet-4-6 + Playwright
+│   ├── sessionStore.js          ← NUOVO: cookie cifrati AES-256 per utente
+│   ├── queue.js                 ← NUOVO: BullMQ + Redis per job queue
+│   ├── progress.js              ← NUOVO: WebSocket per aggiornamenti real-time
+│   ├── profiles/
+│   └── certs/
+│
+└── 02_GIGI_APP/GIGI/
+    │
+    ├── Agent/                           ← NUOVI FILE — cuore v3
+    │   ├── GigiAgentEngine.swift        ← agent loop + parallel execution + confirm mode
+    │   ├── GigiToolRegistry.swift       ← 38 FunctionDeclaration (GigiTool protocol)
+    │   └── GigiComputerUse.swift        ← client iOS → backend /api/computer-use
+    │
+    ├── Brain/                           ← AGGIORNATI
+    │   ├── GigiCloudService.swift       ← + callWithFunctions() + Context Cache
+    │   ├── GigiFoundationAgent.swift    ← system prompt (rimane)
+    │   ├── GigiFoundationSession.swift  ← Apple FM fallback (rimane)
+    │   ├── GigiBrainPipeline.swift      ← semplificato: punta a GigiAgentEngine
+    │   ├── GigiRealtimeEngine.swift     ← Live: barge-in + jitter buffer + downsampling
+    │   └── GigiBrainDiagnostics.swift   ← + status GigiAgentEngine + cost estimate
+
+    ├── Orchestration/                   ← AGGIORNATI
+    │   ├── GigiSmartOrchestrator.swift  ← process() → GigiAgentEngine
+    │   ├── GigiActionBridge.swift       ← invariato (executor nativo)
+    │   ├── GigiActionDispatcher+Native.swift  ← split per leggibilità
+    │   ├── GigiActionDispatcher+Web.swift     ← routing tool web
+    │   ├── GigiPlanner.swift            ← DEPRECATO (sostituito da agent loop)
+    │   └── GigiWebAgent.swift           ← + Desktop UA + nuovi siti US
+    │
+    ├── Audio/                           ← AGGIORNATI
+    │   ├── GigiAudioManager.swift       ← invariato (state machine)
+    │   ├── GigiVADEngine.swift          ← + Dynamic Silence adattivo
+    │   ├── GigiAudioSequestrator.swift  ← + allowBluetooth + duckOthers
+    │   ├── GigiWakeWordEngine.swift     ← invariato
+    │   ├── GigiSpeechService.swift      ← + streamSpeak() per streaming TTS
+    │   └── SoundEngine.swift            ← NUOVO: earcons sintetici + haptics
+    │
+    ├── Memory/                          ← AGGIORNATI
+    │   ├── GigiConversationMemory.swift ← + contents[] strutturato + token budget + disk persist
+    │   ├── GigiMemory.swift             ← + namespace opinion: + relation: + TTL
+    │   ├── GigiVectorStore.swift        ← NUOVO: RAG locale NaturalLanguage embedding
+    │   └── GigiKeychain.swift           ← NUOVO: Keychain wrapper per dati sensibili
+    │
+    └── UI/
+        ├── MainTabView.swift            ← invariato
+        ├── ChatView.swift               ← invariato
+        ├── DashboardView.swift          ← + cost estimate indicator
+        └── ToolOverlayView.swift        ← NUOVO: progress web automation (trasparente)
+```
+
+---
+
+## 19. Roadmap implementativa
+
+### Fase 1 — Agent Loop Core (1–2 settimane) ← MASSIMA PRIORITÀ
+
+| Step | File | Descrizione |
+|---|---|---|
+| 1.1 | `GigiToolRegistry.swift` | GigiTool protocol + 38 tool declarations |
+| 1.2 | `GigiCloudService.swift` | `callWithFunctions(contents:cacheId:)` con native FC |
+| 1.3 | `GigiAgentEngine.swift` | Agent loop: parallel execution, safety lock, confirm mode |
+| 1.4 | `GigiActionDispatcher+Native.swift` | Split dispatcher, routing tool nativo |
+| 1.5 | `GigiActionDispatcher+Web.swift` | Routing tool web |
+| 1.6 | `GigiConversationMemory.swift` | `contentsArray()` formato strutturato + token budget |
+| 1.7 | `GigiSmartOrchestrator.swift` | `process()` → `GigiAgentEngine.process()` |
+| 1.8 | Build + test | Nessuna regressione su comandi nativi |
+
+**Test di accettazione:**
+- "Chiama Marco" → funziona (nessuna regressione)
+- "Chiama Marco e mandagli anche un messaggio" → esegue entrambi
+- "Se c'è pioggia domani metti un reminder" → ragionamento condizionale
+- "Buonanotte" → HomeKit + alarm in parallelo
+
+### Fase 2 — Audio UX + Earcons (3 giorni)
+
+| Step | File | Descrizione |
+|---|---|---|
+| 2.1 | `SoundEngine.swift` | Earcons sintetici (AVAudioEngine) |
+| 2.2 | `GigiVADEngine.swift` | Dynamic Silence adattivo |
+| 2.3 | `GigiAudioSequestrator.swift` | allowBluetooth + duckOthers |
+| 2.4 | `GigiRealtimeEngine.swift` | Downsampling 44.1→16kHz + jitter buffer + barge-in |
+
+### Fase 3 — Memoria RAG + Keychain (1 settimana)
+
+| Step | File | Descrizione |
+|---|---|---|
+| 3.1 | `GigiVectorStore.swift` | Embedding NaturalLanguage + top-K lookup |
+| 3.2 | `GigiMemory.swift` | namespace opinion: + relation: + TTL + soft confirm |
+| 3.3 | `GigiKeychain.swift` | Keychain wrapper per cookie e token |
+| 3.4 | `GigiConversationMemory.swift` | Persistenza su disco + reload se < 1h |
+
+### Fase 4 — Web Automation On-Device (1 settimana)
+
+| Step | File | Descrizione |
+|---|---|---|
+| 4.1 | `GigiWebAgent.swift` | WhatsApp Web completo (Desktop UA + cookie) |
+| 4.2 | `GigiWebAgent.swift` | Resy + OpenTable per mercato USA |
+| 4.3 | `GigiWebAgent.swift` | web_search_and_read (scraping Google) |
+
+### Fase 5 — Backend Claude Computer Use (1–2 settimane)
+
+| Step | File | Descrizione |
+|---|---|---|
+| 5.1 | `queue.js` | BullMQ + Redis job queue |
+| 5.2 | `computerUse.js` | Loop Claude claude-sonnet-4-6 + Playwright + CONFIRM step |
+| 5.3 | `sessionStore.js` | Cookie store AES-256, UA passthrough |
+| 5.4 | `progress.js` | WebSocket aggiornamenti real-time → iOS |
+| 5.5 | `GigiComputerUse.swift` | Client iOS: POST + progress updates + silent push |
+| 5.6 | Test | Ordine Deliveroo web end-to-end (sessione loggata) |
+
+### Fase 6 — Context Cache + Streaming TTS (3 giorni)
+
+| Step | Descrizione |
+|---|---|
+| 6.1 | Gemini Context Cache per system prompt + tool declarations |
+| 6.2 | GigiSpeechService.streamSpeak() per TTS in pipeline |
+| 6.3 | CoreML Meta-classifier locale per selezione tool |
+
+---
+
+## 20. Metriche di successo
+
+| Metrica | Target v3 | Metodo di misura |
+|---|---|---|
+| Latenza comandi instant (CoreML) | < 100ms | Instruments |
+| Latenza azioni native (REST) | < 800ms | Logging voice-end → action |
+| Latenza web automation semplice | < 5s | Logging end-to-end |
+| Latenza web automation complessa | < 40s | Logging end-to-end |
+| Accuratezza intent (italiano) | > 95% | Test set 100 comandi |
+| Accuratezza intent (inglese) | > 97% | Test set 100 comandi |
+| Coreference resolution | > 90% | Test set "lui/lei/lì/quello" |
+| Agent loop 3+ tool in sequenza | Funziona | Scenario B manuale |
+| Parallel execution (3 tool) | Entro max(latenza singoli) + 200ms | Timing test |
+| Token bloat (storia 10 turni) | < 8.000 token | Logging |
+| Wake word false positive | < 1/ora | Log Porcupine |
+| Battery (wake word 8h) | < 3% overhead | Instruments Energy |
+| Costo medio sessione Pro | < $0.30 | costEstimate aggregato |
+| Uptime backend Computer Use | > 99.5% | Monitoring server |
+
+---
+
+## Note finali — cosa cambia e cosa no
+
+### Invariato dalla v2.1
+- Layer audio (GigiAudioManager, GigiWakeWordEngine) — già ottimale
+- GigiActionBridge — tutti i 25+ executor nativi iOS
+- UI (MainTabView, ChatView, DashboardView) — zero modifiche
+- GigiSpeechService — aggiunta solo streamSpeak()
+
+### Deprecato
+- `GigiPlanner.swift` — sostituito dal GigiAgentEngine loop nativo
+
+### Il cuore del cambiamento: 3 nuovi file + 2 aggiornati
+```
+NUOVO:   GigiAgentEngine.swift      ← il loop
+NUOVO:   GigiToolRegistry.swift     ← i 38 tool come oggetti GigiTool
+NUOVO:   GigiComputerUse.swift      ← bridge → backend Claude
+UPDATE:  GigiCloudService.swift     ← + callWithFunctions()
+UPDATE:  GigiSmartOrchestrator.swift ← delegare a GigiAgentEngine
+```
+
+Il resto dell'app non sa nulla del cambiamento — riceve ancora lo stesso
+`AgentResult` che prima riceveva come `GigiAgentResponse`.
+
+---
+
+*GIGI v3 — Paper tecnico — Aprile 2026 — Rev. 2 (peer reviewed)*
+*Leonardo Corte + Claude Code*

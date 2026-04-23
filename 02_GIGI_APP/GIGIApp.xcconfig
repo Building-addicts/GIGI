@@ -1,0 +1,2 @@
+// Committed wrapper: optional local secrets (gitignored) in Config.xcconfig — see Config.example.xcconfig
+#include? "Config.xcconfig"

@@ -1,294 +1,320 @@
 import SwiftUI
 
 struct ChatView: View {
-    /// `itms-services://…` per installazione OTA da killsiri.xyz
-    private static var otaManifestItmsURL: URL {
-        let manifest = "https://killsiri.xyz/deploy/manifest.plist"
-        let enc = manifest.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlQueryAllowed) ?? manifest
-        return URL(string: "itms-services://?action=download-manifest&url=\(enc)")!
-    }
 
-    @StateObject var gigi = GigiSmartOrchestrator.shared
-    @StateObject var dialogue = GigiDialogueEngine.shared
-    @State private var userInput = ""
-    @State private var animating = false
+    @StateObject private var gigi    = GigiSmartOrchestrator.shared
+    @StateObject private var memory  = GigiConversationMemory.shared
+    @State private var userInput     = ""
+    @State private var scrollProxy: ScrollViewProxy? = nil
     @State private var pulseScale: CGFloat = 1.0
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
 
             VStack(spacing: 0) {
 
-                // ── Header ────────────────────────────────────────────────
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("GIGI")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text(gigi.status)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.4))
-                    }
-                    Spacer()
+                // ── Header ────────────────────────────────────────────────────
+                headerView
+                    .padding(.top, 56)
+                    .padding(.bottom, 8)
 
-                    // Indicatore dialogo attivo
-                    if dialogue.isInDialogue {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color.orange)
-                                .frame(width: 6, height: 6)
-                                .scaleEffect(animating ? 1.3 : 1.0)
-                                .animation(.easeInOut(duration: 0.6).repeatForever(), value: animating)
-                            Text("Listening for reply")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.orange)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.orange.opacity(0.1))
-                        .clipShape(Capsule())
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 60)
-                .padding(.bottom, 20)
+                // ── Conversation history ──────────────────────────────────────
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
 
-                Spacer()
-
-                // ── Area principale ────────────────────────────────────────
-                if !gigi.lastResponse.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-
-                        // Badge GIGI
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(Color.purple)
-                                .frame(width: 8, height: 8)
-                            Text("GIGI")
-                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundColor(.purple)
-                        }
-
-                        // Risposta principale
-                        Text(gigi.lastResponse)
-                            .font(.system(size: 17, weight: .regular, design: .rounded))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        // Azioni eseguite (multiple)
-                        if gigi.executedActions.count > 1 {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(gigi.executedActions, id: \.self) { action in
-                                    HStack(spacing: 8) {
-                                        Image(systemName: iconForAction(action))
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.green)
-                                            .frame(width: 16)
-                                        Text(labelForAction(action))
-                                            .font(.system(size: 13))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                }
+                            if memory.messages.isEmpty {
+                                emptyStateView
+                                    .padding(.top, 60)
                             }
-                            .padding(.top, 4)
-                        }
 
-                        // Prompt dialogo
-                        if dialogue.isInDialogue && !dialogue.currentPrompt.isEmpty {
-                            HStack(spacing: 8) {
-                                Image(systemName: "arrow.turn.down.right")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.orange)
-                                Text(dialogue.currentPrompt)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.orange)
+                            ForEach(memory.messages) { msg in
+                                MessageBubble(message: msg)
+                                    .id(msg.id)
                             }
-                            .padding(.top, 4)
                         }
-                    }
-                    .padding(20)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(16)
-                    .padding(.horizontal, 24)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                } else if gigi.isThinking {
-                    // Stato thinking
-                    VStack(spacing: 16) {
-                        ZStack {
-                            ForEach(0..<3) { i in
-                                Circle()
-                                    .fill(Color.purple.opacity(0.15 - Double(i) * 0.04))
-                                    .frame(width: CGFloat(80 + i * 25), height: CGFloat(80 + i * 25))
-                                    .scaleEffect(animating ? 1.1 : 0.95)
-                                    .animation(
-                                        .easeInOut(duration: 1.0 + Double(i) * 0.2)
-                                        .repeatForever(autoreverses: true)
-                                        .delay(Double(i) * 0.15),
-                                        value: animating
-                                    )
-                            }
-                            Image(systemName: "brain")
-                                .font(.system(size: 28))
-                                .foregroundColor(.purple)
-                        }
-                        Text("Understanding...")
-                            .font(.system(size: 13, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.4))
-                    }
-
-                } else {
-                    // Stato idle
-                    VStack(spacing: 16) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.purple.opacity(0.08))
-                                .frame(width: 120, height: 120)
-                                .scaleEffect(gigi.isListening ? pulseScale : 1.0)
-                                .animation(
-                                    gigi.isListening
-                                        ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
-                                        : .default,
-                                    value: pulseScale
-                                )
-                            Circle()
-                                .fill(Color.purple.opacity(0.12))
-                                .frame(width: 80, height: 80)
-                            Image(systemName: gigi.isListening ? "waveform" : "mic.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(.purple)
-                        }
-                        Text(gigi.isListening ? "Listening..." : "Tap mic or type")
-                            .font(.system(size: 13, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.35))
-                    }
-                }
-
-                Spacer()
-
-                // ── Bottom controls ────────────────────────────────────────
-                VStack(spacing: 14) {
-
-                    // Mic button
-                    Button {
-                        if gigi.isListening {
-                            gigi.stopListening()
-                            animating = false
-                            pulseScale = 1.0
-                        } else {
-                            gigi.startListening()
-                            animating = true
-                            pulseScale = 1.15
-                        }
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(gigi.isListening ? Color.purple : Color.white.opacity(0.08))
-                                .frame(width: 72, height: 72)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.purple.opacity(0.4), lineWidth: 1)
-                                )
-                            Image(systemName: gigi.isListening ? "stop.fill" : "mic.fill")
-                                .font(.system(size: 26))
-                                .foregroundColor(.white)
-                        }
-                    }
-
-                    // Text input
-                    HStack(spacing: 10) {
-                        TextField(
-                            dialogue.isInDialogue ? dialogue.currentPrompt : "Ask GIGI anything...",
-                            text: $userInput
-                        )
-                        .font(.system(size: 15))
-                        .foregroundColor(.white)
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.07))
-                        .cornerRadius(12)
-                        .onSubmit { sendText() }
-
-                        Button { sendText() } label: {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(userInput.isEmpty ? .white.opacity(0.15) : .purple)
-                        }
-                        .disabled(userInput.isEmpty)
+                        .padding(.bottom, 16)
                     }
-                                       .padding(.horizontal, 24)
-
-                    // OTA / MDM (killsiri.xyz) — Safari apre profilo e itms-services
-                    VStack(spacing: 8) {
-                        Text("Deploy")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.25))
-                        HStack(spacing: 16) {
-                            Link(destination: URL(string: "https://killsiri.xyz/profiles/gigi_access_pro.mobileconfig")!) {
-                                Label("Profilo", systemImage: "arrow.down.doc")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.cyan.opacity(0.9))
-                            }
-                            Link(destination: Self.otaManifestItmsURL) {
-                                Label("App OTA", systemImage: "app.badge.checkmark")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.green.opacity(0.9))
-                            }
-                        }
+                    .onAppear { scrollProxy = proxy }
+                    .onChange(of: memory.messages.count) { _, _ in
+                        scrollToBottom(proxy: proxy)
                     }
-                    .padding(.bottom, 24)
                 }
+
+                Divider().background(Color.white.opacity(0.08))
+
+                // ── Input bar ─────────────────────────────────────────────────
+                inputBar
+                    .padding(.bottom, 24)
+            }
+
+            // ── Action banner (top pill) ──────────────────────────────────────
+            if !gigi.bannerMessage.isEmpty {
+                bannerView
+                    .padding(.top, 56)
+                    .zIndex(99)
             }
         }
-        .onAppear { animating = true }
-        .animation(.easeInOut(duration: 0.3), value: gigi.lastResponse)
-        .animation(.easeInOut(duration: 0.3), value: gigi.isThinking)
+        .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
+        .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
     }
 
+    // MARK: - Sub-views
+
+    private var headerView: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("GIGI")
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Text(gigi.status)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.35))
+            }
+            Spacer()
+            // Brain indicator
+            HStack(spacing: 6) {
+                if GigiFoundationAgent.isSupported {
+                    Image(systemName: "apple.intelligence")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.purple)
+                    Text("Apple Intelligence")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.purple.opacity(0.8))
+                } else {
+                    Image(systemName: "brain")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.3))
+                    Text("Local AI")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white.opacity(0.3))
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(GigiFoundationAgent.isSupported ? Color.purple.opacity(0.12) : Color.white.opacity(0.05))
+            .clipShape(Capsule())
+            // Clear conversation
+            if !memory.messages.isEmpty {
+                Button {
+                    memory.clear()
+                    GigiFoundationSession.shared.resetContext()
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.3))
+                }
+                .padding(.leading, 8)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var emptyStateView: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle()
+                        .fill(Color.purple.opacity(0.06 - Double(i) * 0.015))
+                        .frame(width: CGFloat(90 + i * 28))
+                }
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 26))
+                    .foregroundColor(.purple.opacity(0.6))
+            }
+            VStack(spacing: 6) {
+                Text("Hey, I'm GIGI.")
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.8))
+                Text("Tap the mic or type to get started.")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.35))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var inputBar: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                // Text field
+                TextField("Message GIGI...", text: $userInput)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(22)
+                    .onSubmit { sendText() }
+
+                // Send button
+                if !userInput.isEmpty {
+                    Button(action: sendText) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 34))
+                            .foregroundColor(.purple)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
+
+                // Mic button
+                Button {
+                    if gigi.isListening {
+                        gigi.stopListening()
+                    } else {
+                        gigi.startListening()
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(gigi.isListening ? Color.purple : Color.white.opacity(0.1))
+                            .frame(width: 46, height: 46)
+                            .scaleEffect(gigi.isListening ? pulseScale : 1.0)
+                            .animation(
+                                gigi.isListening
+                                    ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+                                    : .default,
+                                value: pulseScale
+                            )
+                        Image(systemName: gigi.isListening ? "waveform" : "mic.fill")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                }
+                .onChange(of: gigi.isListening) { _, listening in
+                    pulseScale = listening ? 1.12 : 1.0
+                }
+            }
+            .padding(.horizontal, 16)
+            .animation(.easeInOut(duration: 0.15), value: userInput.isEmpty)
+
+            // Thinking indicator
+            if gigi.isThinking {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                        .tint(.purple)
+                    Text("GIGI is thinking...")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.purple.opacity(0.7))
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(.top, 10)
+    }
+
+    private var bannerView: some View {
+        VStack {
+            HStack(spacing: 8) {
+                ProgressView().tint(.white).scaleEffect(0.7)
+                Text(gigi.bannerMessage)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+            Spacer()
+        }
+    }
+
+    // MARK: - Actions
+
     private func sendText() {
-        guard !userInput.isEmpty else { return }
-        let text = userInput
+        let text = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
         userInput = ""
         Task { await gigi.process(text: text) }
     }
 
-    private func iconForAction(_ action: String) -> String {
-        let icons: [String: String] = [
-            "create_event": "calendar.badge.plus",
-            "set_alarm": "alarm.fill",
-            "set_reminder": "bell.fill",
-            "set_timer": "timer",
-            "send_message": "message.fill",
-            "make_call": "phone.fill",
-            "navigation": "location.fill",
-            "open_app": "app.fill",
-            "play_music": "music.note",
-            "torch_on": "flashlight.on.fill",
-            "set_brightness_up": "sun.max.fill",
-            "find_nearby": "mappin.circle.fill",
-            "search_web": "magnifyingglass"
-        ]
-        return icons[action] ?? "checkmark.circle.fill"
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        guard let last = memory.messages.last else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
+    }
+}
+
+// MARK: - MessageBubble
+
+private struct MessageBubble: View {
+    let message: GigiMessage
+
+    var isUser: Bool { message.role == .user }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if isUser { Spacer(minLength: 48) }
+
+            if !isUser {
+                // GIGI avatar dot
+                Circle()
+                    .fill(Color.purple)
+                    .frame(width: 6, height: 6)
+                    .padding(.bottom, 8)
+            }
+
+            Group {
+                if message.isThinking {
+                    thinkingBubble
+                } else {
+                    Text(message.text)
+                        .font(.system(size: 15, design: .rounded))
+                        .foregroundColor(isUser ? .black : .white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(isUser ? Color.white : Color.white.opacity(0.1))
+                        .clipShape(BubbleShape(isUser: isUser))
+                }
+            }
+
+            if !isUser { Spacer(minLength: 48) }
+        }
     }
 
-    private func labelForAction(_ action: String) -> String {
-        let labels: [String: String] = [
-            "create_event": "Event added to calendar",
-            "set_alarm": "Alarm set",
-            "set_reminder": "Reminder created",
-            "set_timer": "Timer started",
-            "send_message": "Message sent",
-            "make_call": "Call placed",
-            "navigation": "Navigation ready",
-            "open_app": "App opened",
-            "play_music": "Music playing",
-            "torch_on": "Flashlight on",
-            "set_brightness_up": "Brightness increased",
-            "find_nearby": "Searching nearby",
-            "search_web": "Web search opened"
-        ]
-        return labels[action] ?? action.replacingOccurrences(of: "_", with: " ").capitalized
+    private var thinkingBubble: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(Color.white.opacity(0.5))
+                    .frame(width: 6, height: 6)
+                    .animation(
+                        .easeInOut(duration: 0.4)
+                            .repeatForever()
+                            .delay(Double(i) * 0.13),
+                        value: message.isThinking
+                    )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.1))
+        .clipShape(BubbleShape(isUser: false))
+    }
+}
+
+// MARK: - Bubble shape (rounded, with tail)
+
+private struct BubbleShape: Shape {
+    let isUser: Bool
+    let radius: CGFloat = 18
+
+    func path(in rect: CGRect) -> Path {
+        let tailR: CGFloat = 5
+        var path = Path()
+
+        if isUser {
+            path.addRoundedRect(in: rect, cornerSize: CGSize(width: radius, height: radius))
+        } else {
+            // Same for GIGI for now — can add tail later
+            path.addRoundedRect(in: rect, cornerSize: CGSize(width: radius, height: radius))
+        }
+        return path
     }
 }

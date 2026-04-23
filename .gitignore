@@ -4,3 +4,6 @@
 *.xcuserstate
 **/DerivedData/
 .swiftpm/
+
+# Gemini / segreti locali (iOS)
+02_GIGI_APP/Config.xcconfig

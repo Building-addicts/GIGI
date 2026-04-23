@@ -24,11 +24,13 @@ class GigiAuthManager: ObservableObject {
     ]
 
     init() {
+        GigiDebugLogger.log("GigiAuthManager init started")
         // Configura Google Sign In
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
 
         // Ripristina sessione precedente
         restorePreviousSignIn()
+        GigiDebugLogger.log("GigiAuthManager init finished")
     }
 
     // MARK: - Ripristina sessione

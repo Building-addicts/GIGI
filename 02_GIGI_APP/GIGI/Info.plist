@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -14,7 +18,21 @@
 				<string>com.googleusercontent.apps.828342254195-dnrgigjogy3veckt6ef177baie3vdrek</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GIGI Gateway x-callback</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>gigi</string>
+			</array>
+		</dict>
 	</array>
+	<key>GEMINI_API_KEY</key>
+	<string>$(GEMINI_API_KEY)</string>
+	<key>GIGI_GATEWAY_ICLOUD_URL</key>
+	<string>$(GIGI_GATEWAY_ICLOUD_URL)</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>spotify</string>
@@ -61,20 +79,47 @@
 		<string>translate</string>
 		<string>shazam</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>voip</string>
-		<string>audio</string>
-		<string>fetch</string>
-		<string>remote-notification</string>
-	</array>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>GIGI needs screen capture for automatic actions</string>
-	<key>NSSiriUsageDescription</key>
-	<string>GIGi usa Siri per inviare messaggi e chiamare i tuoi contatti automaticamente.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>com.killsiri.GIGI.call</string>
 	</array>
+	<key>PICOVOICE_ACCESS_KEY</key>
+	<string>$(PICOVOICE_ACCESS_KEY)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+		<string>voip</string>
+	</array>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>We need to connect to the local debug server.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>GIGI ha bisogno del microfono per ascoltare i tuoi comandi vocali e la wake word.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>GIGI usa il riconoscimento vocale per capire i tuoi comandi quando non c'è connessione internet.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>GIGI ha bisogno di accedere ai contatti per poter effettuare chiamate e inviare messaggi per te.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>GIGI ha bisogno di accedere al calendario per leggere i tuoi impegni e creare nuovi eventi.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>GIGI ha bisogno di accesso completo al calendario per gestire i tuoi eventi e trovare slot liberi.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>GIGI ha bisogno di accesso ai promemoria per creare le tue sveglie e routine.</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>GIGI ha bisogno di accesso ai promemoria per creare le tue sveglie e routine.</string>
+    <key>NSHomeKitUsageDescription</key>
+    <string>GIGI ha bisogno di accedere a HomeKit per controllare le luci, il termostato e gli altri accessori smart della tua casa.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>GIGI usa la tua posizione per fornirti il meteo e indicazioni stradali precise.</string>
+    <key>NSSiriUsageDescription</key>
+    <string>GIGI si integra con Siri per permetterti di usare i comandi vocali anche quando l'app è chiusa.</string>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>GIGI ha bisogno di accedere ad Apple Music per riprodurre la musica richiesta.</string>
 </dict>
 </plist>
