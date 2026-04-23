@@ -99,12 +99,12 @@ export async function handleRequest(req, res, deps) {
       return sendJson(res, 200, { leases: enriched });
     } catch (e) { return sendJson(res, 500, { error: e.message }); }
   }
-  if (p === '/api/telegram/queue' && req.method === 'GET') {
+  if (p === '/api/sessions' && req.method === 'GET') {
     try {
       const sessPath = path.join(dirname, 'logs', 'sessions.json');
       const sessions = fs.existsSync(sessPath) ? JSON.parse(fs.readFileSync(sessPath, 'utf8')) : {};
-      const list = Object.entries(sessions).map(([chatId, s]) => ({
-        chat_id: chatId,
+      const list = Object.entries(sessions).map(([deviceId, s]) => ({
+        device_id: deviceId,
         session_id: s.session_id,
         last_active_at: s.last_active_at,
         last_active_ago_s: s.last_active_at ? Math.floor((Date.now() - s.last_active_at) / 1000) : null,
@@ -271,17 +271,7 @@ export async function handleRequest(req, res, deps) {
     try { fs.writeFileSync(LOG_FILE, ''); return sendJson(res, 200, { ok: true }); }
     catch (e) { return sendJson(res, 500, { error: e.message }); }
   }
-  if (p === '/api/test-message' && req.method === 'POST') {
-    try {
-      const body = JSON.parse(await readBody(req));
-      const cfg = loadConfig();
-      const r = await fetch(`https://api.telegram.org/bot${cfg.telegram.bot_token}/sendMessage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: cfg.telegram.allowed_chat_ids[0], text: body.text || 'Test dal panel' })
-      });
-      return sendJson(res, 200, await r.json());
-    } catch (e) { return sendJson(res, 500, { error: e.message }); }
-  }
+  // /api/test-message rimosso in fase 17 (era Telegram-only). Per testare iOS usa /api/ios/agent/run (fase 12).
 
   let filePath = p === '/' ? '/index.html' : p;
   filePath = path.join(PUBLIC_DIR, filePath);

@@ -36,7 +36,7 @@ const LOG_FILE = path.join(LOGS_DIR, 'bridge.log');
 const STATE_FILE = path.join(LOGS_DIR, 'state.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
-const TASK_NAME = 'HarnessTelegramBridge';
+const TASK_NAME = 'GigiHarnessServer';
 const STARTUP_DIR = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
 const STARTUP_FILE = path.join(STARTUP_DIR, 'HarnessBridge.vbs');
 
@@ -306,7 +306,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 const cfg = loadConfig();
-const port = cfg.ui?.port || 7777;
+const port = cfg.panel?.port || cfg.ui?.port || 7777;
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`Porta ${port} già in uso — un'altra istanza del panel è già attiva. Uscita.`);

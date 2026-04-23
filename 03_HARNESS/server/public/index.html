@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Harness — Telegram Bridge</title>
+<title>GIGI Harness — Control Panel</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -12,8 +12,8 @@
     <div class="brand">
       <div class="logo"></div>
       <div>
-        <h1>Harness</h1>
-        <span class="sub">Telegram → Claude bridge control panel</span>
+        <h1>GIGI Harness</h1>
+        <span class="sub">Backend iOS → Claude · control panel</span>
       </div>
     </div>
     <div class="controls">
@@ -27,7 +27,6 @@
   <nav class="tabs">
     <button class="tab active" data-tab="status">Stato</button>
     <button class="tab" data-tab="config">Configurazione</button>
-    <button class="tab" data-tab="shortcuts">Scorciatoie</button>
     <button class="tab" data-tab="browsers">Browsers</button>
     <button class="tab" data-tab="workers">Workers</button>
     <button class="tab" data-tab="logs">Log</button>
@@ -37,7 +36,7 @@
     <section id="tab-status" class="panel active">
       <div class="grid">
         <div class="card">
-          <h3>Bridge</h3>
+          <h3>Server</h3>
           <div class="stat" id="card-running">—</div>
           <div class="sub" id="card-uptime">offline</div>
         </div>
@@ -57,7 +56,7 @@
         <div class="row" style="justify-content:space-between;align-items:center">
           <div>
             <div id="browser-label" style="font-size:15px">—</div>
-            <div class="sub" id="browser-sub">Chrome always-on con profilo Harness, accessibile via CDP dal bot.</div>
+            <div class="sub" id="browser-sub">Chrome always-on con profilo GIGI, accessibile via CDP per computer-use.</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn" id="btn-browser-start">Avvia</button>
@@ -70,7 +69,7 @@
         <h3>Terminale live</h3>
         <div class="row" style="justify-content:space-between;align-items:center">
           <div>
-            <div class="sub">Apre una finestra PowerShell che mostra in tempo reale quello che il bridge sta facendo (tail di bridge.log).</div>
+            <div class="sub">Apre finestra terminale che mostra in tempo reale quello che il server sta facendo (tail di bridge.log).</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn primary" id="btn-term-open">Apri finestra</button>
@@ -80,11 +79,11 @@
       </div>
 
       <div class="card" style="margin-top:16px">
-        <h3>Avvio automatico al login Windows</h3>
+        <h3>Avvio automatico al login</h3>
         <div class="row" style="justify-content:space-between;align-items:center">
           <div>
             <div id="autostart-label" style="font-size:15px">—</div>
-            <div class="sub" id="autostart-sub">Se attivo, il bridge parte da solo all'accensione del PC.</div>
+            <div class="sub" id="autostart-sub">Se attivo, il server parte da solo all'accensione.</div>
           </div>
           <label class="switch">
             <input type="checkbox" id="autostart-toggle">
@@ -92,24 +91,15 @@
           </label>
         </div>
       </div>
-
-      <div class="card" style="margin-top:16px">
-        <h3>Manda test al tuo Telegram</h3>
-        <div class="row">
-          <input id="test-text" type="text" placeholder="Testo di test" value="Ciao dal panel">
-          <button class="btn primary" id="btn-test">Invia</button>
-        </div>
-        <div class="sub" id="test-result"></div>
-      </div>
     </section>
 
     <section id="tab-config" class="panel">
       <div class="card">
-        <h3>Telegram</h3>
-        <label>Bot token</label>
-        <input id="cfg-token" type="text" placeholder="123456:ABC...">
-        <label>Chat ID autorizzati (uno per riga)</label>
-        <textarea id="cfg-chats" rows="3" placeholder="270997894"></textarea>
+        <h3>API iOS</h3>
+        <label>Shared secret (Bearer token)</label>
+        <input id="cfg-token" type="text" placeholder="genera un secret random 32 char">
+        <label>Device ID autorizzati (uno per riga, vuoto = tutti)</label>
+        <textarea id="cfg-chats" rows="3" placeholder="device-uuid-1&#10;device-uuid-2"></textarea>
       </div>
       <div class="card">
         <h3>Claude</h3>
@@ -131,11 +121,11 @@
         </div>
         <label>Durata sessione conversazione (minuti) — 0 = mai scade</label>
         <input id="cfg-sessmin" type="number" min="0" placeholder="60">
-        <div class="sub">Dopo questo tempo di inattività la conversazione Telegram viene chiusa e il messaggio successivo ne apre una nuova.</div>
+        <div class="sub">Dopo questo tempo di inattività la sessione Claude del device iOS viene chiusa e la richiesta successiva ne apre una nuova.</div>
         <div class="row" style="justify-content:space-between;align-items:center;margin-top:14px">
           <div>
             <div style="font-size:14px">Finestra sessione Claude live</div>
-            <div class="sub">Ogni messaggio da Telegram apre una finestra PowerShell che mostra Claude mentre lavora (tool calls, risposte, errori). Chiudi la finestra quando vuoi.</div>
+            <div class="sub">Apre una finestra che mostra Claude mentre lavora (tool calls, risposte, errori). Solo Windows.</div>
           </div>
           <label class="switch">
             <input type="checkbox" id="cfg-live">
@@ -143,33 +133,17 @@
           </label>
         </div>
         <label>System prompt (prepended ad ogni richiesta)</label>
-        <textarea id="cfg-sysprompt" rows="5" placeholder="Es: Rispondi in italiano, conciso..."></textarea>
+        <textarea id="cfg-sysprompt" rows="5" placeholder="Sei il backend operativo di GIGI..."></textarea>
       </div>
       <div class="card">
-        <h3>UI</h3>
+        <h3>Server</h3>
         <label>Porta del control panel</label>
         <input id="cfg-port" type="number">
         <div class="sub">Richiede riavvio di panel.js per applicare.</div>
       </div>
       <div class="actions">
-        <button class="btn primary" id="btn-save">Salva e riavvia bridge</button>
+        <button class="btn primary" id="btn-save">Salva e riavvia server</button>
         <span id="save-msg" class="sub"></span>
-      </div>
-    </section>
-
-    <section id="tab-shortcuts" class="panel">
-      <div class="card">
-        <h3>Scorciatoie</h3>
-        <div class="sub">Se invii uno di questi trigger al bot, viene sostituito con l'espansione prima di inoltrarlo a Claude.</div>
-        <table class="shortcuts" id="sc-table">
-          <thead><tr><th>Trigger</th><th>Espansione</th><th></th></tr></thead>
-          <tbody id="sc-body"></tbody>
-        </table>
-        <div class="row" style="margin-top:12px">
-          <input id="sc-key" type="text" placeholder="/es: /btc" style="flex:0 0 180px">
-          <input id="sc-val" type="text" placeholder="Testo da inoltrare a Claude" style="flex:1">
-          <button class="btn primary" id="btn-sc-add">Aggiungi</button>
-        </div>
       </div>
     </section>
 
@@ -197,8 +171,8 @@
         <div id="leases-box" style="margin-top:8px"></div>
       </div>
       <div class="card" style="margin-top:16px">
-        <h3 style="margin:0">Sessioni Telegram</h3>
-        <div class="sub">Conversazioni Claude attive per chat (sopravvivono se < timeout sessione).</div>
+        <h3 style="margin:0">Sessioni device iOS</h3>
+        <div class="sub">Conversazioni Claude attive per device (sopravvivono se &lt; timeout sessione).</div>
         <div id="sessions-box" style="margin-top:8px"></div>
       </div>
     </section>
@@ -211,7 +185,7 @@
             <button class="btn" id="btn-workers-refresh">Aggiorna</button>
           </div>
         </div>
-        <div class="sub">Task ricorrenti che girano dentro il bridge, indipendenti dalle sessioni Telegram. Ogni fire spawna un breve run di Claude col prompt definito.</div>
+        <div class="sub">Task ricorrenti che girano dentro il server, indipendenti dalle sessioni device iOS. Ogni fire spawna un breve run di Claude col prompt definito.</div>
         <div id="workers-list" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
       </div>
       <div class="card" style="margin-top:16px">

@@ -1,4 +1,4 @@
-// Watcher worker: task ricorrenti indipendenti dalle sessioni Claude via Telegram.
+// Watcher worker: task ricorrenti indipendenti dalle sessioni Claude client.
 // Ogni watcher fa partire periodicamente una breve invocazione di Claude con un prompt fissato.
 // Memoria: per default stateless (si appoggia a file JSON); opzionalmente usa session-resume.
 import { spawn } from 'node:child_process';

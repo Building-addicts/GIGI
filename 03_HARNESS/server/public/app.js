@@ -45,48 +45,35 @@ function timeAgo(ts) {
 
 async function loadConfig() {
   cfg = await api('/api/config');
-  $('#cfg-token').value = cfg.telegram.bot_token || '';
-  $('#cfg-chats').value = (cfg.telegram.allowed_chat_ids || []).join('\n');
+  // Nuovo schema iOS-centric: cfg.ios.shared_secret, cfg.ios.allowed_device_ids, cfg.server.port
+  cfg.ios = cfg.ios || {};
+  cfg.server = cfg.server || {};
+  $('#cfg-token').value = cfg.ios.shared_secret || '';
+  $('#cfg-chats').value = (cfg.ios.allowed_device_ids || []).join('\n');
   $('#cfg-bin').value = cfg.claude.bin || '';
   $('#cfg-timeout').value = cfg.claude.timeout_ms || 600000;
   $('#cfg-sessmin').value = cfg.claude.session_timeout_minutes ?? 60;
   $('#cfg-live').checked = !!cfg.claude.show_live_window;
   $('#cfg-perm').value = cfg.claude.permission_mode || 'bypassPermissions';
   $('#cfg-sysprompt').value = cfg.claude.system_prompt || '';
-  $('#cfg-port').value = cfg.ui?.port || 7777;
-  renderShortcuts();
-}
-
-function renderShortcuts() {
-  const body = $('#sc-body');
-  body.innerHTML = '';
-  for (const [k, v] of Object.entries(cfg.shortcuts || {})) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td><code>${k}</code></td><td>${escapeHtml(v)}</td>
-      <td><button class="sc-del" title="Elimina">×</button></td>`;
-    tr.querySelector('.sc-del').onclick = () => {
-      delete cfg.shortcuts[k];
-      renderShortcuts();
-      saveConfig(true);
-    };
-    body.appendChild(tr);
-  }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
+  $('#cfg-port').value = cfg.server?.port || cfg.ui?.port || 7777;
 }
 
 async function saveConfig(silent = false) {
-  cfg.telegram.bot_token = $('#cfg-token').value.trim();
-  cfg.telegram.allowed_chat_ids = $('#cfg-chats').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  cfg.ios = cfg.ios || {};
+  cfg.server = cfg.server || {};
+  cfg.ios.shared_secret = $('#cfg-token').value.trim();
+  cfg.ios.allowed_device_ids = $('#cfg-chats').value.split('\n').map(s=>s.trim()).filter(Boolean);
   cfg.claude.bin = $('#cfg-bin').value.trim();
   cfg.claude.timeout_ms = parseInt($('#cfg-timeout').value, 10);
   cfg.claude.session_timeout_minutes = parseInt($('#cfg-sessmin').value, 10);
   cfg.claude.show_live_window = $('#cfg-live').checked;
   cfg.claude.permission_mode = $('#cfg-perm').value;
   cfg.claude.system_prompt = $('#cfg-sysprompt').value;
-  cfg.ui = { port: parseInt($('#cfg-port').value, 10) };
+  cfg.server.port = parseInt($('#cfg-port').value, 10);
+  delete cfg.telegram;
+  delete cfg.ui;
+  delete cfg.shortcuts;
   const r = await api('/api/config', { method: 'POST', body: JSON.stringify(cfg) });
   if (!silent) {
     $('#save-msg').textContent = r.ok ? '✓ salvato, riavvio bridge...' : 'errore: ' + r.error;
@@ -118,17 +105,6 @@ $('#btn-restart').onclick = async () => { await api('/api/bridge/restart', { met
 $('#btn-save').onclick = () => saveConfig(false);
 $('#btn-log-refresh').onclick = refreshLogs;
 $('#btn-log-clear').onclick = async () => { await api('/api/logs/clear', { method:'POST' }); refreshLogs(); };
-
-$('#btn-sc-add').onclick = () => {
-  const k = $('#sc-key').value.trim();
-  const v = $('#sc-val').value.trim();
-  if (!k || !v) return;
-  if (!cfg.shortcuts) cfg.shortcuts = {};
-  cfg.shortcuts[k] = v;
-  $('#sc-key').value = ''; $('#sc-val').value = '';
-  renderShortcuts();
-  saveConfig(true);
-};
 
 async function refreshAutostart() {
   const r = await api('/api/autostart');
@@ -163,12 +139,6 @@ $('#btn-browser-start').onclick = async () => { await api('/api/browser/start', 
 $('#btn-browser-stop').onclick = async () => { await api('/api/browser/stop', {method:'POST'}); setTimeout(refreshBrowser, 500); };
 $('#btn-term-open').onclick = async () => { await api('/api/terminal/open', {method:'POST'}); };
 $('#btn-term-close').onclick = async () => { await api('/api/terminal/close', {method:'POST'}); };
-
-$('#btn-test').onclick = async () => {
-  const text = $('#test-text').value;
-  const r = await api('/api/test-message', { method:'POST', body: JSON.stringify({ text }) });
-  $('#test-result').textContent = r.ok ? '✓ inviato' : 'errore: ' + (r.description || r.error);
-};
 
 async function refreshBrowsersGrid() {
   const list = await api('/api/browser/instances');
@@ -253,20 +223,20 @@ async function refreshLeases() {
 
 async function refreshSessions() {
   try {
-    const data = await api('/api/telegram/queue');
+    const data = await api('/api/sessions');
     const box = $('#sessions-box');
     if (!data.sessions?.length) {
-      box.innerHTML = '<div class="sub" style="padding:8px">Nessuna sessione Telegram attiva.</div>';
+      box.innerHTML = '<div class="sub" style="padding:8px">Nessuna sessione device iOS attiva.</div>';
       return;
     }
     box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:rgba(255,255,255,.04)">
-        <th style="text-align:left;padding:8px">chat_id</th>
+        <th style="text-align:left;padding:8px">device_id</th>
         <th style="text-align:left;padding:8px">session_id</th>
         <th style="text-align:left;padding:8px">ultimo messaggio</th>
       </tr></thead><tbody>
       ${data.sessions.map(s => `<tr style="border-top:1px solid rgba(255,255,255,.06)">
-        <td style="padding:8px"><code>${s.chat_id}</code></td>
+        <td style="padding:8px"><code>${s.device_id}</code></td>
         <td style="padding:8px"><code style="font-size:11px">${(s.session_id || '').slice(0, 12)}…</code></td>
         <td style="padding:8px">${s.last_active_ago_s !== null ? formatDur(s.last_active_ago_s) + ' fa' : '—'}</td>
       </tr>`).join('')}

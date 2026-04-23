@@ -9,6 +9,7 @@
     "panel": "node panel.js"
   },
   "dependencies": {
-    "puppeteer-core": "^24.41.0"
+    "puppeteer-core": "^24.41.0",
+    "ws": "^8.19.0"
   }
 }
