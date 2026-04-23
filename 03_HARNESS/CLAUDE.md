@@ -15,8 +15,11 @@ GIGI-harness/                      ← root monorepo (remote: Leonardo-Corte/GIG
 └── 03_HARNESS/                    ← sei qui (backend GIGI)
 ```
 
-**Stato integrazione**: fase 10 in corso. Piano completo in
-`00_DOCS/PIANO_INTEGRAZIONE_HARNESS.md` (9 fasi, 57h).
+**Stato integrazione (2026-04-23)**: fasi 10-18 complete. Backend iOS operativo.
+Piano riferimento: `00_DOCS/PIANO_INTEGRAZIONE_HARNESS.md`.
+Spec API: `docs/api/ios-integration.md`. Quick start: `README.md`.
+
+Porte: **7777** panel admin · **7778** RPC loopback · **7779** iOS HTTP+WS.
 
 ## Struttura sottosistema
 
@@ -30,27 +33,31 @@ GIGI-harness/                      ← root monorepo (remote: Leonardo-Corte/GIG
 │   └── api/
 │       └── ios-integration.md     ← spec API iOS (fase 18)
 ├── server/                        ← backend GIGI (ex telegram-bridge)
-│   ├── server.js                  ← processo principale (non killare)
-│   ├── session-manager.js         ← sessione Claude per device iOS (fase 11)
-│   ├── claude-runner.js           ← spawn CLI Claude (fase 11)
-│   ├── queue.js                   ← code richieste + cancel (fase 11)
-│   ├── rate-limit.js              ← recovery rate limit (fase 11)
-│   ├── memory-snapshot.js         ← /memo auto snapshot (fase 11)
-│   ├── transcript-mirror.js       ← mirror JSONL Claude (fase 11)
-│   ├── panel.js                   ← pannello web admin (porta 7777)
+│   ├── server.js                  ← orchestratore + main + HTTP+WS iOS (7779)
+│   ├── paths.js                   ← path costanti (env override)
+│   ├── logger.js                  ← log shared
+│   ├── session-manager.js         ← sessione Claude per device iOS
+│   ├── claude-runner.js           ← spawn CLI Claude + streaming
+│   ├── queue.js                   ← code richieste + cancel + tracking child
+│   ├── rate-limit.js              ← recovery rate limit + interrupted state
+│   ├── memory-snapshot.js         ← /memo auto snapshot
+│   ├── transcript-mirror.js       ← mirror JSONL Claude
+│   ├── panel.js                   ← pannello web admin (7777)
 │   ├── panel-routes.js            ← route handler hot-reloadable
-│   ├── bridge-rpc.js              ← RPC panel↔server
-│   ├── watchers.js                ← worker autonomi periodici
-│   ├── watchers.json              ← definizioni watcher
+│   ├── bridge-rpc.js              ← RPC panel↔server (7778)
+│   ├── watchers.js                ← worker autonomi + action push_apns
+│   ├── watchers.json              ← watcher default (morning-briefing, meeting-prep)
 │   ├── config.example.json        ← template Windows
 │   ├── config.example.mac.json    ← template macOS/Linux
-│   ├── api/                       ← endpoint iOS (fase 12)
-│   │   ├── ios-auth.js            ← middleware Bearer token
-│   │   ├── ios-agent.js           ← POST /api/ios/agent/run
-│   │   ├── ios-memory.js          ← POST /api/ios/memory/*
-│   │   ├── ios-computer-use.js    ← POST /api/ios/computer-use/*
-│   │   ├── ios-push-register.js   ← POST /api/ios/push/register
-│   │   └── ios-stream.js          ← WebSocket /ws/ios/stream
+│   ├── api/                       ← endpoint iOS
+│   │   ├── ios-router.js          ← router + Bearer auth + CORS
+│   │   ├── ios-auth.js            ← middleware Bearer
+│   │   ├── ios-agent.js           ← POST agent/run + cancel + session + memo
+│   │   ├── ios-memory.js          ← POST memory/put + query + DELETE + GET all
+│   │   ├── ios-computer-use.js    ← loop Anthropic SDK + Playwright
+│   │   ├── ios-push-register.js   ← POST push/register + unregister
+│   │   ├── ios-push-test.js       ← POST push/test (APNS smoke)
+│   │   └── ios-stream.js          ← WebSocket /ws/ios/stream + broadcast room
 │   └── logs/                      ← stato runtime (gitignored)
 │       ├── state.json
 │       ├── sessions.json

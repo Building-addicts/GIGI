@@ -68,5 +68,8 @@ enum GigiKeychain {
         static let groqAPIKey        = "groq_api_key"
         static let geminiAPIKey      = "gemini_api_key"   // kept for migration; unused after Groq switch
         static let picovoiceAccessKey = "picovoice_access_key"
+        static let harnessBaseURL    = "harness_base_url"   // e.g. http://10.0.0.5:7779
+        static let harnessSecret     = "harness_shared_secret"
+        static let harnessDeviceID   = "harness_device_id"  // UUID persistente per device
     }
 }

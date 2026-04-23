@@ -4,6 +4,7 @@ import WebKit
 
 @main
 struct GIGIApp: App {
+    @UIApplicationDelegateAdaptor(GigiAppDelegate.self) var appDelegate
     @StateObject var auth = GigiAuthManager.shared
     @Environment(\.scenePhase) private var scenePhase
 

@@ -1714,19 +1714,78 @@ GIGI/
 
 ---
 
-## 9.BIS. Harness — Sottosistema Node adiacente
+## 9.BIS. Harness — Backend iOS GIGI (post fase 17)
 
-Il sottosistema `03_HARNESS/` è parte dell'architettura GIGI: repo unificato, docs condivise, browser pool condivisibile. **Non** è l'implementazione del backend di §9 (che userebbe Anthropic SDK + BullMQ). Harness invece:
-- Spawna il CLI `claude` (Claude Code) per gestire conversazioni Telegram, non chiama `anthropic.messages.create` direttamente
-- È costruito attorno a un flusso utente → Telegram → CLI Claude, non iOS → HTTP → browser
-- Condivide però il **pool browser Chrome loggato** (profile_dir + CDP port) che può essere riutilizzato da un eventuale backend §9 o dal `GigiWebAgent` iOS lato remoto
+**Cambio ruolo 2026-04-23**: Telegram è stato droppato (fase 17 del piano integrazione).
+`03_HARNESS/` è ora **il backend dell'app iOS GIGI**, non più canale Telegram alternativo.
 
-Il ruolo nell'architettura GIGI complessiva è quindi:
-- **Canale alternativo** all'app iOS (Leonardo parla a GIGI via Telegram quando non ha l'iPhone in mano)
-- **Infrastruttura operativa** (watcher WhatsApp, memoria cross-session, browser loggati)
-- **Progettazione memoria futura** (`memory-upgrade/` — stack SOTA candidato per §11)
+### Architettura runtime
 
-L'integrazione runtime app iOS ↔ harness è **opzionale** e dipende da use case specifici da definire.
+```
+iPhone (GigiHarnessClient.swift)
+   │  HTTP(S) + WS
+   ▼
+03_HARNESS/server/server.js  :7779
+   ├─ api/ios-router.js       ← Bearer auth + CORS + dispatcher /api/ios/*
+   ├─ api/ios-agent.js        ← POST /api/ios/agent/run (Claude CLI --resume)
+   ├─ api/ios-memory.js       ← POST put/query/DELETE (memory/store.js)
+   ├─ api/ios-computer-use.js ← Anthropic SDK + Playwright via browser-pool/driver.js
+   ├─ api/ios-push-register.js← salva device APNS token
+   ├─ api/ios-stream.js       ← WebSocket /ws/ios/stream (interim thoughts)
+   ├─ claude-runner.js        ← spawn Claude CLI + streaming JSONL
+   ├─ queue.js                ← enqueue + cancel + tracking child per device
+   ├─ rate-limit.js           ← detection + interrupted recovery
+   ├─ memory-snapshot.js      ← /memo serializzato
+   ├─ transcript-mirror.js    ← backup JSONL Claude → logs/transcripts/<deviceId>
+   ├─ watchers.js             ← worker proattivi + action="push_apns"
+   └─ bridge-rpc.js           ← loopback RPC :7778 per panel.js
+
+03_HARNESS/panel.js  :7777   ← admin UI (indipendente), spawna server come child
+03_HARNESS/apns/send.js      ← provider APNS via HTTP/2 + JWT ES256 (no deps)
+03_HARNESS/memory/store.js   ← API astratta (JSON MVP, LanceDB swap futuro)
+03_HARNESS/browser-pool/driver.js ← lease Playwright CDP per computer-use
+```
+
+### Decisioni (fase 10-18)
+
+1. **Memory stack**: MVP JSON file store → API stabile `memory/store.js`, swap a LanceDB+BGE-M3 cambiando `MEMORY_BACKEND=lancedb` senza toccare gli endpoint iOS.
+2. **Computer-use model**: `claude-opus-4-7` con tool `computer_20241022` (Anthropic SDK diretto, non CLI) via Playwright CDP su Chrome loggato.
+3. **Telegram**: dropped completamente (fase 17). No più `tg()`, `bot_token`, `allowed_chat_ids`, `transcribe.js`.
+4. **Host**: Mac locale per dev, VPS-ready — tutti i path via env var (`HARNESS_CONFIG`, `HARNESS_LOGS_DIR`, `HARNESS_SHARED_SECRET`, `ANTHROPIC_API_KEY`, `APNS_*`).
+5. **Porte**: 7777 admin panel, 7778 RPC loopback, 7779 iOS HTTP+WS.
+6. **Auth**: Bearer shared secret in Keychain iOS (`GigiKeychain.Key.harnessSecret`).
+
+### Flussi chiave
+
+**Comando vocale iOS → risposta Claude**:
+```
+iPhone: STT locale → agent loop → tool = "harness backend"
+→ GigiHarnessClient.agentRun(text) → POST /api/ios/agent/run
+→ server enqueue(deviceId, runClaude) → spawn claude --resume session
+→ (opt) WS stream interim thoughts per dashboard
+→ response {result, session_id} → iOS TTS
+```
+
+**Watcher proattivo → push APNS**:
+```
+watchers.js tick (60s) → fire watcher "gigi-morning-briefing"
+→ Claude CLI genera JSON {"push":[{title, body}]}
+→ watchers.js parse → apns.sendToDevice(deviceId, payload)
+→ iOS AppDelegate handler → NotificationCenter `.gigiProactiveNotification`
+```
+
+**Confirm pagamento computer-use**:
+```
+iOS → POST /api/ios/computer-use {task: "ordina pizza"}
+→ jobId → server Anthropic loop → CONFIRM_REQUIRED regex match
+→ job.status = "awaiting_confirm" + broadcast WS + (futuro: push APNS)
+→ iOS mostra card, user tap OK
+→ POST /api/ios/computer-use/:jobId/confirm {approved: true}
+→ server polling rileva, riprende loop, completa checkout
+```
+
+Spec endpoint completa: `03_HARNESS/docs/api/ios-integration.md`.
+Piano integrazione (fasi 10-18 eseguite): `00_DOCS/PIANO_INTEGRAZIONE_HARNESS.md`.
 
 ### Struttura
 

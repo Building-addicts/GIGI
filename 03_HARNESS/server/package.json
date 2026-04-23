@@ -9,6 +9,8 @@
     "panel": "node panel.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "playwright-core": "^1.59.1",
     "puppeteer-core": "^24.41.0",
     "ws": "^8.19.0"
   }

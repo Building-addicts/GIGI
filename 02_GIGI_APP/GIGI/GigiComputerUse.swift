@@ -2,21 +2,63 @@ import Foundation
 
 // MARK: - GigiComputerUse
 //
-// Client iOS → backend /api/computer-use (Claude Sonnet + Playwright).
-// Full implementation: Phase 5 of TASK_PLAN_V3.md.
-// Stub here unblocks compilation for GigiToolRegistry (Phase 1.1).
+// Client iOS → backend harness /api/ios/computer-use (Claude Opus 4.7 + Playwright).
+// Loop polling: start → attende status=done|awaiting_confirm|failed|cancelled.
+// Timeout polling: 3 minuti. Se awaiting_confirm arriva, il caller deve
+// chiamare `confirm(jobId:approved:)` per sbloccare il loop server-side.
 
 @MainActor
 final class GigiComputerUse {
     static let shared = GigiComputerUse()
     private init() {}
 
-    /// Execute a browser automation task on the backend.
-    /// Returns: result string, or "CONFIRM_REQUIRED: <summary>", or "ERROR: <reason>".
+    /// Avvia un task computer-use e attende il completamento (o confirm_required).
+    /// Ritorna: "result string", oppure "CONFIRM_REQUIRED: <reason>" quando il loop
+    /// backend si ferma per approvazione, oppure "ERROR: <reason>".
     func execute(task: String) async -> String {
-        // TODO Phase 5 — POST to backend /api/computer-use
-        // For now: surface the task to the user so they can act manually.
-        print("GigiComputerUse (stub): \(task)")
-        return "Computer Use not yet implemented. Task: \(task)"
+        guard GigiHarnessClient.shared.isConfigured else {
+            return "ERROR: Harness non configurato (Impostazioni → Harness)"
+        }
+        switch await GigiHarnessClient.shared.computerUseStart(task: task) {
+        case .failure(let e): return "ERROR: \(e)"
+        case .success(let jobId):
+            return await poll(jobId: jobId, timeoutSec: 180)
+        }
+    }
+
+    /// Conferma o rifiuta un job awaiting_confirm. Ritorna true se accettato dal server.
+    func confirm(jobId: String, approved: Bool) async -> Bool {
+        switch await GigiHarnessClient.shared.computerUseConfirm(jobId: jobId, approved: approved) {
+        case .success(let b): return b == approved
+        case .failure: return false
+        }
+    }
+
+    /// Poll status fino a stato terminale o confirm.
+    private func poll(jobId: String, timeoutSec: Int) async -> String {
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutSec))
+        var intervalMs: UInt64 = 800
+        while Date() < deadline {
+            try? await Task.sleep(nanoseconds: intervalMs * 1_000_000)
+            intervalMs = min(intervalMs + 200, 2_500)
+            switch await GigiHarnessClient.shared.computerUseStatus(jobId: jobId) {
+            case .failure(let e): return "ERROR: polling \(e)"
+            case .success(let job):
+                switch job.status {
+                case "done":
+                    return job.result ?? "(nessun output)"
+                case "failed":
+                    return "ERROR: \(job.error ?? "sconosciuto")"
+                case "cancelled":
+                    return "ERROR: cancellato"
+                case "awaiting_confirm":
+                    let reason = job.confirm_required?.reason ?? "conferma richiesta"
+                    return "CONFIRM_REQUIRED:\(jobId):\(reason)"
+                default:
+                    break // pending / running → continua polling
+                }
+            }
+        }
+        return "ERROR: timeout \(timeoutSec)s"
     }
 }

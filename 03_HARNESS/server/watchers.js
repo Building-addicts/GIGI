@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { sendToDevice, broadcastToAll, buildAlertPayload, buildSilentPayload } from '../apns/send.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = process.env.HARNESS_LOGS_DIR || path.join(__dirname, 'logs');
@@ -102,6 +103,43 @@ function runtimeReleaseLock(id) {
     delete r.running[id];
     saveRuntime(r);
   }
+}
+
+// Estrae direttive push da un testo Claude. Accetta:
+// A) JSON blob con chiave "push" → array di direttive
+// B) linee markdown `action=push title="X" body="Y" deviceId=Z`
+// C) blocco fenced ```json {"push":[...]}
+function extractPushDirectives(text) {
+  const directives = [];
+
+  // Tenta fenced json
+  const fenceMatch = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  const candidates = [];
+  if (fenceMatch) candidates.push(fenceMatch[1]);
+  candidates.push(text);
+
+  for (const c of candidates) {
+    // Pattern A/C: blocco JSON con chiave "push"
+    const jsonMatch = /\{[\s\S]*?"push"[\s\S]*?\}/.exec(c);
+    if (jsonMatch) {
+      try {
+        const obj = JSON.parse(jsonMatch[0]);
+        const arr = Array.isArray(obj.push) ? obj.push : [obj.push];
+        for (const d of arr) if (d && typeof d === 'object') directives.push(d);
+        if (directives.length) return directives;
+      } catch {}
+    }
+  }
+
+  // Pattern B: linee `action=push ...`
+  const lineRe = /action\s*=\s*push\s+(.+)$/gim;
+  let m;
+  while ((m = lineRe.exec(text)) !== null) {
+    const kv = {};
+    for (const pair of m[1].matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) kv[pair[1]] = pair[2];
+    if (kv.title || kv.body) directives.push(kv);
+  }
+  return directives;
 }
 
 function nextMidnightRome() {
@@ -237,6 +275,30 @@ async function fireWatcher(w, cfg) {
 
   const summary = (resultText || stderr || '').replace(/\s+/g, ' ').slice(0, 300);
   wlog(`[${w.id}] done code=${exitCode} ${dur}ms — ${summary}`);
+
+  // Azione push_apns: il watcher dichiara "action: push_apns" e il prompt istruisce
+  // Claude a emettere un blocco JSON `{"push":{"title":...,"body":...,"deviceId":...}}`.
+  // Parser minimale: cerca il primo oggetto `{...}` con chiave "push" nel testo output.
+  if (w.action === 'push_apns' && resultText) {
+    try {
+      const pushDirectives = extractPushDirectives(resultText);
+      for (const d of pushDirectives) {
+        const payload = d.silent
+          ? buildSilentPayload(d.data || {})
+          : buildAlertPayload({ title: d.title || 'GIGI', body: d.body || '', data: d.data || {}, badge: d.badge, sound: d.sound, category: d.category });
+        const opts = { pushType: d.silent ? 'background' : 'alert', priority: d.silent ? 5 : 10 };
+        if (d.deviceId) {
+          const r = await sendToDevice(d.deviceId, payload, cfg, opts);
+          wlog(`[${w.id}] apns → ${d.deviceId}: ${r.ok ? 'OK' : 'FAIL ' + (r.error || r.status)}`);
+        } else {
+          const rs = await broadcastToAll(payload, cfg, opts);
+          wlog(`[${w.id}] apns broadcast → ${rs.length} device, ok=${rs.filter(r => r.ok).length}`);
+        }
+      }
+    } catch (e) {
+      wlog(`[${w.id}] push_apns parse/send error: ${e.message}`);
+    }
+  }
 
   // Budget tracking: incrementa responses_count quando l'output dichiara action=sent.
   // Si auto-disabilita il watcher quando raggiunge max_responses.

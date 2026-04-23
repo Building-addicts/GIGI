@@ -1,7 +1,7 @@
 # Inventario Completo Workspace GIGI
 
 Totale file nel workspace iOS+MDM: **933** (pre-assorbimento Harness).
-Post assorbimento `03_HARNESS/`: aggiunti file sorgente Node (telegram-bridge ~13 file, browser-mcp ~8 file, memory-upgrade docs ~30 file). `node_modules` e `browser-profile/` esclusi via `.gitignore`.
+Post fase 10-18 integrazione `03_HARNESS/`: backend Node rinominato (`server/`, `browser-pool/`, `memory/`, `apns/`), Telegram droppato, iOS HTTP+WS API, computer-use Anthropic SDK, APNS provider nativo. `node_modules` + `browser-profile/` esclusi via `.gitignore`.
 
 Nota: la cartella `01_SERVER_MDM/node_modules` contiene **829 file** auto-generati dalle dipendenze npm; sono inclusi nell'inventario come blocco dedicato.
 
@@ -101,40 +101,74 @@ Nota: la cartella `01_SERVER_MDM/node_modules` contiene **829 file** auto-genera
 
 ## 03_HARNESS
 
-Sottosistema Node (ex repo `ArmandoBattaglino/Harness`, assorbito in GIGI). Espone telegram-bridge, browser MCP, memory-upgrade.
+Sottosistema Node. Backend app iOS GIGI: sessioni Claude, memoria, computer-use, APNS, watcher proattivi. Telegram droppato in fase 17.
 
 ### 03_HARNESS root
 
-- `03_HARNESS/CLAUDE.md` - indice memoria harness (entry point sessione Claude Code).
-- `03_HARNESS/.gitignore` - ignore locale harness (config.json, browser-profile/, logs/, whisper-models/).
-- `03_HARNESS/Control Panel.url` - shortcut Windows al pannello locale.
+- `03_HARNESS/CLAUDE.md` - indice memoria harness.
+- `03_HARNESS/README.md` - quick start Mac + deploy VPS.
+- `03_HARNESS/.gitignore` - ignore locale (config.json, browser-profile/, server/logs/, apns/tokens.json, memory/logs/).
+- `03_HARNESS/Control Panel.url` - shortcut al pannello locale.
 
-### 03_HARNESS/docs/memory
+### 03_HARNESS/docs
 
-- `03_HARNESS/docs/memory/context.md` - contesto statico del progetto (struttura, regole critiche, watchers).
+- `03_HARNESS/docs/memory/context.md` - contesto statico (struttura, regole, watchers).
+- `03_HARNESS/docs/api/ios-integration.md` - spec completa endpoint iOS ↔ server.
 
-### 03_HARNESS/telegram-bridge
+### 03_HARNESS/server (ex telegram-bridge)
 
-- `03_HARNESS/telegram-bridge/bridge.js` - processo principale Telegram ↔ Claude Code (~102k).
-- `03_HARNESS/telegram-bridge/panel.js` - HTTP server control panel porta 7777.
-- `03_HARNESS/telegram-bridge/panel-routes.js` - route HTTP pannello.
-- `03_HARNESS/telegram-bridge/bridge-rpc.js` - RPC verso bridge.
-- `03_HARNESS/telegram-bridge/watchers.js` - runtime worker autonomi periodici.
-- `03_HARNESS/telegram-bridge/watchers.json` - definizioni watcher (leo-wa-terminal, tommy-wa-assistant).
-- `03_HARNESS/telegram-bridge/transcribe.js` - whisper.cpp per voice note Telegram.
-- `03_HARNESS/telegram-bridge/config.example.json` - template config (Windows paths originali).
-- `03_HARNESS/telegram-bridge/.env.example` - template env vars.
-- `03_HARNESS/telegram-bridge/package.json` + `package-lock.json` - deps npm.
-- `03_HARNESS/telegram-bridge/start.bat` / `start_hidden.vbs` / `kill.ps1` / `watchdog.ps1` - script Windows.
-- `03_HARNESS/telegram-bridge/public/` - asset statici panel web.
-- `03_HARNESS/telegram-bridge/docs/` - docs interne bridge.
+Orchestratore + moduli focused (refactor fase 11).
 
-### 03_HARNESS/browser-mcp
+- `server.js` - entry point, main(), HTTP+WS iOS, export gigiServer.
+- `paths.js` - path costanti (VPS-ready env).
+- `logger.js` - log shared.
+- `session-manager.js` - sessioni Claude per deviceId.
+- `claude-runner.js` - spawnClaude + runClaude + runParallelTask + pretty print.
+- `queue.js` - enqueue/cancel + tracking child per device.
+- `rate-limit.js` - detection + interrupted recovery.
+- `memory-snapshot.js` - /memo serializzato.
+- `transcript-mirror.js` - backup JSONL Claude per deviceId.
+- `panel.js` - HTTP admin UI (7777), spawna server come child.
+- `panel-routes.js` - route panel hot-reloadable.
+- `bridge-rpc.js` - RPC loopback (7778) panel → watchers.
+- `watchers.js` - worker autonomi + action push_apns.
+- `watchers.json` - watcher default (morning-briefing, meeting-prep).
+- `api/ios-router.js` - router /api/ios/* + Bearer auth.
+- `api/ios-auth.js` - middleware Bearer.
+- `api/ios-agent.js` - POST agent/run + cancel + session + memo.
+- `api/ios-stream.js` - WebSocket /ws/ios/stream + broadcast room.
+- `api/ios-memory.js` - put/query/delete/all (wrap memory/store.js).
+- `api/ios-computer-use.js` - loop Anthropic SDK + Playwright driver.
+- `api/ios-push-register.js` - APNS token register/unregister.
+- `api/ios-push-test.js` - push di test.
+- `config.example.mac.json` + `config.example.json` - template config (Mac + Windows).
+- `.env.example` - template env.
+- `package.json` + `package-lock.json` - deps (ws, @anthropic-ai/sdk, playwright-core, puppeteer-core).
+- `start.sh` + `start.bat` + `start_hidden.vbs` + `kill.sh`/`kill.ps1` - script avvio.
+- `public/` - asset panel admin (iOS-centric, Telegram rimosso).
+- `logs/` (gitignored) - stato runtime (sessions.json, state.json, transcripts/, computer_use_jobs.json, cost_tracking.json).
 
-- `03_HARNESS/browser-mcp/server.js` - server MCP Puppeteer pool Chrome.
-- `03_HARNESS/browser-mcp/server-playwright.js` - variante Playwright.
-- `03_HARNESS/browser-mcp/package.json` + `package-lock.json` - deps npm.
-- `03_HARNESS/browser-mcp/PLAN*.md`, `FUTURE-PLAN.md` - design doc.
+### 03_HARNESS/browser-pool (ex browser-mcp)
+
+- `server.js` - MCP Puppeteer pool Chrome (legacy, ancora usato per watcher).
+- `server-playwright.js` - variante MCP Playwright.
+- `driver.js` - API diretta per computer-use (lease/release + Playwright CDP primitives).
+- `package.json` + `package-lock.json` - deps.
+
+### 03_HARNESS/memory
+
+Backend memoria semantica per-device (swappabile).
+
+- `store.js` - API astratta MemoryStore (put/query/delete/all).
+- `backends/json-store.js` - MVP JSON file per userId.
+- `logs/` (gitignored) - storage per-user.
+
+### 03_HARNESS/apns
+
+Provider APNS nativo (HTTP/2 + JWT ES256, no deps esterne).
+
+- `send.js` - sendPush/sendToDevice/broadcastToAll + buildAlertPayload/buildSilentPayload.
+- `tokens.json` (gitignored) - device token registrati.
 
 ### 03_HARNESS/memory-upgrade
 

@@ -5,6 +5,7 @@ import * as agent from './ios-agent.js';
 import * as computerUse from './ios-computer-use.js';
 import * as memory from './ios-memory.js';
 import * as push from './ios-push-register.js';
+import { handlePushTest } from './ios-push-test.js';
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -60,6 +61,7 @@ export async function handleIosRequest(req, res, ctx) {
   // push
   if (p === '/api/ios/push/register' && m === 'POST')   { await push.handleRegister(req, res, deps); return true; }
   if (p === '/api/ios/push/unregister' && m === 'POST') { await push.handleUnregister(req, res, deps); return true; }
+  if (p === '/api/ios/push/test' && m === 'POST')       { await handlePushTest(req, res, deps); return true; }
 
   // health
   if (p === '/api/ios/health' && m === 'GET') { json(res, 200, { ok: true, data: { pid: process.pid, uptime_s: Math.floor(process.uptime()) } }); return true; }

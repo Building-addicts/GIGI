@@ -18,11 +18,16 @@ struct SettingsView: View {
     @State private var accessoryList: [String] = []
     @State private var showWhatsApp = false
     @State private var showProfile = false
+    @State private var harnessURL = ""
+    @State private var harnessSecret = ""
+    @State private var harnessStatus = "—"
+    @State private var isTestingHarness = false
 
     var body: some View {
         NavigationStack {
             List {
                 brainSection
+                harnessSection
                 whatsAppSection
                 profileSection
                 wakeWordSection
@@ -93,6 +98,48 @@ struct SettingsView: View {
             Text("🧠 AI Brain (Groq)")
         } footer: {
             Text("Free key at console.groq.com — stored securely in your Keychain.")
+                .font(.caption)
+        }
+    }
+
+    // MARK: - Harness section (backend GIGI)
+
+    private var harnessSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Base URL").font(.caption).foregroundColor(.secondary)
+                TextField("http://10.0.0.5:7779", text: $harnessURL)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    .autocorrectionDisabled()
+                    .font(.system(.body, design: .monospaced))
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Bearer secret").font(.caption).foregroundColor(.secondary)
+                SecureField("shared secret 32 char", text: $harnessSecret)
+                    .font(.system(.body, design: .monospaced))
+            }
+            Button("Salva e testa") {
+                Task { await saveAndTestHarness() }
+            }
+            .foregroundColor(.purple)
+            .disabled(harnessURL.isEmpty || harnessSecret.isEmpty || isTestingHarness)
+
+            HStack {
+                Text("Stato")
+                Spacer()
+                if isTestingHarness {
+                    ProgressView().scaleEffect(0.8)
+                } else {
+                    Text(harnessStatus)
+                        .foregroundColor(harnessStatus.contains("✓") ? .green : .secondary)
+                        .font(.subheadline)
+                }
+            }
+        } header: {
+            Text("🖥 Harness Backend")
+        } footer: {
+            Text("Backend Node (computer-use, memoria, watcher proattivi). Genera il secret con `openssl rand -hex 16`. Senza configurazione, GIGI funziona solo local.")
                 .font(.caption)
         }
     }
@@ -333,6 +380,21 @@ struct SettingsView: View {
         accessoryList = await GigiHomeKit.shared.accessoryNames()
         let existing = GigiConfig.groqAPIKey
         if !existing.isEmpty { geminiKey = existing }
+        harnessURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) ?? ""
+        harnessSecret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? ""
+        harnessStatus = GigiHarnessClient.shared.isConfigured ? "configurato (non testato)" : "non configurato"
+    }
+
+    private func saveAndTestHarness() async {
+        isTestingHarness = true
+        GigiKeychain.save(harnessURL.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.save(harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessSecret)
+        _ = GigiHarnessClient.ensureDeviceId()
+        switch await GigiHarnessClient.shared.health() {
+        case .success(let h): harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
+        case .failure(let e): harnessStatus = "✗ \(e)"
+        }
+        isTestingHarness = false
     }
 
     private func saveGeminiKey() {

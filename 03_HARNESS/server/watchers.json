@@ -7,7 +7,8 @@
       "interval_sec": 86400,
       "use_session": false,
       "timeout_ms": 180000,
-      "prompt": "PLACEHOLDER fase 15: briefing mattutino GIGI. Leggi calendario + meteo + news locali, sintetizza in max 3 frasi italiane, manda push APNS a device iOS registrati. Output: '[morning-briefing] action=sent' oppure 'action=skip'."
+      "action": "push_apns",
+      "prompt": "Sei GIGI. Genera un briefing mattutino conciso per Leonardo. Se hai accesso a calendario/meteo/news tramite tool, raccogli i dati; altrimenti fai un saluto generico. Output: UN SOLO blocco JSON con questo schema esatto, niente altro testo:\n```json\n{\"push\": [{\"title\": \"Buongiorno Leonardo\", \"body\": \"<max 120 caratteri, 1-3 punti chiave>\", \"data\": {\"type\": \"morning-briefing\"}}]}\n```\nSe non ci sono notizie utili, ometti il push ed emetti `action=skip`."
     },
     {
       "id": "gigi-meeting-prep",
@@ -16,7 +17,8 @@
       "interval_sec": 600,
       "use_session": false,
       "timeout_ms": 60000,
-      "prompt": "PLACEHOLDER fase 15: controlla calendario prossimi 30 minuti, se evento imminente manda push APNS con titolo + 1 riga contesto. Output: '[meeting-prep] action=sent' oppure 'action=skip'."
+      "action": "push_apns",
+      "prompt": "Sei GIGI. Controlla il calendario per eventi nei prossimi 30 minuti. Se c'è un evento imminente, emetti un SOLO blocco JSON:\n```json\n{\"push\": [{\"title\": \"<titolo evento>\", \"body\": \"tra <minuti> min · <1 riga contesto>\", \"data\": {\"type\": \"meeting-prep\", \"eventId\": \"<id>\"}}]}\n```\nSe nessun evento imminente, emetti `action=skip`."
     }
   ]
 }
