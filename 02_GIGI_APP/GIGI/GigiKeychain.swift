@@ -71,5 +71,7 @@ enum GigiKeychain {
         static let harnessBaseURL    = "harness_base_url"   // e.g. http://10.0.0.5:7779
         static let harnessSecret     = "harness_shared_secret"
         static let harnessDeviceID   = "harness_device_id"  // UUID persistente per device
+        static let harnessApnsToken    = "harness_apns_token"    // ultimo device token ricevuto da Apple
+        static let harnessApnsSyncedTo = "harness_apns_synced_to" // SHA256(baseURL|secret) cui il token è stato inviato con successo
     }
 }

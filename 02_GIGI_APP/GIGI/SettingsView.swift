@@ -390,6 +390,9 @@ struct SettingsView: View {
         GigiKeychain.save(harnessURL.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessBaseURL)
         GigiKeychain.save(harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessSecret)
         _ = GigiHarnessClient.ensureDeviceId()
+        // Config cambiata → ri-sincronizza il token APNS con il (nuovo) backend.
+        // Se il device ha già un token salvato, viene reinviato; altrimenti no-op.
+        GigiApnsSync.onConfigChanged()
         switch await GigiHarnessClient.shared.health() {
         case .success(let h): harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
         case .failure(let e): harnessStatus = "✗ \(e)"

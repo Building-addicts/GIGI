@@ -46,18 +46,16 @@ final class GigiAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         GigiDebugLogger.log("APNS token ricevuto: \(token.prefix(16))…")
-        Task { @MainActor in
-            guard GigiHarnessClient.shared.isConfigured else {
-                GigiDebugLogger.log("APNS: Harness non configurato — skip register")
-                return
-            }
-            let bundleId = Bundle.main.bundleIdentifier
-            let r = await GigiHarnessClient.shared.pushRegister(apnsToken: token, bundleId: bundleId)
-            switch r {
-            case .success: GigiDebugLogger.log("APNS: registrato su backend Harness")
-            case .failure(let e): GigiDebugLogger.log("APNS: register fallito — \(e)")
-            }
-        }
+        // Persisti il token SEMPRE (anche se Harness non configurato) e delega
+        // la sincronizzazione al GigiApnsSync, che gestisce retry + cambio config.
+        Task { @MainActor in GigiApnsSync.onTokenReceived(token) }
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        // Retry opportunistico: se in passato la sync è fallita (rete giù, server
+        // non raggiungibile, config mancante) il token verrà rinviato qui.
+        // No-op se il fingerprint (URL + secret) combacia con l'ultimo sync OK.
+        Task { @MainActor in GigiApnsSync.onAppDidBecomeActive() }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Swift.Error) {
