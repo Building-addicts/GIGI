@@ -27,6 +27,7 @@ struct SettingsView: View {
     @State private var harnessStatus = "—"
     @State private var isTestingHarness = false
     @State private var showPairingSheet = false
+    @State private var showChecklistSheet = false
     @State private var pairedDeviceName: String? = nil
     @FocusState var focusedField: SettingsField?
 
@@ -125,6 +126,24 @@ struct SettingsView: View {
 
     private var harnessSection: some View {
         Section {
+            // Pre-pair education: visible only when not paired yet so the
+            // user knows what they need before scanning a QR.
+            if !harnessIsPaired {
+                Button {
+                    showChecklistSheet = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "checklist")
+                            .font(.system(size: 18))
+                        Text("Vedi requisiti")
+                            .font(.body.weight(.medium))
+                        Spacer()
+                    }
+                    .foregroundColor(.purple)
+                    .padding(.vertical, 4)
+                }
+            }
+
             // Primary action: pair via QR
             Button {
                 showPairingSheet = true
@@ -196,7 +215,7 @@ struct SettingsView: View {
         } header: {
             Text("🖥 Harness Backend")
         } footer: {
-            Text("Installa Tailscale su PC + iPhone (stesso account), apri localhost:7777/pair nel browser del PC e scansiona il QR. Una-tantum, poi funziona da qualsiasi rete.")
+            Text("Non sei sicuro di cosa serve? Tap 'Vedi requisiti'. Apri localhost:7777/setup nel browser del PC per scegliere la modalità tunnel, poi localhost:7777/pair per il QR. Una-tantum, poi funziona da qualsiasi rete.")
                 .font(.caption)
         }
         .sheet(isPresented: $showPairingSheet) {
@@ -204,6 +223,9 @@ struct SettingsView: View {
                 pairedDeviceName = deviceName
                 harnessStatus = "✓ Connesso a \(deviceName)"
             }
+        }
+        .sheet(isPresented: $showChecklistSheet) {
+            SetupChecklistView()
         }
     }
 
