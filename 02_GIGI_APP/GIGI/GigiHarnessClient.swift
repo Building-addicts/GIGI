@@ -42,11 +42,42 @@ final class GigiHarnessClient {
         var description: String {
             switch self {
             case .notConfigured: return "Harness non configurato (URL/secret mancanti)"
-            case .badResponse(let s, let b): return "HTTP \(s): \(b.prefix(200))"
+            case .badResponse(let s, let b): return "HTTP \(s): \(Self.summarize(body: b, status: s))"
             case .decodeFailed(let e): return "decode: \(e.localizedDescription)"
             case .transport(let e):    return "network: \(e.localizedDescription)"
             case .apiError(let c, let m): return "\(c): \(m)"
             }
+        }
+
+        /// Strips HTML tags from a Cloudflare error page so we don't dump
+        /// `<!DOCTYPE html><!--[if lt IE 7]>…` in the user UI. Keeps the
+        /// short error text (e.g. "Origin DNS error", "Tunnel error") and
+        /// adds a hint when the status hints at a stale tunnel URL.
+        private static func summarize(body: String, status: Int) -> String {
+            let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            // If response wasn't HTML, return the first 200 chars verbatim
+            guard trimmed.lowercased().contains("<html") || trimmed.lowercased().hasPrefix("<!doctype") else {
+                return String(trimmed.prefix(200))
+            }
+            // Cloudflare 5xx error pages have <title>...</title> with a clear summary
+            if let titleRange = trimmed.range(of: "<title>", options: .caseInsensitive),
+               let endRange = trimmed.range(of: "</title>", options: .caseInsensitive),
+               titleRange.upperBound < endRange.lowerBound {
+                let title = String(trimmed[titleRange.upperBound..<endRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if status == 530 || status == 502 || status == 521 || status == 522 {
+                    return "\(title) — il tunnel non risponde, rigenera il QR da localhost:7777/setup"
+                }
+                return title
+            }
+            // Fallback: strip tags blindly
+            let plain = trimmed.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            if status == 530 {
+                return "tunnel non raggiungibile (530) — rigenera il QR"
+            }
+            return String(plain.prefix(160))
         }
     }
 
