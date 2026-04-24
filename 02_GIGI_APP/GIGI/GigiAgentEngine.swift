@@ -30,7 +30,8 @@ final class GigiAgentEngine {
     // MARK: - Config
 
     private let maxIterations  = 8
-    private let globalTimeout: TimeInterval = 90.0
+    private let fastTimeout: TimeInterval  = 20.0   // native iOS tools
+    private let slowTimeout: TimeInterval  = 90.0   // web / harness tools
     // Groq llama-3.3-70b pricing (USD): ~$0.059/1M input tokens, ~$0.079/1M output tokens.
     // We use a blended rate for the simplified estimate.
     private let costPerToken = 0.00000015
@@ -90,7 +91,6 @@ final class GigiAgentEngine {
         var contents    = initialContents
         var executedTools: [String] = []
         var totalCost: Double = 0
-        let deadline    = Date().addingTimeInterval(globalTimeout)
 
         // Tool selection: base on current utterance + every prior user turn in history
         // so follow-ups like "procedi" / "margarita" don't strip out tools the model
@@ -107,6 +107,15 @@ final class GigiAgentEngine {
 
         let relevantTools = Array(relevantByName.values)
         var toolDeclarations = registry.declarations(for: relevantTools)
+
+        // Slow tools need extra time; native-only requests use a tight timeout
+        // so a hanging Groq call doesn't block the user for 90s on "what time is it".
+        let slowToolNames: Set<String> = [
+            "web_order_food", "web_book_restaurant", "web_vision_task",
+            "web_whatsapp", "web_search_and_read", "ask_harness", "computer_use"
+        ]
+        let hasSlow = relevantTools.contains { slowToolNames.contains($0.name) }
+        let deadline = Date().addingTimeInterval(hasSlow ? slowTimeout : fastTimeout)
 
         for iteration in 0..<maxIterations {
 
