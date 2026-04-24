@@ -47,12 +47,13 @@ final class GigiPlannerEngine {
         • A single native iOS action: call, text/message, navigate, play music, set alarm/timer/reminder, open app, HomeKit, torch, FaceTime, media controls, weather, tell time/date.
         • Simple calendar read (read_calendar, check schedule).
         • Casual conversation, trivia, definitions.
+        • Order food / book restaurant / web search (these use native iOS tools, no harness needed).
 
-        RULE 2 — Output a task plan if the request requires ANY of:
-        • Live web data (prices, availability, current news, live flight info).
-        • Multi-site automation (booking + payment, form filling, web scraping).
-        • Two or more coordinated actions that depend on each other's output.
-        • Research + action (find X then do Y with the result).
+        RULE 2 — ONLY output a task plan if the request requires ALL of:
+        • Live web data that cannot be found via a basic web search (stock quotes, flight prices), OR
+        • Multi-site automation with login + form fill + payment, OR
+        • Two or more COORDINATED actions where step 2 depends on step 1's output.
+        • Simple "order from X" or "book a table at Y" requests → isSimple=true (native web tools).
 
         DOMAINS:
         • ios        — native iPhone actions (call, message, alarm, HomeKit, calendar create, etc.)
@@ -82,9 +83,7 @@ final class GigiPlannerEngine {
         {"isSimple":true,"tasks":[]}
 
         "Order sushi from Yang"
-        {"isSimple":false,"tasks":[
-          {"id":"t1","domain":"browser","description":"Order sushi from Yang on the best available delivery platform (Deliveroo, Uber Eats, Glovo). Complete checkout.","dependsOn":[],"schema":null}
-        ]}
+        {"isSimple":true,"tasks":[]}
         """
 
     func decompose(userText: String) async -> TaskPlan {

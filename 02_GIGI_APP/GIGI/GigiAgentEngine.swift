@@ -68,7 +68,10 @@ final class GigiAgentEngine {
         // Planner gate: ~200ms fast call to decide if decomposition is needed.
         // Falls back to simple react loop on any planner failure — zero regression risk.
         let plan = await GigiPlannerEngine.shared.decompose(userText: text)
-        if !plan.isSimple && plan.tasks.count >= 2 {
+        // Single non-iOS task: route to harness with domain (gives real browser tools).
+        // Multi-task: orchestrated execution respecting dependsOn DAG.
+        let hasNonIos = plan.tasks.contains { $0.domain != .ios && $0.domain != .unknown }
+        if !plan.isSimple && (plan.tasks.count >= 2 || (plan.tasks.count == 1 && hasNonIos)) {
             return await orchestratedExecution(plan: plan, userText: text)
         }
 

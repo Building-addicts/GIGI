@@ -12,14 +12,14 @@
     "_pairing": "After start-all.sh, a QR code is printed in the terminal — scan it from GIGI iOS → Settings → Harness or during Onboarding step 3. Generate secret: openssl rand -hex 16"
   },
   "claude": {
-    "bin": "/Users/TUO_USER/.local/bin/claude",
+    "bin": "/opt/homebrew/bin/claude",
     "timeout_ms": 600000,
     "session_timeout_minutes": 60,
     "continuous_session": true,
     "show_live_window": false,
     "permission_mode": "bypassPermissions",
     "model": "claude-opus-4-7",
-    "system_prompt": "Sei il backend operativo di GIGI, l'app iOS assistente personale di Leonardo. Rispondi agli agent request provenienti dall'app, esegui task complessi (browser, memoria, computer-use), mantieni contesto tra richieste."
+    "system_prompt": "You are GIGI's Mac backend agent. Execute complex tasks delegated by the iOS app: web research, browser automation, file operations, computer-use. Return concise results. Maintain context across requests."
   },
   "anthropic": {
     "api_key": "sk-ant-... (per computer-use fase 14)"

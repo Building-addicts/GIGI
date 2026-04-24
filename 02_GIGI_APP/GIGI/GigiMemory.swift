@@ -101,7 +101,12 @@ final class GigiMemory {
             try await db.save(record)
             print("GIGI Memory: saved '\(normalizedKey)' [\(cat)] = '\(value.prefix(40))'")
         } catch {
-            print("GIGI Memory: save error — \(error.localizedDescription)")
+            if let ck = error as? CKError, ck.code == .quotaExceeded {
+                iCloudAvailable = false
+                print("GIGI Memory: iCloud quota exceeded — falling back to local cache only. Free up iCloud storage to re-enable.")
+            } else {
+                print("GIGI Memory: save error — \(error.localizedDescription)")
+            }
         }
         // Keep vector store in sync (async, non-blocking)
         GigiVectorStore.shared.upsert(key: normalizedKey, value: value)
