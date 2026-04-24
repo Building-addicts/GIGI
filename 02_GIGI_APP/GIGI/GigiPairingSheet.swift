@@ -160,9 +160,12 @@ struct GigiPairingSheet: View {
         case .notConfigured:
             return "Configurazione rimossa dopo il salvataggio. Riprova."
         case .transport:
-            return "Harness irraggiungibile. Verifica Tailscale attivo su PC e iPhone."
+            // Generic transport failure — the tunnel/URL in the QR is unreachable.
+            // Most common cause: URL scanned from an old QR after cloudflared
+            // restarted (Quick Tunnel URLs are ephemeral). Second cause: PC off.
+            return "Harness irraggiungibile. Verifica che il harness sia acceso e rigenera il QR da localhost:7777/setup."
         case .badResponse(let status, _):
-            if status == 401 { return "Secret rifiutato dal server (401)." }
+            if status == 401 { return "Secret rifiutato dal server (401). Rigenera il QR." }
             return "Harness ha risposto HTTP \(status)."
         case .apiError(let code, let msg):
             return "\(code): \(msg)"

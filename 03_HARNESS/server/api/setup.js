@@ -38,15 +38,28 @@ async function readBody(req) {
   });
 }
 
-function saveConfigMode(cfgPath, mode, patch = {}) {
+// Writes the tunnel mode + sub-object patch to disk AND mutates the
+// in-memory cfg passed in (so other handlers sharing the same cfg closure
+// — notably /api/pair — see the fresh state without re-reading disk).
+function saveConfigMode(cfgPath, liveCfg, mode, patch = {}) {
   try {
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    cfg.tunnel = cfg.tunnel || { mode: 'manual', named: {}, quick: {}, lan: {} };
-    cfg.tunnel.mode = mode;
-    if (patch.quick)  Object.assign(cfg.tunnel.quick  = cfg.tunnel.quick  || {}, patch.quick);
-    if (patch.lan)    Object.assign(cfg.tunnel.lan    = cfg.tunnel.lan    || {}, patch.lan);
-    if (patch.named)  Object.assign(cfg.tunnel.named  = cfg.tunnel.named  || {}, patch.named);
-    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const onDisk = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    onDisk.tunnel = onDisk.tunnel || { mode: 'manual', named: {}, quick: {}, lan: {} };
+    onDisk.tunnel.mode = mode;
+    if (patch.quick)  Object.assign(onDisk.tunnel.quick = onDisk.tunnel.quick || {}, patch.quick);
+    if (patch.lan)    Object.assign(onDisk.tunnel.lan   = onDisk.tunnel.lan   || {}, patch.lan);
+    if (patch.named)  Object.assign(onDisk.tunnel.named = onDisk.tunnel.named || {}, patch.named);
+    fs.writeFileSync(cfgPath, JSON.stringify(onDisk, null, 2), 'utf8');
+
+    // Mirror into the caller's in-memory cfg object so handlers that close
+    // over it (pair.js, ios-router.js) see the update immediately.
+    if (liveCfg) {
+      liveCfg.tunnel = liveCfg.tunnel || { mode: 'manual', named: {}, quick: {}, lan: {} };
+      liveCfg.tunnel.mode = mode;
+      if (patch.quick) Object.assign(liveCfg.tunnel.quick = liveCfg.tunnel.quick || {}, patch.quick);
+      if (patch.lan)   Object.assign(liveCfg.tunnel.lan   = liveCfg.tunnel.lan   || {}, patch.lan);
+      if (patch.named) Object.assign(liveCfg.tunnel.named = liveCfg.tunnel.named || {}, patch.named);
+    }
   } catch (e) {
     console.error('setup: config write failed:', e.message);
   }
@@ -105,7 +118,7 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
         if (url) break;
         await new Promise(r => setTimeout(r, 500));
       }
-      saveConfigMode(cfgPath, 'quick', { quick: { last_url: url, last_started: Date.now() } });
+      saveConfigMode(cfgPath, cfg, 'quick', { quick: { last_url: url, last_started: Date.now() } });
       return json(res, 200, { ok: true, data: { url, status: cloudflared.status() } }), true;
     } catch (e) {
       return json(res, 500, { ok: false, error: { code: 'QUICK_START_FAIL', message: e.message } }), true;
@@ -126,7 +139,7 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
         deviceName:  process.env.COMPUTERNAME || process.env.HOSTNAME || 'gigi-harness',
         version:     '1.0'
       });
-      saveConfigMode(cfgPath, 'lan', { lan: { service_name: process.env.COMPUTERNAME || 'gigi-harness' } });
+      saveConfigMode(cfgPath, cfg, 'lan', { lan: { service_name: process.env.COMPUTERNAME || 'gigi-harness' } });
       return json(res, 200, { ok: true, data: { advertising: true } }), true;
     } catch (e) {
       return json(res, 500, { ok: false, error: { code: 'LAN_START_FAIL', message: e.message } }), true;
@@ -142,7 +155,7 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
   if (p === '/api/setup/manual' && req.method === 'POST') {
     if (mdnsHandle) { mdnsHandle.stop(); mdnsHandle = null; }
     await cloudflared.stop();
-    saveConfigMode(cfgPath, 'manual');
+    saveConfigMode(cfgPath, cfg, 'manual');
     return json(res, 200, { ok: true, data: { mode: 'manual' } }), true;
   }
 
@@ -201,7 +214,7 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
       await cloudflared.startNamed({ tunnelName: created.uuid, configPath: cfgYml, localPort });
 
       // 5) persist
-      saveConfigMode(cfgPath, 'named', {
+      saveConfigMode(cfgPath, cfg, 'named', {
         named: {
           tunnel_uuid: created.uuid,
           tunnel_name: tunnelName,
