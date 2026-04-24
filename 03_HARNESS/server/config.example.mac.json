@@ -28,7 +28,7 @@
     "key_path": "/Users/TUO_USER/.gigi/AuthKey_XXXXXXXXXX.p8",
     "key_id": "XXXXXXXXXX",
     "team_id": "XXXXXXXXXX",
-    "bundle_id": "com.leonardocorte.gigi",
+    "bundle_id": "com.killsiri.GIGI",
     "production": false
   },
   "memory": {
