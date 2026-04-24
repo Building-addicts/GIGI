@@ -156,7 +156,7 @@ struct SettingsView: View {
             // Re-test + unpair
             if harnessIsPaired {
                 Button("Verifica connessione") {
-                    Task { await saveAndTestHarness() }
+                    Task { await testHarnessHealthOnly() }
                 }
                 .foregroundColor(.purple)
                 .disabled(isTestingHarness)
@@ -462,19 +462,49 @@ struct SettingsView: View {
         harnessStatus = GigiHarnessClient.shared.isConfigured ? "configurato (non testato)" : "non configurato"
     }
 
+    /// Used only by the "Salva e testa" button inside the manual/advanced
+    /// DisclosureGroup. Reads the TextField @State bindings and writes them
+    /// to the Keychain. Safe only when the user has just typed URL+secret
+    /// manually. DO NOT call from the primary "Verifica connessione" button
+    /// post-QR-pair — that would wipe the Keychain because the @State
+    /// bindings are empty (the pair sheet writes directly to Keychain,
+    /// not to our @State).
     private func saveAndTestHarness() async {
         isTestingHarness = true
-        GigiKeychain.save(harnessURL.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessBaseURL)
-        GigiKeychain.save(harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessSecret)
+        let url    = harnessURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secret = harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty, !secret.isEmpty else {
+            harnessStatus = "URL e secret non possono essere vuoti"
+            isTestingHarness = false
+            return
+        }
+        GigiKeychain.save(url,    forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.save(secret, forKey: GigiKeychain.Key.harnessSecret)
         _ = GigiHarnessClient.ensureDeviceId()
-        // Config cambiata → ri-sincronizza il token APNS con il (nuovo) backend.
-        // Se il device ha già un token salvato, viene reinviato; altrimenti no-op.
         GigiApnsSync.onConfigChanged()
         switch await GigiHarnessClient.shared.health() {
         case .success(let h): harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
         case .failure(let e): harnessStatus = "✗ \(e)"
         }
         isTestingHarness = false
+    }
+
+    /// Idempotent health-only check. Reads the Keychain (authoritative
+    /// source, populated by the pair sheet) and pings `/api/ios/health`.
+    /// Never writes. This is the only action safe to expose post-pair.
+    private func testHarnessHealthOnly() async {
+        isTestingHarness = true
+        defer { isTestingHarness = false }
+        guard GigiHarnessClient.shared.isConfigured else {
+            harnessStatus = "✗ Harness non configurato (URL/secret mancanti)"
+            return
+        }
+        switch await GigiHarnessClient.shared.health() {
+        case .success(let h):
+            harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
+        case .failure(let e):
+            harnessStatus = "✗ \(e)"
+        }
     }
 
     private func saveGeminiKey() {
