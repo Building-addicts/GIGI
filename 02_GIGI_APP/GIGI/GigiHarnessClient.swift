@@ -298,6 +298,13 @@ final class GigiHarnessStream: NSObject {
     private var keepOpen = false
     private var reconnectMs: UInt64 = 500
 
+    /// Heartbeat period. Cloudflare Tunnel free tier closes idle WebSockets
+    /// after 100s; 60s leaves a comfortable margin. Tailscale and LAN don't
+    /// enforce idle limits but the extra ping is cheap and harmless.
+    private let pingIntervalSec: UInt64 = 60
+    private var pingTask: Task<Void, Never>?
+    private var missedPongs = 0
+
     func connect(onEvent: @escaping EventHandler) {
         guard let wsURL = Self.makeWebSocketURL() else {
             GigiDebugLogger.log("GigiHarnessStream: URL WebSocket non disponibile")
@@ -313,13 +320,57 @@ final class GigiHarnessStream: NSObject {
         task = session.webSocketTask(with: req)
         task?.resume()
         Task { await readLoop() }
+        startHeartbeat()
         reconnectMs = 500
     }
 
     func disconnect() {
         keepOpen = false
+        stopHeartbeat()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
+    }
+
+    // MARK: - Heartbeat (Cloudflare-friendly keepalive)
+
+    private func startHeartbeat() {
+        stopHeartbeat()
+        missedPongs = 0
+        pingTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled, self.keepOpen, self.task != nil {
+                try? await Task.sleep(nanoseconds: self.pingIntervalSec * 1_000_000_000)
+                guard !Task.isCancelled, self.keepOpen, let t = self.task else { return }
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    t.sendPing { [weak self] error in
+                        guard let self else { cont.resume(); return }
+                        if error != nil {
+                            self.missedPongs += 1
+                            GigiDebugLogger.log("GigiHarnessStream ping failed · miss=\(self.missedPongs)")
+                            if self.missedPongs >= 2 {
+                                self.reconnect()
+                            }
+                        } else {
+                            self.missedPongs = 0
+                        }
+                        cont.resume()
+                    }
+                }
+            }
+        }
+    }
+
+    private func stopHeartbeat() {
+        pingTask?.cancel()
+        pingTask = nil
+    }
+
+    private func reconnect() {
+        guard keepOpen else { return }
+        let handler = onEvent
+        disconnect()
+        keepOpen = true
+        if let h = handler { connect(onEvent: h) }
     }
 
     private func readLoop() async {

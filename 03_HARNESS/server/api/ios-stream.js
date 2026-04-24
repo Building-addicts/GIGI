@@ -59,13 +59,36 @@ export function attachWebSocketServer(httpServer, cfg) {
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.deviceId = deviceId;
+      ws.isAlive = true;
       joinRoom(deviceId, ws);
       ws.on('close', () => leaveRoom(deviceId, ws));
       ws.on('error', () => leaveRoom(deviceId, ws));
+      // Heartbeat: iOS client (GigiHarnessStream) sends a WebSocket ping
+      // every ~60s to keep the tunnel alive through Cloudflare's 100s idle
+      // timeout. `ws` auto-replies with a pong; we flip isAlive back on
+      // every pong so the sweep below can detect dead sockets.
+      ws.on('pong', () => { ws.isAlive = true; });
       try { ws.send(JSON.stringify({ type: 'connected', deviceId, ts: Date.now() })); } catch {}
     });
   });
 
-  log('ws: iOS stream pronto su /ws/ios/stream');
+  // Every 30s, ping every socket. If a socket hasn't replied to the previous
+  // ping (isAlive still false from last sweep), consider it dead and drop it.
+  const sweep = setInterval(() => {
+    for (const [deviceId, set] of rooms) {
+      for (const ws of set) {
+        if (ws.readyState !== ws.OPEN) continue;
+        if (ws.isAlive === false) {
+          try { ws.terminate(); } catch {}
+          continue;
+        }
+        ws.isAlive = false;
+        try { ws.ping(); } catch {}
+      }
+    }
+  }, 30_000);
+  sweep.unref?.();
+
+  log('ws: iOS stream pronto su /ws/ios/stream (heartbeat 30s)');
   return wss;
 }
