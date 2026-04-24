@@ -135,7 +135,7 @@ struct SettingsView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "checklist")
                             .font(.system(size: 18))
-                        Text("Vedi requisiti")
+                        Text("View requirements")
                             .font(.body.weight(.medium))
                         Spacer()
                     }
@@ -151,7 +151,7 @@ struct SettingsView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "qrcode.viewfinder")
                         .font(.system(size: 18))
-                    Text(harnessIsPaired ? "Ri-pair con Harness" : "Pair con Harness")
+                    Text(harnessIsPaired ? "Re-pair with Harness" : "Pair with Harness")
                         .font(.body.weight(.medium))
                     Spacer()
                 }
@@ -161,7 +161,7 @@ struct SettingsView: View {
 
             // Status line
             HStack {
-                Text("Stato")
+                Text("Status")
                 Spacer()
                 if isTestingHarness {
                     ProgressView().scaleEffect(0.8)
@@ -174,7 +174,7 @@ struct SettingsView: View {
 
             // Re-test + unpair
             if harnessIsPaired {
-                Button("Verifica connessione") {
+                Button("Test connection") {
                     Task { await testHarnessHealthOnly() }
                 }
                 .foregroundColor(.purple)
@@ -183,12 +183,12 @@ struct SettingsView: View {
                 Button(role: .destructive) {
                     removePairing()
                 } label: {
-                    Text("Rimuovi pairing")
+                    Text("Remove pairing")
                 }
             }
 
             // Advanced: manual config still available for power users / debug.
-            DisclosureGroup("Configurazione manuale (avanzata)") {
+            DisclosureGroup("Manual configuration (advanced)") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Base URL").font(.caption).foregroundColor(.secondary)
                     TextField("http://10.0.0.5:7779", text: $harnessURL)
@@ -200,11 +200,11 @@ struct SettingsView: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Bearer secret").font(.caption).foregroundColor(.secondary)
-                    SecureField("shared secret 32 char", text: $harnessSecret)
+                    SecureField("32+ char shared secret", text: $harnessSecret)
                         .font(.system(.body, design: .monospaced))
                         .focused($focusedField, equals: .harnessSecret)
                 }
-                Button("Salva e testa") {
+                Button("Save and test") {
                     Task { await saveAndTestHarness() }
                 }
                 .foregroundColor(.purple)
@@ -215,7 +215,7 @@ struct SettingsView: View {
         } header: {
             Text("🖥 Harness Backend")
         } footer: {
-            Text("Non sei sicuro di cosa serve? Tap 'Vedi requisiti'. Apri localhost:7777/setup nel browser del PC per scegliere la modalità tunnel, poi localhost:7777/pair per il QR. Una-tantum, poi funziona da qualsiasi rete.")
+            Text("Not sure what's needed? Tap 'View requirements'. Open localhost:7777/setup in your PC browser to choose the tunnel mode, then localhost:7777/pair for the QR. One-time setup, then works from any network.")
                 .font(.caption)
         }
         .sheet(isPresented: $showPairingSheet) {
@@ -239,7 +239,7 @@ struct SettingsView: View {
         GigiKeychain.delete(forKey: GigiKeychain.Key.harnessSecret)
         harnessURL = ""
         harnessSecret = ""
-        harnessStatus = "non configurato"
+        harnessStatus = "Not configured"
         pairedDeviceName = nil
     }
 
@@ -496,7 +496,7 @@ struct SettingsView: View {
         let url    = harnessURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let secret = harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty, !secret.isEmpty else {
-            harnessStatus = "URL e secret non possono essere vuoti"
+            harnessStatus = "URL and secret cannot be empty"
             isTestingHarness = false
             return
         }
@@ -518,7 +518,7 @@ struct SettingsView: View {
         isTestingHarness = true
         defer { isTestingHarness = false }
         guard GigiHarnessClient.shared.isConfigured else {
-            harnessStatus = "✗ Harness non configurato (URL/secret mancanti)"
+            harnessStatus = "✗ Harness not configured (URL/secret missing)"
             return
         }
         switch await GigiHarnessClient.shared.health() {

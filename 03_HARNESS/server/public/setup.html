@@ -82,15 +82,15 @@
 <body>
 <main>
   <h1>GIGI Setup 🎛</h1>
-  <p class="sub">Scegli come l'iPhone raggiunge questo PC. Puoi cambiare in qualsiasi momento.</p>
+  <p class="sub">Choose how your iPhone reaches this PC. You can change this anytime.</p>
 
   <div class="top-bar">
     <div>
-      Modalità attiva:
+      Active mode:
       <span id="currentMode" class="pill gray">—</span>
     </div>
     <div>
-      <a href="/pair" id="pairLink" style="display:none">→ Apri pagina di pairing QR</a>
+      <a href="/pair" id="pairLink" style="display:none">→ Open pairing QR page</a>
     </div>
   </div>
 
@@ -98,72 +98,72 @@
     <!-- Card B — Quick Tunnel -->
     <div class="card" id="card-quick">
       <div class="header-row">
-        <h2>🚀 Quick Tunnel <span id="pill-quick" class="pill gray">disabilitato</span></h2>
+        <h2>🚀 Quick Tunnel <span id="pill-quick" class="pill gray">off</span></h2>
       </div>
-      <p>Cloudflare ti dà un URL pubblico in 10 secondi. Zero account, zero dominio.</p>
+      <p>Cloudflare gives you a public URL in 10 seconds. No account, no domain.</p>
       <ul>
-        <li>✅ Funziona da ovunque (4G, hotel, estero)</li>
-        <li>✅ HTTPS cifrato</li>
-        <li>⚠️ L'URL cambia a ogni restart del PC → riscansionare QR</li>
-        <li>Ideale per test e uso breve</li>
+        <li>✅ Works from anywhere (4G, hotels, abroad)</li>
+        <li>✅ HTTPS encrypted</li>
+        <li>⚠️ URL changes on every PC restart → rescan QR</li>
+        <li>Best for testing and short-term use</li>
       </ul>
       <div class="row">
-        <button class="primary" id="btn-quick-start">Avvia Quick Tunnel</button>
+        <button class="primary" id="btn-quick-start">Start Quick Tunnel</button>
         <button class="secondary" id="btn-quick-stop">Stop</button>
       </div>
-      <div class="status-line" id="status-quick">Stato: —</div>
+      <div class="status-line" id="status-quick">Status: —</div>
     </div>
 
     <!-- Card C — LAN -->
     <div class="card" id="card-lan">
       <div class="header-row">
-        <h2>🏠 Solo Wi-Fi casa (mDNS) <span id="pill-lan" class="pill gray">disabilitato</span></h2>
+        <h2>🏠 Home Wi-Fi only (mDNS) <span id="pill-lan" class="pill gray">off</span></h2>
       </div>
-      <p>Zero setup. GIGI visibile solo sulla tua Wi-Fi di casa.</p>
+      <p>Zero setup. GIGI visible only on your home Wi-Fi.</p>
       <ul>
         <li>✅ Zero config, zero account</li>
-        <li>✅ Massima privacy (traffico non esce di casa)</li>
-        <li>❌ Non funziona fuori casa (4G, altri Wi-Fi)</li>
+        <li>✅ Maximum privacy (traffic never leaves home)</li>
+        <li>❌ Doesn't work away from home (4G, other Wi-Fi)</li>
       </ul>
       <div class="row">
-        <button class="primary" id="btn-lan-start">Avvia LAN mode</button>
+        <button class="primary" id="btn-lan-start">Start LAN mode</button>
         <button class="secondary" id="btn-lan-stop">Stop</button>
       </div>
-      <div class="status-line" id="status-lan">Stato: —</div>
+      <div class="status-line" id="status-lan">Status: —</div>
     </div>
 
     <!-- Card A — Named Tunnel -->
     <div class="card" id="card-named">
       <div class="header-row">
-        <h2>☁️ Cloudflare Tunnel + dominio <span id="pill-named" class="pill gray">off</span></h2>
+        <h2>☁️ Cloudflare Tunnel + domain <span id="pill-named" class="pill gray">off</span></h2>
       </div>
-      <p>URL stabile permanente (`gigi.tuodominio.me`), funziona sempre, ri-pair mai.</p>
+      <p>Permanent stable URL (`gigi.yourdomain.me`), always works, never re-pair.</p>
       <ul>
-        <li>🎯 L'opzione definitiva: URL invariato anche dopo reboot PC</li>
-        <li>Richiede: account Cloudflare (gratis) + dominio aggiunto alla tua zone CF (~€5/anno)</li>
-        <li>Setup guidato in 3 passi, ~5 min una-tantum</li>
+        <li>🎯 The definitive option: URL stays the same even after PC reboot</li>
+        <li>Requires: Cloudflare account (free) + a domain added to your CF zone (~$10/year)</li>
+        <li>Guided setup in 3 steps, ~5 min one-time</li>
       </ul>
 
       <div id="named-step-1">
         <div class="row">
-          <button class="primary" id="btn-named-login">1. Login su Cloudflare</button>
+          <button class="primary" id="btn-named-login">1. Sign in to Cloudflare</button>
         </div>
         <div class="status-line" id="status-named-login">
-          Cliccando, aprirò il browser sul dashboard Cloudflare per autenticarti e scaricare il cert.pem.
+          Clicking will open your browser on the Cloudflare dashboard to authenticate and download cert.pem.
         </div>
       </div>
 
       <div id="named-step-2" style="display:none; margin-top:14px">
-        <label style="font-size:12px;color:#8888a0;text-transform:uppercase;letter-spacing:0.06em">Hostname GIGI</label>
-        <input type="text" id="named-hostname" placeholder="gigi.tuodominio.me"
+        <label style="font-size:12px;color:#8888a0;text-transform:uppercase;letter-spacing:0.06em">GIGI hostname</label>
+        <input type="text" id="named-hostname" placeholder="gigi.yourdomain.me"
                style="width:100%;padding:10px 12px;margin:6px 0 12px;background:#0c0c14;
                       border:1px solid #32325a;border-radius:8px;color:#e6e6ec;
                       font:13px/1.3 'SF Mono',Consolas,monospace">
         <div class="row">
-          <button class="primary" id="btn-named-configure">2. Crea tunnel + DNS</button>
+          <button class="primary" id="btn-named-configure">2. Create tunnel + DNS</button>
         </div>
         <div class="status-line" id="status-named-config">
-          Il dominio base (es. `tuodominio.me`) deve essere già attivo nella tua zone Cloudflare.
+          The base domain (e.g. `yourdomain.me`) must already be active in your Cloudflare zone.
         </div>
       </div>
 
@@ -172,7 +172,7 @@
           <button class="secondary" id="btn-named-stop">Stop named tunnel</button>
         </div>
         <div class="status-line" id="status-named-run">
-          Tunnel named attivo.
+          Named tunnel active.
         </div>
       </div>
     </div>
@@ -180,17 +180,17 @@
     <!-- Card D — Manual -->
     <div class="card" id="card-manual">
       <div class="header-row">
-        <h2>⚙️ Manuale / Tailscale / custom <span id="pill-manual" class="pill gray">disabilitato</span></h2>
+        <h2>⚙️ Manual / Tailscale / custom <span id="pill-manual" class="pill gray">off</span></h2>
       </div>
-      <p>Inserisci URL+secret a mano nelle Impostazioni GIGI dell'iPhone. Funziona con Tailscale, reverse SSH, VPS proprio, ecc.</p>
+      <p>Enter URL+secret manually in the GIGI iPhone Settings. Works with Tailscale, reverse SSH, your own VPS, etc.</p>
       <div class="row">
-        <button class="secondary" id="btn-manual">Imposta come modalità attiva</button>
+        <button class="secondary" id="btn-manual">Set as active mode</button>
       </div>
     </div>
   </div>
 
   <p class="foot">
-    Setup endpoint: <code>/api/setup/*</code> (solo localhost).<br>
+    Setup endpoint: <code>/api/setup/*</code> (localhost only).<br>
     Pair QR: <a href="/pair">/pair</a>
   </p>
 </main>
@@ -225,24 +225,24 @@
 
       // Quick card
       const quickStatus = s.cloudflared || {};
-      document.getElementById('pill-quick').textContent = quickStatus.running && quickStatus.mode === 'quick' ? 'attivo' : 'off';
+      document.getElementById('pill-quick').textContent = quickStatus.running && quickStatus.mode === 'quick' ? 'active' : 'off';
       document.getElementById('pill-quick').className = 'pill ' + (quickStatus.running && quickStatus.mode === 'quick' ? 'green' : 'gray');
       document.getElementById('card-quick').classList.toggle('active', mode === 'quick');
       document.getElementById('status-quick').innerHTML = quickStatus.publicUrl
         ? `URL: <strong>${quickStatus.publicUrl}</strong> · uptime ${quickStatus.uptime_s || 0}s`
-        : (quickStatus.running ? 'Avviando… attendi qualche secondo' : (quickStatus.lastError ? `Errore: ${quickStatus.lastError}` : 'Stato: spento'));
+        : (quickStatus.running ? 'Starting… wait a few seconds' : (quickStatus.lastError ? `Error: ${quickStatus.lastError}` : 'Status: stopped'));
 
       // LAN card
       const lanAdv = s.lan?.advertising;
-      document.getElementById('pill-lan').textContent = lanAdv ? 'attivo' : 'off';
+      document.getElementById('pill-lan').textContent = lanAdv ? 'active' : 'off';
       document.getElementById('pill-lan').className = 'pill ' + (lanAdv ? 'green' : 'gray');
       document.getElementById('card-lan').classList.toggle('active', mode === 'lan');
       document.getElementById('status-lan').textContent = lanAdv
-        ? `Advertising _gigi._tcp.local come "${s.lan.serviceName || 'gigi-harness'}"`
-        : 'Stato: non in advertise';
+        ? `Advertising _gigi._tcp.local as "${s.lan.serviceName || 'gigi-harness'}"`
+        : 'Status: not advertising';
 
       // Manual card
-      document.getElementById('pill-manual').textContent = mode === 'manual' ? 'attivo' : 'off';
+      document.getElementById('pill-manual').textContent = mode === 'manual' ? 'active' : 'off';
       document.getElementById('pill-manual').className = 'pill ' + (mode === 'manual' ? 'green' : 'gray');
       document.getElementById('card-manual').classList.toggle('active', mode === 'manual');
     } catch (e) {
@@ -273,16 +273,16 @@
   document.getElementById('btn-named-login').addEventListener('click', async () => {
     const btn = document.getElementById('btn-named-login');
     const status = document.getElementById('status-named-login');
-    btn.disabled = true; btn.textContent = 'Attendo login nel browser…';
-    status.textContent = 'Si è aperto il browser verso dash.cloudflare.com. Completa il login e torna qui.';
+    btn.disabled = true; btn.textContent = 'Waiting for browser sign-in…';
+    status.textContent = 'Browser opened on dash.cloudflare.com. Complete sign-in and come back here.';
     try {
       await api('POST', '/api/setup/named/login');
-      status.innerHTML = '<strong style="color:#66e088">✓ cert.pem scaricato</strong>';
+      status.innerHTML = '<strong style="color:#66e088">✓ cert.pem downloaded</strong>';
       document.getElementById('named-step-1').style.display = 'none';
       document.getElementById('named-step-2').style.display = '';
     } catch (e) {
-      status.innerHTML = '<strong style="color:#e06666">Errore: ' + e.message + '</strong>';
-      btn.disabled = false; btn.textContent = '1. Login su Cloudflare';
+      status.innerHTML = '<strong style="color:#e06666">Error: ' + e.message + '</strong>';
+      btn.disabled = false; btn.textContent = '1. Sign in to Cloudflare';
     }
   });
 
@@ -291,22 +291,22 @@
     const status = document.getElementById('status-named-config');
     const hostname = (document.getElementById('named-hostname').value || '').trim();
     if (!hostname || !hostname.includes('.')) {
-      status.innerHTML = '<strong style="color:#e0b866">Inserisci un hostname valido, es. gigi.tuodominio.me</strong>';
+      status.innerHTML = '<strong style="color:#e0b866">Enter a valid hostname, e.g. gigi.yourdomain.me</strong>';
       return;
     }
-    btn.disabled = true; btn.textContent = 'Creando tunnel + DNS…';
-    status.textContent = 'Aspetto che Cloudflare propaghi il DNS…';
+    btn.disabled = true; btn.textContent = 'Creating tunnel + DNS…';
+    status.textContent = 'Waiting for Cloudflare to propagate the DNS record…';
     try {
       const r = await api('POST', '/api/setup/named/configure', { hostname });
-      status.innerHTML = '<strong style="color:#66e088">✓ Tunnel attivo</strong> · ' + r.publicUrl;
+      status.innerHTML = '<strong style="color:#66e088">✓ Tunnel active</strong> · ' + r.publicUrl;
       document.getElementById('named-step-2').style.display = 'none';
       document.getElementById('named-step-3').style.display = '';
       document.getElementById('status-named-run').innerHTML =
-        'URL: <strong>' + r.publicUrl + '</strong> · attivo fino al prossimo stop/reboot.<br>' +
-        '→ <a href="/pair" style="color:#b9a8ff">Apri pagina pair</a> per scansionare il QR con l\'iPhone.';
+        'URL: <strong>' + r.publicUrl + '</strong> · active until next stop/reboot.<br>' +
+        '→ <a href="/pair" style="color:#b9a8ff">Open pair page</a> to scan the QR with your iPhone.';
     } catch (e) {
-      status.innerHTML = '<strong style="color:#e06666">Errore: ' + e.message + '</strong>';
-      btn.disabled = false; btn.textContent = '2. Crea tunnel + DNS';
+      status.innerHTML = '<strong style="color:#e06666">Error: ' + e.message + '</strong>';
+      btn.disabled = false; btn.textContent = '2. Create tunnel + DNS';
     }
   });
 

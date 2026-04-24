@@ -65,15 +65,15 @@
 </head>
 <body>
 <main>
-  <h1>Pair GIGI iPhone <span class="badge">una-tantum</span></h1>
-  <p class="sub">Inquadra questo QR dall'app GIGI → Settings → Pair con Harness.</p>
+  <h1>Pair GIGI iPhone <span class="badge">one-time</span></h1>
+  <p class="sub">Scan this QR from the GIGI app → Settings → Pair with Harness.</p>
 
   <div class="card">
-    <div id="qr" class="qr-wrap loading">Caricamento QR…</div>
+    <div id="qr" class="qr-wrap loading">Loading QR…</div>
     <div class="kv">
       <label>URL</label>
       <code id="url">—</code>
-      <button id="copyUrl">Copia</button>
+      <button id="copyUrl">Copy</button>
     </div>
     <div class="kv">
       <label>Device</label>
@@ -86,16 +86,16 @@
   </div>
 
   <div class="card">
-    <strong>Come collegare:</strong>
+    <strong>How to connect:</strong>
     <ol>
-      <li>Verifica che ci sia una modalità tunnel attiva su <a href="/setup" style="color:#b9a8ff">/setup</a> (Quick, LAN o Cloudflare Named).</li>
-      <li>Apri l'app <strong>GIGI</strong> sull'iPhone.</li>
-      <li>Vai in <strong>Settings → Pair con Harness</strong> e tocca il pulsante scan.</li>
-      <li>Inquadra questo QR. La configurazione è automatica.</li>
+      <li>Make sure a tunnel mode is active on <a href="/setup" style="color:#b9a8ff">/setup</a> (Quick, LAN or Cloudflare Named).</li>
+      <li>Open the <strong>GIGI</strong> app on your iPhone.</li>
+      <li>Go to <strong>Settings → Pair with Harness</strong> and tap the scan button.</li>
+      <li>Point your camera at this QR. The configuration is automatic.</li>
     </ol>
   </div>
 
-  <p class="footer">L'endpoint <code>/api/pair</code> è accessibile solo da localhost per proteggere il secret.</p>
+  <p class="footer">The <code>/api/pair</code> endpoint is reachable only from localhost to protect the secret.</p>
 </main>
 <script>
   // The panel runs on :7777 but the pair endpoint lives on the iOS HTTP
@@ -122,7 +122,7 @@
     } catch (e) {
       const qrBox = document.getElementById('qr');
       qrBox.classList.remove('loading');
-      qrBox.textContent = 'Errore: ' + e.message;
+      qrBox.textContent = 'Error: ' + e.message;
       qrBox.style.color = '#ff6b6b';
     }
   }
@@ -131,7 +131,7 @@
     const u = document.getElementById('url').textContent;
     try { await navigator.clipboard.writeText(u); } catch { /* ignore */ }
     const btn = document.getElementById('copyUrl');
-    const prev = btn.textContent; btn.textContent = 'Copiato!'; setTimeout(() => { btn.textContent = prev; }, 1200);
+    const prev = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = prev; }, 1200);
   });
 
   window.addEventListener('focus', loadPair);

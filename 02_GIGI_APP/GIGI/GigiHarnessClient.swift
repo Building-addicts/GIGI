@@ -41,7 +41,7 @@ final class GigiHarnessClient {
 
         var description: String {
             switch self {
-            case .notConfigured: return "Harness non configurato (URL/secret mancanti)"
+            case .notConfigured: return "Harness not configured (URL/secret missing)"
             case .badResponse(let s, let b): return "HTTP \(s): \(Self.summarize(body: b, status: s))"
             case .decodeFailed(let e): return "decode: \(e.localizedDescription)"
             case .transport(let e):    return "network: \(e.localizedDescription)"
@@ -66,7 +66,7 @@ final class GigiHarnessClient {
                 let title = String(trimmed[titleRange.upperBound..<endRange.lowerBound])
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if status == 530 || status == 502 || status == 521 || status == 522 {
-                    return "\(title) — il tunnel non risponde, rigenera il QR da localhost:7777/setup"
+                    return "\(title) — tunnel not responding, regenerate the QR from localhost:7777/setup"
                 }
                 return title
             }
@@ -75,7 +75,7 @@ final class GigiHarnessClient {
                 .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
                 .trimmingCharacters(in: .whitespaces)
             if status == 530 {
-                return "tunnel non raggiungibile (530) — rigenera il QR"
+                return "tunnel unreachable (530) — regenerate the QR"
             }
             return String(plain.prefix(160))
         }

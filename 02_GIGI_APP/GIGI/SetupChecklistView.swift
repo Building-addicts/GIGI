@@ -49,19 +49,19 @@ struct SetupChecklistView: View {
 
                     requirementCard(
                         index: 1,
-                        title: "PC (o VPS) sempre acceso con harness in esecuzione",
-                        body: "GIGI parla con Claude tramite un piccolo backend (\"harness\") che gira sul tuo computer. Quando il PC è acceso e l'harness è in funzione, l'app può collegarsi da ovunque tramite Cloudflare Tunnel.",
+                        title: "A PC (or VPS) running the GIGI Harness",
+                        body: "GIGI talks to Claude through a small backend (\"harness\") running on your computer. When the PC is on and the harness is running, the app can reach it from anywhere via Cloudflare Tunnel.",
                         state: req1State,
                         action: req1Action
                     )
 
                     requirementCard(
                         index: 2,
-                        title: "Account Cloudflare (gratuito)",
-                        body: "Cloudflare crea il tunnel che fa raggiungere il tuo PC dall'app, anche da 4G/5G. La registrazione è gratuita per sempre.",
+                        title: "Cloudflare account (free)",
+                        body: "Cloudflare provides the tunnel that exposes your PC to the app, even on cellular. Free forever for personal use.",
                         state: cfDone ? .done : .pending,
                         action: .button(
-                            label: cfDone ? "Fatto ✓" : "Apri sign-up Cloudflare",
+                            label: cfDone ? "Done ✓" : "Open Cloudflare sign-up",
                             tint: .purple,
                             handler: {
                                 if let url = URL(string: "https://dash.cloudflare.com/sign-up") {
@@ -74,11 +74,11 @@ struct SetupChecklistView: View {
 
                     requirementCard(
                         index: 3,
-                        title: "Claude Code CLI sul PC",
-                        body: "L'harness chiama il tuo Claude Code locale per processare i task. Serve la subscription Claude Pro/Max attiva.",
+                        title: "Claude Code CLI on the PC",
+                        body: "The harness calls your local Claude Code to process tasks. You need an active Claude Pro/Max subscription.",
                         state: claudeCliDone ? .done : .pending,
                         action: .button(
-                            label: claudeCliDone ? "Fatto ✓" : "Apri pagina Claude Code",
+                            label: claudeCliDone ? "Done ✓" : "Open Claude Code docs",
                             tint: .purple,
                             handler: {
                                 if let url = URL(string: "https://docs.anthropic.com/claude-code") {
@@ -91,10 +91,10 @@ struct SetupChecklistView: View {
 
                     requirementCard(
                         index: 4,
-                        title: "Harness GIGI installato",
-                        body: "Sul tuo PC: avvia l'harness con `bin/1_START_ALL.bat` (Windows) o `node server.js` dalla cartella `03_HARNESS/server`. Apri poi `http://localhost:7777/setup` nel browser per configurare il tunnel.",
+                        title: "GIGI Harness installed",
+                        body: "On your PC: start the harness with `bin/1_START_ALL.bat` (Windows) or `node server.js` from `03_HARNESS/server`. Then open `http://localhost:7777/setup` in your browser to configure the tunnel.",
                         state: harnessInstallDone ? .done : .pending,
-                        action: .toggle(label: "Ho installato e avviato l'harness", isOn: $harnessInstallDone)
+                        action: .toggle(label: "I installed and started the harness", isOn: $harnessInstallDone)
                     )
 
                     proceedButton
@@ -105,11 +105,11 @@ struct SetupChecklistView: View {
                 .padding(.bottom, 32)
             }
             .background(Color.black.ignoresSafeArea())
-            .navigationTitle("Setup GIGI")
+            .navigationTitle("GIGI Setup")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Chiudi") { dismiss() }.foregroundColor(.secondary)
+                    Button("Close") { dismiss() }.foregroundColor(.secondary)
                 }
             }
         }
@@ -127,10 +127,10 @@ struct SetupChecklistView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Benvenuto in GIGI 👋")
+            Text("Welcome to GIGI 👋")
                 .font(.title2.weight(.bold))
                 .foregroundColor(.white)
-            Text("Per usare GIGI ti servono 4 cose. Verifica che siano pronte prima di scansionare il QR di pairing.")
+            Text("You need four things before scanning the pairing QR. Check that each one is ready below.")
                 .font(.subheadline)
                 .foregroundColor(.white.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
@@ -205,7 +205,7 @@ struct SetupChecklistView: View {
                     .font(.footnote)
                     .foregroundColor(.white.opacity(0.7))
                 Spacer()
-                Button("Ricontrolla") {
+                Button("Recheck") {
                     Task { await retry() }
                 }
                 .font(.footnote)
@@ -226,16 +226,16 @@ struct SetupChecklistView: View {
         switch harnessLive {
         case .unknown:
             return .live(
-                label: "Configura un URL/secret prima (vai in Settings → Harness → Configurazione manuale, oppure scansiona un QR).",
+                label: "Configure a URL/secret first (Settings → Harness → Manual configuration, or scan a QR).",
                 isLoading: isCheckingHarness,
                 retry: { await refreshHarnessLive() }
             )
         case .checking:
-            return .live(label: "Verifico raggiungibilità…", isLoading: true, retry: {})
+            return .live(label: "Checking reachability…", isLoading: true, retry: {})
         case .reachable:
-            return .live(label: "Harness raggiungibile ✓", isLoading: false, retry: { await refreshHarnessLive() })
+            return .live(label: "Harness reachable ✓", isLoading: false, retry: { await refreshHarnessLive() })
         case .unreachable(let why):
-            return .live(label: "Non raggiungibile: \(why)", isLoading: isCheckingHarness, retry: { await refreshHarnessLive() })
+            return .live(label: "Not reachable: \(why)", isLoading: isCheckingHarness, retry: { await refreshHarnessLive() })
         }
     }
 
@@ -263,7 +263,7 @@ struct SetupChecklistView: View {
         } label: {
             HStack {
                 Spacer()
-                Text("Procedi al Pair")
+                Text("Continue to pair")
                     .font(.body.weight(.semibold))
                 Image(systemName: "qrcode.viewfinder")
                 Spacer()

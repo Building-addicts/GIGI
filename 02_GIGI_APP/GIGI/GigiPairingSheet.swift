@@ -42,7 +42,7 @@ struct GigiPairingSheet: View {
             case .validating:
                 VStack(spacing: 16) {
                     ProgressView().tint(.purple).scaleEffect(1.3)
-                    Text("Mi collego al tuo Harness…")
+                    Text("Connecting to your harness…")
                         .font(.footnote)
                         .foregroundColor(.white.opacity(0.8))
                 }
@@ -52,10 +52,10 @@ struct GigiPairingSheet: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 54))
                         .foregroundColor(.green)
-                    Text("Connesso a \(device)")
+                    Text("Connected to \(device)")
                         .font(.headline)
                         .foregroundColor(.white)
-                    Text("Puoi chiudere questa schermata.")
+                    Text("You can close this screen.")
                         .font(.footnote)
                         .foregroundColor(.white.opacity(0.7))
                 }
@@ -65,7 +65,7 @@ struct GigiPairingSheet: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 42))
                         .foregroundColor(.yellow)
-                    Text("Pairing fallito")
+                    Text("Pairing failed")
                         .font(.headline)
                         .foregroundColor(.white)
                     Text(message)
@@ -74,12 +74,12 @@ struct GigiPairingSheet: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 28)
                     HStack(spacing: 12) {
-                        Button("Chiudi") { dismiss() }
+                        Button("Close") { dismiss() }
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.7))
                             .padding(.horizontal, 16).padding(.vertical, 10)
                             .background(Capsule().stroke(Color.white.opacity(0.2)))
-                        Button("Riprova") { phase = .scanning }
+                        Button("Retry") { phase = .scanning }
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -108,14 +108,14 @@ struct GigiPairingSheet: View {
 
     private func process(_ payload: String) async {
         guard let data = payload.data(using: .utf8) else {
-            await fail("QR illeggibile.")
+            await fail("QR unreadable.")
             return
         }
         let decoded: PairPayload
         do {
             decoded = try JSONDecoder().decode(PairPayload.self, from: data)
         } catch {
-            await fail("Formato QR non valido.\nScansionato: \(payload.prefix(80))…")
+            await fail("Invalid QR format.\nScanned: \(payload.prefix(80))…")
             return
         }
 
@@ -125,7 +125,7 @@ struct GigiPairingSheet: View {
         guard let _ = URL(string: trimmedURL),
               trimmedURL.hasPrefix("http://") || trimmedURL.hasPrefix("https://"),
               !trimmedSecret.isEmpty else {
-            await fail("URL o secret non valido nel QR.")
+            await fail("Invalid URL or secret in the QR.")
             return
         }
 
@@ -158,19 +158,19 @@ struct GigiPairingSheet: View {
     private func userMessage(for err: GigiHarnessClient.Error) -> String {
         switch err {
         case .notConfigured:
-            return "Configurazione rimossa dopo il salvataggio. Riprova."
+            return "Configuration removed after save. Please retry."
         case .transport:
             // Generic transport failure — the tunnel/URL in the QR is unreachable.
             // Most common cause: URL scanned from an old QR after cloudflared
             // restarted (Quick Tunnel URLs are ephemeral). Second cause: PC off.
-            return "Harness irraggiungibile. Verifica che il harness sia acceso e rigenera il QR da localhost:7777/setup."
+            return "Harness unreachable. Make sure the harness is running and regenerate the QR from localhost:7777/setup."
         case .badResponse(let status, _):
-            if status == 401 { return "Secret rifiutato dal server (401). Rigenera il QR." }
-            return "Harness ha risposto HTTP \(status)."
+            if status == 401 { return "Secret rejected by the server (401). Regenerate the QR." }
+            return "Harness returned HTTP \(status)."
         case .apiError(let code, let msg):
             return "\(code): \(msg)"
         case .decodeFailed:
-            return "Risposta del server non leggibile."
+            return "Server response unreadable."
         }
     }
 

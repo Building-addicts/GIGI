@@ -82,7 +82,7 @@ final class GigiClaudeBridge {
         case .success(let agentResult):
             let finalText = agentResult.result.trimmingCharacters(in: .whitespacesAndNewlines)
             let tokens = (agentResult.usage?.output_tokens ?? 0) + (agentResult.usage?.input_tokens ?? 0)
-            return ToolResult.success(finalText.isEmpty ? "(Claude returned empty response)" : finalText,
+            return ToolResult.success(finalText.isEmpty ? "(Claude returned an empty response)" : finalText,
                                       tokenEstimate: max(tokens, 50))
 
         case .failure(let err):
@@ -127,7 +127,7 @@ final class GigiClaudeBridge {
                 memory?.updateToolEvent(id: id, status: "cancelled")
             }
             toolBubbleIdByToolUseId.removeAll(keepingCapacity: true)
-            memory?.addThought("task cancellato")
+            memory?.addThought("task cancelled")
         default:
             break
         }
@@ -192,24 +192,24 @@ final class GigiClaudeBridge {
     private static func userFacingError(for err: GigiHarnessClient.Error) -> String {
         switch err {
         case .notConfigured:
-            return "Configura il pairing in Settings → Harness"
+            return "Configure pairing in Settings → Harness"
         case .transport:
-            var msg = "Harness irraggiungibile. Verifica che il server sia acceso"
+            var msg = "Harness unreachable. Make sure the server is running"
             // If the paired URL is a Tailscale CGNAT address, the most likely
             // cause is Tailscale being off on either side rather than the
             // harness being down per se.
             if let url = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL),
                url.contains("://100.") {
-                msg += ". Controlla Tailscale attivo su PC e iPhone."
+                msg += ". Check that Tailscale is active on both PC and iPhone."
             }
             return msg
         case .badResponse(let status, _):
-            if status == 401 { return "Secret non più valido. Ri-pair dal Panel." }
-            return "Harness errore HTTP \(status)"
+            if status == 401 { return "Secret no longer valid. Re-pair from the Panel." }
+            return "Harness HTTP error \(status)"
         case .apiError(let code, let message):
             return "Harness: \(code) — \(message)"
         case .decodeFailed:
-            return "Harness: risposta non leggibile"
+            return "Harness: unreadable response"
         }
     }
 

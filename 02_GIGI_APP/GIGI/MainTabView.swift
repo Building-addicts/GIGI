@@ -85,9 +85,9 @@ struct MainTabView: View {
             Image(systemName: "link.badge.plus")
                 .font(.system(size: 16, weight: .semibold))
             VStack(alignment: .leading, spacing: 2) {
-                Text("Collega GIGI al tuo PC")
+                Text("Connect GIGI to your PC")
                     .font(.subheadline.weight(.semibold))
-                Text("Tocca per scansionare il QR")
+                Text("Tap to set up & pair")
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.75))
             }

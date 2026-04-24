@@ -31,7 +31,7 @@ struct GigiPairScannerView: View {
                 if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
                     DataScannerRepresentable(onScan: onScan)
                 } else {
-                    unavailable("Questo dispositivo non supporta la scansione QR.")
+                    unavailable("This device doesn't support QR scanning.")
                 }
             case .denied, .restricted:
                 deniedOverlay
@@ -61,7 +61,7 @@ struct GigiPairScannerView: View {
 
             VStack {
                 Spacer()
-                Text("Inquadra il QR mostrato su localhost:7777/pair")
+                Text("Point your camera at the QR shown on localhost:7777/pair")
                     .font(.footnote)
                     .foregroundColor(.white.opacity(0.9))
                     .padding(.horizontal, 14)
@@ -89,7 +89,7 @@ struct GigiPairScannerView: View {
     private var waitingOverlay: some View {
         VStack(spacing: 12) {
             ProgressView().tint(.white)
-            Text("Richiedo accesso alla fotocamera…")
+            Text("Requesting camera access…")
                 .foregroundColor(.white.opacity(0.8))
                 .font(.footnote)
         }
@@ -100,10 +100,10 @@ struct GigiPairScannerView: View {
             Image(systemName: "camera.fill.badge.ellipsis")
                 .font(.system(size: 42))
                 .foregroundColor(.white.opacity(0.7))
-            Text("Fotocamera non autorizzata")
+            Text("Camera access denied")
                 .font(.headline)
                 .foregroundColor(.white)
-            Text("Per scansionare il QR vai in Impostazioni iOS → GIGI → Fotocamera e attiva l'accesso.")
+            Text("To scan the QR, open iOS Settings → GIGI → Camera and enable access.")
                 .font(.footnote)
                 .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -113,7 +113,7 @@ struct GigiPairScannerView: View {
                     UIApplication.shared.open(url)
                 }
             } label: {
-                Text("Apri Impostazioni")
+                Text("Open Settings")
                     .font(.subheadline.weight(.medium))
                     .foregroundColor(.white)
                     .padding(.horizontal, 18).padding(.vertical, 10)
