@@ -7,6 +7,7 @@ struct ChatView: View {
     @State private var userInput     = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
     @State private var pulseScale: CGFloat = 1.0
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -37,6 +38,8 @@ struct ChatView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
                     }
+                    .scrollDismissesKeyboard(.interactively)
+                    .onTapGesture { isInputFocused = false }
                     .onAppear { scrollProxy = proxy }
                     .onChange(of: memory.messages.count) { _, _ in
                         scrollToBottom(proxy: proxy)
@@ -148,6 +151,8 @@ struct ChatView: View {
                     .padding(.vertical, 11)
                     .background(Color.white.opacity(0.07))
                     .cornerRadius(22)
+                    .focused($isInputFocused)
+                    .submitLabel(.send)
                     .onSubmit { sendText() }
 
                 // Send button
@@ -230,6 +235,7 @@ struct ChatView: View {
         let text = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         userInput = ""
+        isInputFocused = false
         Task { await gigi.process(text: text) }
     }
 
@@ -249,6 +255,17 @@ private struct MessageBubble: View {
     var isUser: Bool { message.role == .user }
 
     var body: some View {
+        switch message.role {
+        case .thinking:
+            thoughtLine
+        case .toolEvent:
+            toolEventLine
+        default:
+            standardBubble
+        }
+    }
+
+    private var standardBubble: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if isUser { Spacer(minLength: 48) }
 
@@ -276,6 +293,32 @@ private struct MessageBubble: View {
 
             if !isUser { Spacer(minLength: 48) }
         }
+    }
+
+    private var thoughtLine: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("💭")
+                .font(.caption2)
+            Text(message.text)
+                .font(.caption2)
+                .italic()
+                .foregroundColor(.white.opacity(0.6))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var toolEventLine: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "gearshape.fill")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.5))
+            Text(message.text)
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.55))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
     }
 
     private var thinkingBubble: some View {
