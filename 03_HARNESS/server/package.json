@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.90.0",
     "playwright-core": "^1.59.1",
     "puppeteer-core": "^24.41.0",
+    "qrcode": "^1.5.4",
     "ws": "^8.19.0"
   }
 }

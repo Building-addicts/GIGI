@@ -192,10 +192,19 @@ final class GigiClaudeBridge {
     private static func userFacingError(for err: GigiHarnessClient.Error) -> String {
         switch err {
         case .notConfigured:
-            return "Configura URL+secret in Settings → Harness"
+            return "Configura il pairing in Settings → Harness"
         case .transport:
-            return "Harness irraggiungibile. Verifica che il server sia acceso"
+            var msg = "Harness irraggiungibile. Verifica che il server sia acceso"
+            // If the paired URL is a Tailscale CGNAT address, the most likely
+            // cause is Tailscale being off on either side rather than the
+            // harness being down per se.
+            if let url = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL),
+               url.contains("://100.") {
+                msg += ". Controlla Tailscale attivo su PC e iPhone."
+            }
+            return msg
         case .badResponse(let status, _):
+            if status == 401 { return "Secret non più valido. Ri-pair dal Panel." }
             return "Harness errore HTTP \(status)"
         case .apiError(let code, let message):
             return "Harness: \(code) — \(message)"

@@ -30,6 +30,7 @@ import * as transcriptMirror from './transcript-mirror.js';
 import * as watchers from './watchers.js';
 import { startRpc } from './bridge-rpc.js';
 import { handleIosRequest } from './api/ios-router.js';
+import { handlePair } from './api/pair.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
 
 // ─────────────────────────────────────────────────────────────
@@ -169,6 +170,10 @@ async function main() {
   const iosHost = cfg.server?.host || '127.0.0.1';
   const iosServer = http.createServer(async (req, res) => {
     try {
+      // /api/pair is loopback-only (enforced inside handlePair) and MUST
+      // run before the iOS router, because it intentionally skips the
+      // Bearer check (the QR itself hands out the Bearer).
+      if (await handlePair(req, res, { cfg })) return;
       const handled = await handleIosRequest(req, res, { cfg, gigiServer });
       if (!handled) {
         res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });

@@ -4,6 +4,10 @@ import SwiftUI
 //
 // All configuration in one place: API keys, wake word, privacy, debug.
 
+enum SettingsField: Hashable {
+    case geminiKey, harnessURL, harnessSecret
+}
+
 struct SettingsView: View {
     @State private var geminiKey = ""   // bound to Groq key slot
     @State private var picoKey = ""
@@ -22,6 +26,9 @@ struct SettingsView: View {
     @State private var harnessSecret = ""
     @State private var harnessStatus = "—"
     @State private var isTestingHarness = false
+    @State private var showPairingSheet = false
+    @State private var pairedDeviceName: String? = nil
+    @FocusState var focusedField: SettingsField?
 
     var body: some View {
         NavigationStack {
@@ -38,9 +45,19 @@ struct SettingsView: View {
                 aboutSection
             }
             .listStyle(.insetGrouped)
+            .scrollIndicators(.hidden)
             .preferredColorScheme(.dark)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.purple)
+                }
+            }
             .task { await loadState() }
             .sheet(isPresented: $showWhatsApp) { WhatsAppLinkSheet() }
             .sheet(isPresented: $showProfile) { ProfileEditSheet() }
@@ -58,11 +75,13 @@ struct SettingsView: View {
                         .font(.system(.body, design: .monospaced))
                         .autocorrectionDisabled()
                         .submitLabel(.done)
+                        .focused($focusedField, equals: .geminiKey)
                         .onSubmit { saveGeminiKey() }
                 } else {
                     SecureField("Groq API Key", text: $geminiKey)
                         .font(.system(.body, design: .monospaced))
                         .submitLabel(.done)
+                        .focused($focusedField, equals: .geminiKey)
                         .onSubmit { saveGeminiKey() }
                 }
                 Button(action: { showKey.toggle() }) {
@@ -106,25 +125,22 @@ struct SettingsView: View {
 
     private var harnessSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Base URL").font(.caption).foregroundColor(.secondary)
-                TextField("http://10.0.0.5:7779", text: $harnessURL)
-                    .keyboardType(.URL)
-                    .autocapitalization(.none)
-                    .autocorrectionDisabled()
-                    .font(.system(.body, design: .monospaced))
+            // Primary action: pair via QR
+            Button {
+                showPairingSheet = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 18))
+                    Text(harnessIsPaired ? "Ri-pair con Harness" : "Pair con Harness")
+                        .font(.body.weight(.medium))
+                    Spacer()
+                }
+                .foregroundColor(.purple)
+                .padding(.vertical, 4)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Bearer secret").font(.caption).foregroundColor(.secondary)
-                SecureField("shared secret 32 char", text: $harnessSecret)
-                    .font(.system(.body, design: .monospaced))
-            }
-            Button("Salva e testa") {
-                Task { await saveAndTestHarness() }
-            }
-            .foregroundColor(.purple)
-            .disabled(harnessURL.isEmpty || harnessSecret.isEmpty || isTestingHarness)
 
+            // Status line
             HStack {
                 Text("Stato")
                 Spacer()
@@ -136,12 +152,73 @@ struct SettingsView: View {
                         .font(.subheadline)
                 }
             }
+
+            // Re-test + unpair
+            if harnessIsPaired {
+                Button("Verifica connessione") {
+                    Task { await saveAndTestHarness() }
+                }
+                .foregroundColor(.purple)
+                .disabled(isTestingHarness)
+
+                Button(role: .destructive) {
+                    removePairing()
+                } label: {
+                    Text("Rimuovi pairing")
+                }
+            }
+
+            // Advanced: manual config still available for power users / debug.
+            DisclosureGroup("Configurazione manuale (avanzata)") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Base URL").font(.caption).foregroundColor(.secondary)
+                    TextField("http://10.0.0.5:7779", text: $harnessURL)
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                        .focused($focusedField, equals: .harnessURL)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Bearer secret").font(.caption).foregroundColor(.secondary)
+                    SecureField("shared secret 32 char", text: $harnessSecret)
+                        .font(.system(.body, design: .monospaced))
+                        .focused($focusedField, equals: .harnessSecret)
+                }
+                Button("Salva e testa") {
+                    Task { await saveAndTestHarness() }
+                }
+                .foregroundColor(.purple)
+                .disabled(harnessURL.isEmpty || harnessSecret.isEmpty || isTestingHarness)
+            }
+            .font(.caption)
+            .tint(.secondary)
         } header: {
             Text("🖥 Harness Backend")
         } footer: {
-            Text("Backend Node (computer-use, memoria, watcher proattivi). Genera il secret con `openssl rand -hex 16`. Senza configurazione, GIGI funziona solo local.")
+            Text("Installa Tailscale su PC + iPhone (stesso account), apri localhost:7777/pair nel browser del PC e scansiona il QR. Una-tantum, poi funziona da qualsiasi rete.")
                 .font(.caption)
         }
+        .sheet(isPresented: $showPairingSheet) {
+            GigiPairingSheet { deviceName in
+                pairedDeviceName = deviceName
+                harnessStatus = "✓ Connesso a \(deviceName)"
+            }
+        }
+    }
+
+    private var harnessIsPaired: Bool {
+        (GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL)?.isEmpty == false) &&
+        (GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret)?.isEmpty == false)
+    }
+
+    private func removePairing() {
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessSecret)
+        harnessURL = ""
+        harnessSecret = ""
+        harnessStatus = "non configurato"
+        pairedDeviceName = nil
     }
 
     // MARK: - WhatsApp section

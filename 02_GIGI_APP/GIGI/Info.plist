@@ -120,5 +120,7 @@
     <string>GIGI si integra con Siri per permetterti di usare i comandi vocali anche quando l'app è chiusa.</string>
     <key>NSAppleMusicUsageDescription</key>
     <string>GIGI ha bisogno di accedere ad Apple Music per riprodurre la musica richiesta.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>GIGI usa la fotocamera per leggere il QR code del tuo Harness backend (pairing una-tantum).</string>
 </dict>
 </plist>

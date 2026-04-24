@@ -273,6 +273,17 @@ export async function handleRequest(req, res, deps) {
   }
   // /api/test-message rimosso in fase 17 (era Telegram-only). Per testare iOS usa /api/ios/agent/run (fase 12).
 
+  // Pairing page: serves public/pair.html, client-side fetches /api/pair?format=svg
+  // on the iOS HTTP port (7779) to render the QR.
+  if (p === '/pair') {
+    fs.readFile(path.join(PUBLIC_DIR, 'pair.html'), (err, data) => {
+      if (err) { res.writeHead(404); return res.end('pair.html missing'); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(data);
+    });
+    return;
+  }
+
   let filePath = p === '/' ? '/index.html' : p;
   filePath = path.join(PUBLIC_DIR, filePath);
   if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
