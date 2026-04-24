@@ -87,7 +87,7 @@ final class GigiFoundationAgent {
     // MARK: - System prompt (shared with Groq fallback)
 
     /// Orchestration + NLU policy: behave like a compact frontier-model router — infer latent intent, coreference, and slot-fill.
-    static let systemPrompt = """
+    nonisolated static let systemPrompt = """
         ROLE — You are GIGI's ORCHESTRATION BRAIN (on-device policy layer). Your job matches a frontier LLM router:
         (1) Infer what the user WANTS DONE, not literal keywords.
         (2) Resolve pronouns and ellipsis using "Recent conversation" (him/her/them/it/there/"quello"/"lì"/"gli stessi").
@@ -181,7 +181,7 @@ final class GigiFoundationAgent {
     /// Tool-calling variant used by GigiAgentEngine with Groq `tool_choice: "auto"`.
     /// Different paradigm from `systemPrompt`: do NOT emit JSON, do NOT invent tools,
     /// reply in plain spoken English when no listed tool applies.
-    static let agentToolPrompt = """
+    nonisolated static let agentToolPrompt = """
         You are GIGI, an autonomous personal AI on iPhone — think Jarvis. You speak natural, concise American English.
 
         TOOLS: You have access to the tools listed in this request.

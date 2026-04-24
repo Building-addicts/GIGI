@@ -424,7 +424,7 @@ final class GigiCloudService {
 
     // MARK: - Private: parse Groq response
 
-    private func parseGroqResponse(from data: Data) throws -> GigiLLMResponse {
+    private nonisolated func parseGroqResponse(from data: Data) throws -> GigiLLMResponse {
         guard let json    = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first   = choices.first,

@@ -708,6 +708,7 @@ final class GuidedSetupSession: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            Task { @MainActor [weak self] in
             guard let self,
                   let userInfo = notification.userInfo,
                   let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -730,12 +731,11 @@ final class GuidedSetupSession: ObservableObject {
                 self.isInterrupted = false
                 // Re-ask the current question when audio resumes
                 if !self.isDone {
-                    Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
-                        self?.addGigi("Welcome back! " + (self?.steps[self?.currentStep ?? 0].prompt ?? ""))
-                    }
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    self.addGigi("Welcome back! " + self.steps[self.currentStep].prompt)
                 }
             @unknown default: break
+            }
             }
         }
     }

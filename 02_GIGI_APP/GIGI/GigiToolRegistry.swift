@@ -3,30 +3,30 @@ import Foundation
 
 // MARK: - Shared value types
 
-struct ToolResult {
+struct ToolResult: Sendable {
     let value: String
     let error: String?
     let requiresConfirm: ConfirmRequest?
     let tokenEstimate: Int
 
-    static func success(_ value: String, tokenEstimate: Int = 10) -> ToolResult {
+    nonisolated static func success(_ value: String, tokenEstimate: Int = 10) -> ToolResult {
         ToolResult(value: value, error: nil, requiresConfirm: nil, tokenEstimate: tokenEstimate)
     }
 
-    static func failure(_ error: String) -> ToolResult {
+    nonisolated static func failure(_ error: String) -> ToolResult {
         ToolResult(value: "", error: error, requiresConfirm: nil, tokenEstimate: 5)
     }
 
-    static func confirm(_ request: ConfirmRequest, tokenEstimate: Int = 15) -> ToolResult {
+    nonisolated static func confirm(_ request: ConfirmRequest, tokenEstimate: Int = 15) -> ToolResult {
         ToolResult(value: "", error: nil, requiresConfirm: request, tokenEstimate: tokenEstimate)
     }
 }
 
-struct ConfirmRequest {
+struct ConfirmRequest: @unchecked Sendable {
     let type: ConfirmType
     let summary: String
     let action: String
-    let args: [String: Any]
+    let args: [String: Any]   // [String: Any] is not Sendable but args are read-only value copies
 }
 
 enum ConfirmType {
