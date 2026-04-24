@@ -31,7 +31,7 @@ final class GigiAgentEngine {
 
     private let maxIterations  = 5
     private let globalTimeout: TimeInterval = 15.0
-    // Gemini 2.0 Flash pricing (USD): ~$0.075/1M input tokens, ~$0.30/1M output tokens.
+    // Groq llama-3.3-70b pricing (USD): ~$0.059/1M input tokens, ~$0.079/1M output tokens.
     // We use a blended rate for the simplified estimate.
     private let costPerToken = 0.00000015
 
@@ -206,7 +206,7 @@ final class GigiAgentEngine {
                     .map { (call, r) in (name: call.name, result: r.error.map { "ERROR: \($0)" } ?? r.value) }
                 mem.addToolResults(toolResultPairs)
 
-                // Build tool results content for next Gemini turn
+                // Build tool results content for next LLM turn
                 let toolResultTuples: [(name: String, value: String, error: String?)] =
                     zip(response.functionCalls, results).map { (call, r) in
                         (name: call.name, value: r.value, error: r.error)
@@ -226,7 +226,7 @@ final class GigiAgentEngine {
                 )
 
             } else {
-                // Gemini returned neither text nor function calls — break and use safety lock
+                // LLM returned neither text nor function calls — break and use safety lock
                 break
             }
         }

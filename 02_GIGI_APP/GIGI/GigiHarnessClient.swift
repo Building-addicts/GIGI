@@ -268,13 +268,16 @@ final class GigiHarnessClient {
         return .failure(lastError)
     }
 
+    /// Risposta JSON comune dal server (`{ ok, data?, error? }`). Non può stare dentro
+    /// `decodeEnvelope` perché Swift vieta tipi generici annidati in funzioni generiche.
+    private struct Envelope<D: Decodable>: Decodable {
+        let ok: Bool
+        let data: D?
+        let error: ErrorDetail?
+        struct ErrorDetail: Decodable { let code: String; let message: String }
+    }
+
     private static func decodeEnvelope<T: Decodable>(_ data: Data, as: T.Type, status: Int) -> Result<T, Error> {
-        struct Envelope<D: Decodable>: Decodable {
-            let ok: Bool
-            let data: D?
-            let error: ErrorDetail?
-            struct ErrorDetail: Decodable { let code: String; let message: String }
-        }
         do {
             let env = try JSONDecoder().decode(Envelope<T>.self, from: data)
             if env.ok, let d = env.data { return .success(d) }

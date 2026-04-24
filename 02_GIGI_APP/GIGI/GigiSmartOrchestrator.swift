@@ -62,7 +62,7 @@ class GigiSmartOrchestrator: ObservableObject {
             }
         }
 
-        // Barge-in: user spoke while Gemini Live was playing audio → stop TTS, listen
+        // Barge-in: user spoke while realtime voice was playing audio → stop TTS, listen
         GigiRealtimeEngine.shared.onBargein = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -231,7 +231,7 @@ class GigiSmartOrchestrator: ObservableObject {
         }
     }
 
-    // MARK: - Gemini Live tool execution (called by GigiRealtimeEngine)
+    // MARK: - Realtime voice tool execution (called by GigiRealtimeEngine)
 
     func executeRealtimeToolCall(_ call: GigiToolCall) async -> String {
         await dispatcher.executeRealtimeTool(call)

@@ -174,7 +174,7 @@ final class GigiCloudService {
         }
     }
 
-    // MARK: - NLU / Brain pipeline (replaces processWithGemini)
+    // MARK: - NLU / Brain pipeline (Groq)
 
     func processWithGroq(_ text: String, history: String) async -> GigiAgentResponse? {
         let apiKey = GigiConfig.groqAPIKey

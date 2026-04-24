@@ -6,12 +6,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "panel": "node panel.js"
+    "panel": "node panel.js",
+    "start:all": "bash start-all.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "playwright-core": "^1.59.1",
     "puppeteer-core": "^24.41.0",
+    "qrcode-terminal": "^0.12.0",
     "ws": "^8.19.0"
   }
 }

@@ -5,7 +5,8 @@ import SwiftUI
 // All configuration in one place: API keys, wake word, privacy, debug.
 
 struct SettingsView: View {
-    @State private var geminiKey = ""   // bound to Groq key slot
+    @State private var groqKey = ""
+    @State private var showQRScanner = false
     @State private var picoKey = ""
     @State private var showKey = false
     @State private var connectionStatus: String = "—"
@@ -44,6 +45,17 @@ struct SettingsView: View {
             .task { await loadState() }
             .sheet(isPresented: $showWhatsApp) { WhatsAppLinkSheet() }
             .sheet(isPresented: $showProfile) { ProfileEditSheet() }
+            .fullScreenCover(isPresented: $showQRScanner) {
+                HarnessQRScannerView(
+                    onScanned: { payload in
+                        harnessURL = payload.url
+                        harnessSecret = payload.secret
+                        showQRScanner = false
+                        Task { await saveAndTestHarness() }
+                    },
+                    onCancel: { showQRScanner = false }
+                )
+            }
         }
     }
 
@@ -54,27 +66,27 @@ struct SettingsView: View {
             // Inline key editor
             HStack {
                 if showKey {
-                    TextField("gsk_...", text: $geminiKey)
+                    TextField("gsk_...", text: $groqKey)
                         .font(.system(.body, design: .monospaced))
                         .autocorrectionDisabled()
                         .submitLabel(.done)
-                        .onSubmit { saveGeminiKey() }
+                        .onSubmit { saveGroqKey() }
                 } else {
-                    SecureField("Groq API Key", text: $geminiKey)
+                    SecureField("Groq API Key", text: $groqKey)
                         .font(.system(.body, design: .monospaced))
                         .submitLabel(.done)
-                        .onSubmit { saveGeminiKey() }
+                        .onSubmit { saveGroqKey() }
                 }
                 Button(action: { showKey.toggle() }) {
                     Image(systemName: showKey ? "eye.slash" : "eye")
                         .foregroundColor(.secondary)
                 }
-                Button(action: saveGeminiKey) {
+                Button(action: saveGroqKey) {
                     Text("Save")
                         .foregroundColor(.purple)
                         .fontWeight(.semibold)
                 }
-                .disabled(geminiKey.isEmpty)
+                .disabled(groqKey.isEmpty)
             }
 
             HStack {
@@ -106,6 +118,13 @@ struct SettingsView: View {
 
     private var harnessSection: some View {
         Section {
+            Button {
+                showQRScanner = true
+            } label: {
+                Label("Scan QR from Mac terminal", systemImage: "qrcode.viewfinder")
+                    .foregroundColor(.purple)
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 Text("Base URL").font(.caption).foregroundColor(.secondary)
                 TextField("http://10.0.0.5:7779", text: $harnessURL)
@@ -119,14 +138,14 @@ struct SettingsView: View {
                 SecureField("shared secret 32 char", text: $harnessSecret)
                     .font(.system(.body, design: .monospaced))
             }
-            Button("Salva e testa") {
+            Button("Save & test") {
                 Task { await saveAndTestHarness() }
             }
             .foregroundColor(.purple)
             .disabled(harnessURL.isEmpty || harnessSecret.isEmpty || isTestingHarness)
 
             HStack {
-                Text("Stato")
+                Text("Status")
                 Spacer()
                 if isTestingHarness {
                     ProgressView().scaleEffect(0.8)
@@ -379,7 +398,7 @@ struct SettingsView: View {
         memoryCount = all.count
         accessoryList = await GigiHomeKit.shared.accessoryNames()
         let existing = GigiConfig.groqAPIKey
-        if !existing.isEmpty { geminiKey = existing }
+        if !existing.isEmpty { groqKey = existing }
         harnessURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) ?? ""
         harnessSecret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? ""
         harnessStatus = GigiHarnessClient.shared.isConfigured ? "configurato (non testato)" : "non configurato"
@@ -398,8 +417,8 @@ struct SettingsView: View {
         isTestingHarness = false
     }
 
-    private func saveGeminiKey() {
-        let trimmed = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func saveGroqKey() {
+        let trimmed = groqKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         GigiConfig.setGroqAPIKey(trimmed)
         connectionStatus = "Key saved"

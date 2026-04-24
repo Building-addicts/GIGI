@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - GigiAgentResponse
-// Output strutturato condiviso tra Foundation Models, Gemini NLU e local fallback.
+// Output strutturato condiviso tra Foundation Models, Groq NLU e local fallback.
 
 struct GigiAgentResponse {
     let action:   String   // intent label (es. "make_call", "navigate", "respond")
@@ -77,14 +77,14 @@ final class GigiFoundationAgent {
 
     // MARK: - Process
 
-    /// Ritorna nil se Foundation Models non disponibile — l'orchestrator usa Gemini o local.
+    /// Ritorna nil se Foundation Models non disponibile — l'orchestrator usa Groq o local fallback.
     func process(text: String, history: String) async -> GigiAgentResponse? {
         guard #available(iOS 18.1, *) else { return nil }
         guard GigiFoundationAgent.isSupported    else { return nil }
         return await GigiFoundationSession.shared.respond(text: text, history: history)
     }
 
-    // MARK: - System prompt (usato anche da Gemini fallback)
+    // MARK: - System prompt (shared with Groq fallback)
 
     /// Orchestration + NLU policy: behave like a compact frontier-model router — infer latent intent, coreference, and slot-fill.
     static let systemPrompt = """

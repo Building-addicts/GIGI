@@ -1,14 +1,15 @@
 {
   "server": {
     "port": 7779,
-    "host": "127.0.0.1"
+    "host": "0.0.0.0"
   },
   "panel": {
     "port": 7777
   },
   "ios": {
     "shared_secret": "GENERA_UN_BEARER_SECRET_RANDOM_32_CHAR",
-    "allowed_device_ids": []
+    "allowed_device_ids": [],
+    "_pairing": "After start-all.sh, a QR code is printed in the terminal — scan it from GIGI iOS → Settings → Harness or during Onboarding step 3. Generate secret: openssl rand -hex 16"
   },
   "claude": {
     "bin": "/Users/TUO_USER/.local/bin/claude",

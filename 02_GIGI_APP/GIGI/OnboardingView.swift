@@ -32,6 +32,7 @@ struct OnboardingView: View {
     @State private var harnessSecret = ""
     @State private var harnessStatus = ""   // "", "testing", "ok:<pid>", "fail:<err>"
     @State private var isTestingHarness = false
+    @State private var showQRScanner = false
 
     // Profile step
     @State private var profileName = ""
@@ -106,6 +107,17 @@ struct OnboardingView: View {
         }
         .preferredColorScheme(.dark)
         .task { loadExistingKey() }
+        .fullScreenCover(isPresented: $showQRScanner) {
+            HarnessQRScannerView(
+                onScanned: { payload in
+                    harnessURL = payload.url
+                    harnessSecret = payload.secret
+                    showQRScanner = false
+                    Task { await testAndSaveHarness() }
+                },
+                onCancel: { showQRScanner = false }
+            )
+        }
     }
 
     // MARK: - Steps
@@ -249,6 +261,25 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white.opacity(0.7))
                     .padding(.horizontal, 24)
+
+                // QR scan shortcut
+                Button {
+                    showQRScanner = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "qrcode.viewfinder")
+                        Text("Scan QR from Mac terminal")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 22).padding(.vertical, 10)
+                    .background(Color.purple)
+                    .clipShape(Capsule())
+                }
+
+                Text("— or enter manually —")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.3))
 
                 VStack(spacing: 10) {
                     TextField("http://10.0.0.5:7779", text: $harnessURL)
