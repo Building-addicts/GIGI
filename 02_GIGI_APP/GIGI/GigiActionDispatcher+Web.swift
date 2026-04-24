@@ -97,12 +97,13 @@ extension GigiActionDispatcher {
     private func handleWebOrderFood(_ args: [String: Any]) async -> ToolResult {
         let restaurant = webStr(args, "restaurant")
         let items      = webStr(args, "items", fallback: "food")
-        let platform   = webStr(args, "platform", fallback: "ubereats")
+        let platform   = webStr(args, "platform", fallback: "auto")
 
         guard !restaurant.isEmpty else { return .failure("restaurant parameter required for web_order_food") }
 
         // Require confirmation before placing a real order
-        let summary = "Order \(items) from \(restaurant) via \(platform). Confirm?"
+        let platformLabel = platform == "auto" ? "best available delivery app" : platform
+        let summary = "Order \(items.isEmpty ? "food" : items) from \(restaurant) via \(platformLabel). Confirm?"
         return .confirm(ConfirmRequest(type: .payment, summary: summary, action: "web_order_food", args: args))
     }
 
@@ -110,15 +111,27 @@ extension GigiActionDispatcher {
     func executeWebOrderFood(_ args: [String: Any]) async -> ToolResult {
         let restaurant = webStr(args, "restaurant")
         let items      = webStr(args, "items", fallback: "food")
-        let platform   = webStr(args, "platform", fallback: "ubereats")
+        let platform   = webStr(args, "platform", fallback: "auto")
 
-        // Choose platform URL
+        // Prefer harness (Mac Chrome) — handles login, captchas, payment flows
+        if GigiHarnessClient.shared.isConfigured {
+            let task = "Order \(items.isEmpty ? "food" : items) from \(restaurant) on \(platform == "auto" ? "the best available delivery platform (Just Eat, Deliveroo, Uber Eats, Glovo)" : platform). Complete the full checkout including delivery address and payment."
+            switch await GigiHarnessClient.shared.agentRun(text: task, domain: "browser") {
+            case .success(let r): return .success(r.result, tokenEstimate: 60)
+            case .failure: break  // fall through to on-device
+            }
+        }
+
+        // On-device fallback via WKWebView vision agent
         var searchURL: URL? {
             var c = CharacterSet.urlQueryAllowed; c.remove(charactersIn: "&+?=#")
             let q = restaurant.addingPercentEncoding(withAllowedCharacters: c) ?? restaurant
             switch platform.lowercased() {
+            case "justeat":   return URL(string: "https://www.just-eat.it/cerca#q=\(q)")
+            case "deliveroo": return URL(string: "https://deliveroo.it/it/search?query=\(q)")
             case "doordash":  return URL(string: "https://www.doordash.com/search/store/\(q)")
             case "grubhub":   return URL(string: "https://www.grubhub.com/search?query=\(q)")
+            case "glovo":     return URL(string: "https://glovoapp.com/it/it/search/\(q)")
             default:          return URL(string: "https://www.ubereats.com/search?q=\(q)")
             }
         }
