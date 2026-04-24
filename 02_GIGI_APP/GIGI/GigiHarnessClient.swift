@@ -249,6 +249,72 @@ final class GigiHarnessClient {
 
     struct HealthInfo: Decodable { let pid: Int; let uptime_s: Int }
 
+    // MARK: - Diagnostics (Phase 6 — diagnostic-driven pair flow)
+
+    /// One row of the diagnostics report. Mirrors checks.js CheckResult.
+    struct DiagnosticsCheck: Decodable, Identifiable, Equatable {
+        let id: String
+        let label: String
+        let severity: String      // "critical" | "warning" | "info"
+        let ok: Bool
+        let hint: String?
+        let action: String?
+    }
+
+    struct DiagnosticsCounts: Decodable, Equatable {
+        struct Pair: Decodable, Equatable { let ok: Int; let total: Int }
+        let critical: Pair
+        let warning: Pair
+        let info: Pair
+    }
+
+    struct DiagnosticsSummary: Decodable, Equatable {
+        let allCriticalOk: Bool
+        let counts: DiagnosticsCounts
+    }
+
+    struct DiagnosticsReport: Decodable, Equatable {
+        let generatedAt: String
+        let elapsedMs: Int
+        let summary: DiagnosticsSummary
+        let checks: [DiagnosticsCheck]
+    }
+
+    /// Calls `GET /api/setup/diagnostics`. The harness caches its own
+    /// response for 5s — pass `forceRefresh: true` to bypass.
+    func diagnostics(forceRefresh: Bool = false) async -> Result<DiagnosticsReport, Error> {
+        guard let c = cfg else { return .failure(.notConfigured) }
+        let path = forceRefresh ? "/api/setup/diagnostics?refresh=1" : "/api/setup/diagnostics"
+        return await getJSON(path: path, as: DiagnosticsReport.self, cfg: c)
+    }
+
+    /// Snapshot of the most recent diagnostics report. Set by the
+    /// SetupDiagnosticView poll loop; consumed by `isReady`. Stays nil
+    /// until the first successful diagnostic call after pair.
+    private(set) var lastDiagnostics: DiagnosticsReport?
+    private var lastDiagnosticsAt: Date?
+
+    /// Updates the in-memory snapshot. Called by the diagnostic view on
+    /// each successful poll. The TTL pattern (5min) is enforced by the
+    /// `isReady` reader rather than by us discarding old reports.
+    func cacheDiagnostics(_ report: DiagnosticsReport) {
+        lastDiagnostics = report
+        lastDiagnosticsAt = Date()
+    }
+
+    /// True iff the harness is paired AND the last diagnostics snapshot
+    /// (taken within the last 5 minutes) reports allCriticalOk == true.
+    /// Used by MainTabView to hide the "Connect to your harness" banner
+    /// and by the chat input gate.
+    var isReady: Bool {
+        guard isConfigured,
+              let snap = lastDiagnostics,
+              let at = lastDiagnosticsAt,
+              Date().timeIntervalSince(at) < 5 * 60
+        else { return false }
+        return snap.summary.allCriticalOk
+    }
+
     func health() async -> Result<HealthInfo, Error> {
         guard let c = cfg else { return .failure(.notConfigured) }
         return await getJSON(path: "/api/ios/health", as: HealthInfo.self, cfg: c)
