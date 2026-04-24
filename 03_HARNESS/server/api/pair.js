@@ -56,12 +56,27 @@ function isLoopback(req) {
 
 function buildPayload(cfg) {
   const port = cfg?.server?.port || 7779;
-  const host = pickHostIp(cfg);
+  const mode = cfg?.tunnel?.mode || 'manual';
   const secret = cfg?.ios?.shared_secret || '';
+
+  // Mode-aware URL selection:
+  //   named → https://<hostname>   (stable forever, survives reboot)
+  //   quick → https://<last_url>   (trycloudflare, changes on restart)
+  //   lan / manual → http://<local-ip>:<port>
+  let url;
+  if (mode === 'named' && cfg?.tunnel?.named?.hostname) {
+    url = `https://${cfg.tunnel.named.hostname}`;
+  } else if (mode === 'quick' && cfg?.tunnel?.quick?.last_url) {
+    url = cfg.tunnel.quick.last_url;
+  } else {
+    url = `http://${pickHostIp(cfg)}:${port}`;
+  }
+
   return {
-    url:        `http://${host}:${port}`,
+    url,
     secret,
     deviceName: os.hostname(),
+    mode,
     createdAt:  new Date().toISOString()
   };
 }

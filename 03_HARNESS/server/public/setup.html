@@ -132,19 +132,49 @@
       <div class="status-line" id="status-lan">Stato: —</div>
     </div>
 
-    <!-- Card A — Named Tunnel placeholder -->
-    <div class="card disabled" id="card-named">
+    <!-- Card A — Named Tunnel -->
+    <div class="card" id="card-named">
       <div class="header-row">
-        <h2>☁️ Cloudflare Tunnel + dominio <span class="pill yellow">in arrivo</span></h2>
+        <h2>☁️ Cloudflare Tunnel + dominio <span id="pill-named" class="pill gray">off</span></h2>
       </div>
       <p>URL stabile permanente (`gigi.tuodominio.me`), funziona sempre, ri-pair mai.</p>
       <ul>
-        <li>🎯 L'opzione definitiva per uso quotidiano</li>
-        <li>Richiede: account Cloudflare (gratis) + dominio (~€5/anno)</li>
-        <li>Setup guidato in-wizard, ~10 min una-tantum</li>
+        <li>🎯 L'opzione definitiva: URL invariato anche dopo reboot PC</li>
+        <li>Richiede: account Cloudflare (gratis) + dominio aggiunto alla tua zone CF (~€5/anno)</li>
+        <li>Setup guidato in 3 passi, ~5 min una-tantum</li>
       </ul>
-      <div class="row"><button class="primary" disabled>Attiva (Phase 5.2)</button></div>
-      <div class="status-line">Arriva nella prossima iterazione — per ora usa Quick Tunnel.</div>
+
+      <div id="named-step-1">
+        <div class="row">
+          <button class="primary" id="btn-named-login">1. Login su Cloudflare</button>
+        </div>
+        <div class="status-line" id="status-named-login">
+          Cliccando, aprirò il browser sul dashboard Cloudflare per autenticarti e scaricare il cert.pem.
+        </div>
+      </div>
+
+      <div id="named-step-2" style="display:none; margin-top:14px">
+        <label style="font-size:12px;color:#8888a0;text-transform:uppercase;letter-spacing:0.06em">Hostname GIGI</label>
+        <input type="text" id="named-hostname" placeholder="gigi.tuodominio.me"
+               style="width:100%;padding:10px 12px;margin:6px 0 12px;background:#0c0c14;
+                      border:1px solid #32325a;border-radius:8px;color:#e6e6ec;
+                      font:13px/1.3 'SF Mono',Consolas,monospace">
+        <div class="row">
+          <button class="primary" id="btn-named-configure">2. Crea tunnel + DNS</button>
+        </div>
+        <div class="status-line" id="status-named-config">
+          Il dominio base (es. `tuodominio.me`) deve essere già attivo nella tua zone Cloudflare.
+        </div>
+      </div>
+
+      <div id="named-step-3" style="display:none; margin-top:14px">
+        <div class="row">
+          <button class="secondary" id="btn-named-stop">Stop named tunnel</button>
+        </div>
+        <div class="status-line" id="status-named-run">
+          Tunnel named attivo.
+        </div>
+      </div>
     </div>
 
     <!-- Card D — Manual -->
@@ -233,6 +263,48 @@
   wireButton('btn-lan-start',   '/api/setup/lan/start');
   wireButton('btn-lan-stop',    '/api/setup/lan/stop');
   wireButton('btn-manual',      '/api/setup/manual');
+  wireButton('btn-named-stop',  '/api/setup/named/stop');
+
+  // Named flow: login → configure
+  document.getElementById('btn-named-login').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-named-login');
+    const status = document.getElementById('status-named-login');
+    btn.disabled = true; btn.textContent = 'Attendo login nel browser…';
+    status.textContent = 'Si è aperto il browser verso dash.cloudflare.com. Completa il login e torna qui.';
+    try {
+      await api('POST', '/api/setup/named/login');
+      status.innerHTML = '<strong style="color:#66e088">✓ cert.pem scaricato</strong>';
+      document.getElementById('named-step-1').style.display = 'none';
+      document.getElementById('named-step-2').style.display = '';
+    } catch (e) {
+      status.innerHTML = '<strong style="color:#e06666">Errore: ' + e.message + '</strong>';
+      btn.disabled = false; btn.textContent = '1. Login su Cloudflare';
+    }
+  });
+
+  document.getElementById('btn-named-configure').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-named-configure');
+    const status = document.getElementById('status-named-config');
+    const hostname = (document.getElementById('named-hostname').value || '').trim();
+    if (!hostname || !hostname.includes('.')) {
+      status.innerHTML = '<strong style="color:#e0b866">Inserisci un hostname valido, es. gigi.tuodominio.me</strong>';
+      return;
+    }
+    btn.disabled = true; btn.textContent = 'Creando tunnel + DNS…';
+    status.textContent = 'Aspetto che Cloudflare propaghi il DNS…';
+    try {
+      const r = await api('POST', '/api/setup/named/configure', { hostname });
+      status.innerHTML = '<strong style="color:#66e088">✓ Tunnel attivo</strong> · ' + r.publicUrl;
+      document.getElementById('named-step-2').style.display = 'none';
+      document.getElementById('named-step-3').style.display = '';
+      document.getElementById('status-named-run').innerHTML =
+        'URL: <strong>' + r.publicUrl + '</strong> · attivo fino al prossimo stop/reboot.<br>' +
+        '→ <a href="/pair" style="color:#b9a8ff">Apri pagina pair</a> per scansionare il QR con l\'iPhone.';
+    } catch (e) {
+      status.innerHTML = '<strong style="color:#e06666">Errore: ' + e.message + '</strong>';
+      btn.disabled = false; btn.textContent = '2. Crea tunnel + DNS';
+    }
+  });
 
   refresh();
   setInterval(refresh, 3000);

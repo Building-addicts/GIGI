@@ -84,6 +84,102 @@ class CloudflaredManager {
     return this.status();
   }
 
+  /**
+   * Spawns `cloudflared tunnel login`. The binary opens the user's default
+   * browser to the Cloudflare dashboard, the user authenticates and picks a
+   * zone, the browser redirects back to a Cloudflare callback which causes
+   * `cloudflared` to download an origin certificate and write it to
+   * `~/.cloudflared/cert.pem`. We poll for that file and resolve once it
+   * appears. Timeout 5 minutes — the user might take a moment to click
+   * through the dashboard on the first login.
+   */
+  async login({ timeoutMs = 300_000 } = {}) {
+    const bin = await this.ensureBinary();
+    const certPath = path.join(os.homedir(), '.cloudflared', 'cert.pem');
+    // Clear any stale cert so we reliably detect the new one
+    try { fs.unlinkSync(certPath); } catch {}
+    log('[cloudflared] spawn login');
+    const child = spawn(bin, ['tunnel', 'login'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+    child.stdout.on('data', d => log('[cloudflared login]', d.toString().trim()));
+    child.stderr.on('data', d => log('[cloudflared login]', d.toString().trim()));
+
+    const start = Date.now();
+    return await new Promise((resolve, reject) => {
+      const poll = setInterval(() => {
+        if (fs.existsSync(certPath)) {
+          clearInterval(poll);
+          try { child.kill('SIGTERM'); } catch {}
+          resolve({ certPath });
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          clearInterval(poll);
+          try { child.kill('SIGTERM'); } catch {}
+          reject(new Error('timeout attesa login Cloudflare — riprova'));
+        }
+      }, 1500);
+      child.on('exit', (code) => {
+        if (!fs.existsSync(certPath)) {
+          clearInterval(poll);
+          reject(new Error(`cloudflared login uscito (code=${code}) senza scrivere cert.pem`));
+        }
+      });
+    });
+  }
+
+  /**
+   * Creates (or looks up if already exists) a named tunnel via `cloudflared`
+   * and returns the tunnel UUID + credential JSON path. Uses the cert written
+   * by `login()` — must be called after.
+   */
+  async createNamedTunnel({ name }) {
+    const bin = await this.ensureBinary();
+    return await new Promise((resolve, reject) => {
+      const p = spawn(bin, ['tunnel', 'create', name], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true
+      });
+      let out = '', err = '';
+      p.stdout.on('data', d => { out += d.toString(); });
+      p.stderr.on('data', d => { err += d.toString(); });
+      p.on('exit', (code) => {
+        const combined = out + err;
+        // Parse "Created tunnel <name> with id <uuid>" or "A tunnel with the
+        // name <name> already exists" — handle both as success.
+        const m1 = combined.match(/tunnel .*? with id ([0-9a-f-]{36})/i);
+        const m2 = combined.match(/already exists .*? id:? ([0-9a-f-]{36})/i);
+        const uuid = (m1 && m1[1]) || (m2 && m2[1]);
+        if (code === 0 && uuid) return resolve({ uuid, name });
+        // As a fallback try `cloudflared tunnel list --output json` to find uuid
+        reject(new Error(`tunnel create failed (${code}): ${combined.slice(0, 400)}`));
+      });
+    });
+  }
+
+  /**
+   * Routes DNS for a named tunnel: creates a CNAME `<hostname>` → `<uuid>.cfargotunnel.com`.
+   * Requires the zone for hostname to be active in the user's Cloudflare account.
+   */
+  async routeDns({ uuid, hostname }) {
+    const bin = await this.ensureBinary();
+    return await new Promise((resolve, reject) => {
+      const p = spawn(bin, ['tunnel', 'route', 'dns', uuid, hostname], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true
+      });
+      let out = '', err = '';
+      p.stdout.on('data', d => { out += d.toString(); });
+      p.stderr.on('data', d => { err += d.toString(); });
+      p.on('exit', (code) => {
+        if (code === 0) return resolve({ hostname, uuid });
+        reject(new Error(`tunnel route dns failed (${code}): ${(out+err).slice(0, 400)}`));
+      });
+    });
+  }
+
   async stop() {
     if (!this.proc) return;
     const p = this.proc;

@@ -12,6 +12,7 @@
 // require a Cloudflare OAuth app registration which is follow-up work.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { cloudflared } from '../tunnel/cloudflared-manager.js';
 import { startAdvertise, stopAdvertise } from '../tunnel/mdns.js';
 
@@ -145,15 +146,88 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
     return json(res, 200, { ok: true, data: { mode: 'manual' } }), true;
   }
 
-  // ---- Named tunnel (Cloudflare OAuth) — Phase 5.2 follow-up ----
-  if (p.startsWith('/api/setup/named/')) {
-    return json(res, 501, {
-      ok: false,
-      error: {
-        code: 'NOT_IMPLEMENTED',
-        message: 'Named Cloudflare tunnel wizard arrives in Phase 5.2. Use Quick Tunnel for now, or Manual mode with your existing cloudflared setup.'
+  // ---- Named tunnel (Cloudflare login + named hostname) — Phase 5.2 ----
+  // Flow: (1) POST /named/login spawns `cloudflared tunnel login` which
+  // opens the user's browser; we poll ~/.cloudflared/cert.pem and resolve
+  // when it's written. (2) POST /named/configure takes {hostname, tunnelName?}
+  // and does `cloudflared tunnel create` + `cloudflared tunnel route dns`
+  // + writes a config.yml with ingress rule + starts `cloudflared tunnel run`.
+  if (p === '/api/setup/named/login' && req.method === 'POST') {
+    try {
+      const r = await cloudflared.login({ timeoutMs: 5 * 60_000 });
+      return json(res, 200, { ok: true, data: { certPath: r.certPath } }), true;
+    } catch (e) {
+      return json(res, 500, { ok: false, error: { code: 'LOGIN_FAIL', message: e.message } }), true;
+    }
+  }
+
+  if (p === '/api/setup/named/cert-status' && req.method === 'GET') {
+    const cp = path.join(os.homedir(), '.cloudflared', 'cert.pem');
+    const present = fs.existsSync(cp);
+    return json(res, 200, { ok: true, data: { present, path: present ? cp : null } }), true;
+  }
+
+  if (p === '/api/setup/named/configure' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const hostname = String(body.hostname || '').trim().toLowerCase();
+      if (!hostname || !hostname.includes('.')) {
+        return json(res, 400, { ok: false, error: { code: 'BAD_HOSTNAME', message: 'hostname non valido' } }), true;
       }
-    }), true;
+      const tunnelName = String(body.tunnelName || `gigi-${Date.now().toString(36)}`).trim();
+      const localPort = cfg?.server?.port || 7779;
+
+      // 1) create named tunnel
+      const created = await cloudflared.createNamedTunnel({ name: tunnelName });
+
+      // 2) route DNS CNAME hostname → <uuid>.cfargotunnel.com
+      await cloudflared.routeDns({ uuid: created.uuid, hostname });
+
+      // 3) write a local cloudflared config.yml with the ingress rule
+      const cfgYml = path.join(os.homedir(), '.gigi', `cloudflared-${created.uuid}.yml`);
+      const credFile = path.join(os.homedir(), '.cloudflared', `${created.uuid}.json`);
+      fs.mkdirSync(path.dirname(cfgYml), { recursive: true });
+      fs.writeFileSync(cfgYml, [
+        `tunnel: ${created.uuid}`,
+        `credentials-file: ${credFile.replace(/\\/g, '/')}`,
+        `ingress:`,
+        `  - hostname: ${hostname}`,
+        `    service: http://localhost:${localPort}`,
+        `  - service: http_status:404`,
+        ``
+      ].join('\n'), 'utf8');
+
+      // 4) start cloudflared as named
+      await cloudflared.startNamed({ tunnelName: created.uuid, configPath: cfgYml, localPort });
+
+      // 5) persist
+      saveConfigMode(cfgPath, 'named', {
+        named: {
+          tunnel_uuid: created.uuid,
+          tunnel_name: tunnelName,
+          hostname,
+          cert_path:   path.join(os.homedir(), '.cloudflared', 'cert.pem'),
+          config_path: cfgYml
+        }
+      });
+
+      return json(res, 200, {
+        ok: true,
+        data: {
+          hostname,
+          tunnel: created,
+          publicUrl: `https://${hostname}`,
+          status: cloudflared.status()
+        }
+      }), true;
+    } catch (e) {
+      return json(res, 500, { ok: false, error: { code: 'NAMED_CONFIGURE_FAIL', message: e.message } }), true;
+    }
+  }
+
+  if (p === '/api/setup/named/stop' && req.method === 'POST') {
+    await cloudflared.stop();
+    return json(res, 200, { ok: true, data: cloudflared.status() }), true;
   }
 
   return json(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: p } }), true;
