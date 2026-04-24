@@ -46,7 +46,7 @@ export async function handleAgentRun(req, res, deps) {
         return { error: 'CANCELLED' };
       }
       try {
-        return await gigiServer.runClaude(cfg, text, deviceId, onEvent, onSpawn, null, { domain, schema });
+        return await gigiServer.runClaude(cfg, text, deviceId, onEvent, onSpawn, { domain, schema });
       } finally {
         untrackChild(deviceId);
       }

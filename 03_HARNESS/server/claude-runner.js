@@ -133,10 +133,15 @@ export function spawnClaude(cfg, args, onEvent, onSpawn) {
       ? args.map(a => a === 'json' ? 'stream-json' : a).concat(['--verbose'])
       : args;
 
+    // Strip ANTHROPIC_API_KEY from env — Claude CLI uses its own stored credentials.
+    // A placeholder value in .env would override the stored key and cause "Invalid API key".
+    const claudeEnv = { ...process.env };
+    delete claudeEnv.ANTHROPIC_API_KEY;
     const child = spawn(cfg.claude.bin || 'claude', streamArgs, {
       shell: false,
       windowsHide: true,
-      timeout: cfg.claude.timeout_ms || 600000
+      timeout: cfg.claude.timeout_ms || 600000,
+      env: claudeEnv
     });
     if (onSpawn) { try { onSpawn(child); } catch {} }
     let stdout = '', stderr = '';

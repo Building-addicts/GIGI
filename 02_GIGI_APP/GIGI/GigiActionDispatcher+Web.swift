@@ -96,26 +96,28 @@ extension GigiActionDispatcher {
 
     private func handleWebOrderFood(_ args: [String: Any]) async -> ToolResult {
         let restaurant = webStr(args, "restaurant")
-        let items      = webStr(args, "items", fallback: "food")
-        let platform   = webStr(args, "platform", fallback: "auto")
-
-        guard !restaurant.isEmpty else { return .failure("restaurant parameter required for web_order_food") }
-
-        // Require confirmation before placing a real order
-        let platformLabel = platform == "auto" ? "best available delivery app" : platform
-        let summary = "Order \(items.isEmpty ? "food" : items) from \(restaurant) via \(platformLabel). Confirm?"
-        return .confirm(ConfirmRequest(type: .payment, summary: summary, action: "web_order_food", args: args))
+        let platform   = webStr(args, "platform")
+        let items      = webStr(args, "items")
+        // Accept if restaurant provided, or if platform/items given (LLM may omit restaurant for "order pizza from Just Eat")
+        guard !restaurant.isEmpty || !platform.isEmpty || !items.isEmpty else {
+            return .failure("web_order_food: provide restaurant name, platform, or items to order")
+        }
+        return await executeWebOrderFood(args)
     }
 
-    /// Called after user confirms web_order_food.
     func executeWebOrderFood(_ args: [String: Any]) async -> ToolResult {
         let restaurant = webStr(args, "restaurant")
         let items      = webStr(args, "items", fallback: "food")
-        let platform   = webStr(args, "platform", fallback: "auto")
+        let platform   = normalizedDeliveryPlatform(webStr(args, "platform", fallback: "auto"))
 
         // Prefer harness (Mac Chrome) — handles login, captchas, payment flows
         if GigiHarnessClient.shared.isConfigured {
-            let task = "Order \(items.isEmpty ? "food" : items) from \(restaurant) on \(platform == "auto" ? "the best available delivery platform (Just Eat, Deliveroo, Uber Eats, Glovo)" : platform). Complete the full checkout including delivery address and payment."
+            let platformLabel = platform == "auto" ? "the best available delivery platform (Just Eat, Deliveroo, Uber Eats, Glovo)" : platform
+            let itemLabel = items.isEmpty ? "food" : items
+            let source = restaurant.isEmpty
+                ? "using \(platformLabel)"
+                : "from \(restaurant) using \(platformLabel)"
+            let task = "Order \(itemLabel) \(source). Complete the checkout flow only up to the final payment/order confirmation step, then stop and ask Leonardo for confirmation before placing or paying for the order."
             switch await GigiHarnessClient.shared.agentRun(text: task, domain: "browser") {
             case .success(let r): return .success(r.result, tokenEstimate: 60)
             case .failure: break  // fall through to on-device
@@ -189,5 +191,26 @@ extension GigiActionDispatcher {
 
     private func webStr(_ args: [String: Any], _ key: String, fallback: String = "") -> String {
         (args[key] as? String) ?? fallback
+    }
+
+    private func normalizedDeliveryPlatform(_ raw: String) -> String {
+        let compact = raw
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch compact {
+        case "just eat", "justeat", "just hit":
+            return "justeat"
+        case "uber eats", "ubereats":
+            return "ubereats"
+        case "door dash", "doordash":
+            return "doordash"
+        case "deliveroo", "glovo":
+            return compact
+        default:
+            return compact.isEmpty ? "auto" : compact
+        }
     }
 }

@@ -990,20 +990,20 @@ struct WebBookRestaurantTool: GigiTool {
 
 struct WebOrderFoodTool: GigiTool {
     let name = "web_order_food"
-    let requiresConfirmation = true
-    let tags = ["order", "food", "delivery", "pizza", "deliveroo", "ubereats", "doordash", "glovo", "cibo", "ordina", "consegna"]
+    let requiresConfirmation = false
+    let tags = ["order", "food", "delivery", "pizza", "deliveroo", "ubereats", "doordash", "glovo", "justeat", "just eat", "just-eat", "just hit", "cibo", "ordina", "ordinami", "consegna"]
 
     let declaration = FunctionDeclaration(
         name: "web_order_food",
-        description: "Order food via a delivery platform. ALWAYS requires payment confirmation before placing the order.",
+        description: "Order food via a delivery platform. Delegates to Mac harness for browser automation.",
         parameters: JSONSchema(
             type: "object",
             properties: [
-                "restaurant": JSONSchemaProperty(type: "string", description: "Restaurant or cuisine type", enumValues: nil),
+                "restaurant": JSONSchemaProperty(type: "string", description: "Restaurant name or cuisine type (e.g. 'Pizzeria Napoli', 'sushi'). Do NOT put the platform name here.", enumValues: nil),
                 "items":      JSONSchemaProperty(type: "string", description: "Items to order (optional)", enumValues: nil),
                 "platform":   JSONSchemaProperty(type: "string", description: "Delivery platform", enumValues: ["deliveroo", "ubereats", "doordash", "glovo", "justeat", "auto"])
             ],
-            required: ["restaurant"]
+            required: []
         )
     )
 
@@ -1137,7 +1137,7 @@ struct AskHarnessTool: GigiTool {
         guard GigiHarnessClient.shared.isConfigured else {
             return .failure("Harness backend not set up. Go to Settings → Harness Backend and scan the QR code from your Mac.")
         }
-        switch await GigiHarnessClient.shared.agentRun(text: task) {
+        switch await GigiHarnessClient.shared.agentRun(text: task, domain: "browser") {
         case .success(let r): return .success(r.result, tokenEstimate: 50)
         case .failure(let e): return .failure("Harness error: \(e.description)")
         }
