@@ -7,6 +7,7 @@ struct MainTabView: View {
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "gigi.onboarding.complete")
     @State private var selection: Int = 0
     @State private var showPairingSheet = false
+    @State private var showChecklist = false
     @State private var harnessConfigured = GigiHarnessClient.shared.isConfigured
 
     var body: some View {
@@ -72,6 +73,10 @@ struct MainTabView: View {
                 harnessConfigured = GigiHarnessClient.shared.isConfigured
             }
         }
+        .sheet(isPresented: $showChecklist) {
+            SetupChecklistView()
+                .onDisappear { harnessConfigured = GigiHarnessClient.shared.isConfigured }
+        }
         .onAppear { harnessConfigured = GigiHarnessClient.shared.isConfigured }
     }
 
@@ -100,6 +105,6 @@ struct MainTabView: View {
         .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
         .padding(.horizontal, 14)
         .padding(.top, 56)
-        .onTapGesture { showPairingSheet = true }
+        .onTapGesture { showChecklist = true }
     }
 }
