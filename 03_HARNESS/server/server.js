@@ -32,6 +32,7 @@ import { startRpc } from './bridge-rpc.js';
 import { handleIosRequest } from './api/ios-router.js';
 import { handlePair } from './api/pair.js';
 import { handleSetup } from './api/setup.js';
+import { handleDiagnostics } from './api/diagnostics.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
 
 // ─────────────────────────────────────────────────────────────
@@ -175,6 +176,11 @@ async function main() {
       // run before the iOS router, because it intentionally skips the
       // Bearer check (the QR itself hands out the Bearer).
       if (await handlePair(req, res, { cfg })) return;
+      // /api/setup/diagnostics — Bearer-authed (same secret as iOS API).
+      // MUST run before handleSetup, since handleSetup also matches
+      // /api/setup/* but enforces loopback-only — the iPhone is NOT
+      // on loopback when calling diagnostics.
+      if (await handleDiagnostics(req, res, { cfg, gigiServer })) return;
       // /api/setup/* — wizard endpoints, also loopback-only + bearer-free.
       if (await handleSetup(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
       const handled = await handleIosRequest(req, res, { cfg, gigiServer });
