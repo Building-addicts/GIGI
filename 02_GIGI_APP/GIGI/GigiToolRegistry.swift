@@ -1074,15 +1074,14 @@ struct WebVisionTaskTool: GigiTool {
 struct ComputerUseTool: GigiTool {
     let name = "computer_use"
     let requiresConfirmation = true
-    let tags: [String] = []  // Never auto-selected by meta-classifier — only Gemini can invoke it explicitly
+    let tags: [String] = []  // Never auto-selected by meta-classifier — only harness can invoke it explicitly
 
     let declaration = FunctionDeclaration(
         name: "computer_use",
         description: """
-        LAST RESORT ONLY. Use this tool ONLY if web_whatsapp, web_book_restaurant, and web_order_food \
-        are not applicable or have already failed. This tool uses a backend Claude agent with a real \
-        browser. It costs ~$0.20 per execution and takes 20–40 seconds. Never use it for tasks that \
-        native iOS tools can handle (calls, messages, timers, HomeKit, calendar).
+        LAST RESORT ONLY. Use this tool ONLY if ask_harness is unavailable or has already failed. \
+        This tool uses a backend Claude agent with a real browser. It costs ~$0.20 per execution and \
+        takes 20–40 seconds. Never use it for tasks that native iOS tools can handle.
         """,
         parameters: JSONSchema(
             type: "object",
@@ -1093,6 +1092,50 @@ struct ComputerUseTool: GigiTool {
 
     func execute(args: [String: Any]) async -> ToolResult {
         await bridge("computer_use", params: ["task": str(args, "task")])
+    }
+}
+
+struct AskHarnessTool: GigiTool {
+    let name = "ask_harness"
+    let requiresConfirmation = false
+    let tags = [
+        "research", "find online", "flight", "hotel", "ticket", "prenotazione", "volo",
+        "cerca online", "compra", "acquista", "ordina online", "complex task",
+        "summarize", "riassumi", "analizza", "analyze", "report", "compare",
+        "book", "prenota", "schedule meeting", "agenda", "mac", "computer"
+    ]
+
+    let declaration = FunctionDeclaration(
+        name: "ask_harness",
+        description: """
+        Delegate a complex or multi-step task to the Mac harness backend (Claude Opus + real Chrome \
+        browser). Use for: deep web research, flight/hotel search, multi-site automation, reading \
+        live web pages, file operations, or any task beyond native iOS capabilities. \
+        Provide a complete, detailed task description including all context and desired output format.
+        """,
+        parameters: JSONSchema(
+            type: "object",
+            properties: [
+                "task": JSONSchemaProperty(
+                    type: "string",
+                    description: "Complete task description with all context, data needed, and desired output format",
+                    enumValues: nil
+                )
+            ],
+            required: ["task"]
+        )
+    )
+
+    func execute(args: [String: Any]) async -> ToolResult {
+        let task = str(args, "task")
+        guard !task.isEmpty else { return .failure("ask_harness: task description required") }
+        guard GigiHarnessClient.shared.isConfigured else {
+            return .failure("Harness backend not set up. Go to Settings → Harness Backend and scan the QR code from your Mac.")
+        }
+        switch await GigiHarnessClient.shared.agentRun(text: task) {
+        case .success(let r): return .success(r.result, tokenEstimate: 50)
+        case .failure(let e): return .failure("Harness error: \(e.description)")
+        }
     }
 }
 
@@ -1115,7 +1158,8 @@ final class GigiToolRegistry {
         HomekitTempTool(), HomekitSceneTool(),
         RememberTool(), RecallTool(), SearchGroupsTool(),
         WebWhatsAppTool(), WebBookRestaurantTool(), WebOrderFoodTool(),
-        WebSearchAndReadTool(), WebVisionTaskTool(), ComputerUseTool()
+        WebSearchAndReadTool(), WebVisionTaskTool(), ComputerUseTool(),
+        AskHarnessTool()
     ]
 
     // Always included regardless of text (high frequency, low cost)
@@ -1150,7 +1194,7 @@ final class GigiToolRegistry {
         }
 
         scored.sort { $0.score > $1.score }
-        return Array(scored.prefix(10).map(\.tool))
+        return Array(scored.prefix(12).map(\.tool))
     }
 
     /// Lookup by name for execution in AgentEngine.
