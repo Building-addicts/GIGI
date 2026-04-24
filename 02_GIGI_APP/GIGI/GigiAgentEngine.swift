@@ -29,8 +29,8 @@ final class GigiAgentEngine {
 
     // MARK: - Config
 
-    private let maxIterations  = 5
-    private let globalTimeout: TimeInterval = 15.0
+    private let maxIterations  = 8
+    private let globalTimeout: TimeInterval = 90.0
     // Groq llama-3.3-70b pricing (USD): ~$0.059/1M input tokens, ~$0.079/1M output tokens.
     // We use a blended rate for the simplified estimate.
     private let costPerToken = 0.00000015
@@ -137,15 +137,15 @@ final class GigiAgentEngine {
                 switch error {
                 case GigiCloudError.httpError(let status, let body):
                     let snippet = body.prefix(160)
-                    speech = "Errore Groq \(status). \(snippet)"
+                    speech = "Groq error \(status). \(snippet)"
                 case GigiCloudError.missingAPIKey:
-                    speech = "Manca la chiave Groq nelle impostazioni."
+                    speech = "Groq API key missing — add it in Settings."
                 case GigiCloudError.timeout:
-                    speech = "Timeout Groq — riprova."
+                    speech = "Groq timed out — try again."
                 case GigiCloudError.emptyResponse:
-                    speech = "Groq risposta vuota."
+                    speech = "Groq returned an empty response."
                 default:
-                    speech = "Errore di rete: \(error.localizedDescription)"
+                    speech = "Network error: \(error.localizedDescription)"
                 }
                 return AgentResult(
                     speech:          speech,
@@ -275,7 +275,7 @@ final class GigiAgentEngine {
         guard let request = pendingConfirmRequest,
               let tool    = pendingConfirmTool else {
             return AgentResult(
-                speech:          "Nessuna operazione in attesa di conferma.",
+                speech:          "Nothing pending confirmation.",
                 executedTools:   [],
                 isFollowUp:      false,
                 costEstimate:    0,
@@ -291,7 +291,7 @@ final class GigiAgentEngine {
         pendingConfirmArgs    = [:]
 
         let result = await tool.execute(args: argsSnapshot)
-        let speech = result.error.map { "Non sono riuscito: \($0)" } ?? result.value
+        let speech = result.error.map { "Couldn't complete that: \($0)" } ?? result.value
 
         // Save to memory before returning (addModelSpeech internally calls saveSession)
         GigiConversationMemory.shared.addModelSpeech(speech)
@@ -324,7 +324,7 @@ final class GigiAgentEngine {
 
     private func safetyLock(tools: [String], cost: Double) -> AgentResult {
         AgentResult(
-            speech:          "Sto avendo difficoltà con questo compito — vuoi che provi in un altro modo?",
+            speech:          "I ran into trouble with that — want me to try a different approach?",
             executedTools:   tools,
             isFollowUp:      false,
             costEstimate:    cost,
