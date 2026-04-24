@@ -325,6 +325,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - Phase 4 is orthogonal to Phase 1 & 2. It can be implemented in parallel — no shared files except `SettingsView.swift` (modified by both P2.2 and P4.6, but in different sections). Resolve any merge conflict by hand.
 
 ### U0 — User installs Tailscale (prerequisite, no code)
+- **Status**: PENDING USER — required before P4.9 can run
 - **Owner**: Armando
 - **Steps**:
   1. PC: download Tailscale from https://tailscale.com/download, install, login (Google/GitHub/Microsoft account)
@@ -336,6 +337,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Gate**: without this, P4.9 test cannot pass
 
 ### P4.1 — Add `qrcode` dep + `/api/pair` endpoint
+- **Status**: COMPLETED · commit `ca8a599` · curl verified HTTP 200 + SVG QR
 - **Agent**: backend-dev
 - **Depends on**: none
 - **Target files**:
@@ -358,6 +360,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 1h
 
 ### P4.2 — Panel page `/pair` with QR render
+- **Status**: COMPLETED · commit `ca8a599` · `localhost:7777/pair` renders QR + instructions
 - **Agent**: frontend-dev (web, not iOS)
 - **Depends on**: P4.1
 - **Target files**:
@@ -380,6 +383,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 45min
 
 ### P4.3 — iOS Info.plist camera permission
+- **Status**: COMPLETED · commit `ca8a599` · `NSCameraUsageDescription` added
 - **Agent**: frontend-dev
 - **Depends on**: none (independent of backend)
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\Info.plist`
@@ -391,6 +395,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 15min
 
 ### P4.4 — `GigiPairScanner.swift` (VisionKit wrapper)
+- **Status**: COMPLETED · commit `ca8a599` · BUILD SUCCEEDED · DataScannerViewController wrapper with permission flow
 - **Agent**: frontend-dev
 - **Depends on**: P4.3
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiPairScanner.swift`
@@ -407,6 +412,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 1.5h
 
 ### P4.5 — `GigiPairingSheet.swift` (validation + Keychain save)
+- **Status**: COMPLETED · commit `ca8a599` · BUILD SUCCEEDED · state machine scanning→validating→success/failure with health check and rollback
 - **Agent**: frontend-dev
 - **Depends on**: P4.4
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiPairingSheet.swift`
@@ -426,6 +432,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 1.5h
 
 ### P4.6 — `SettingsView` integration: "Pair con Harness" button
+- **Status**: COMPLETED · commit `ca8a599` · BUILD SUCCEEDED · primary Pair button + status line + "Rimuovi pairing" + manual config under DisclosureGroup
 - **Agent**: frontend-dev
 - **Depends on**: P4.5
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
@@ -445,6 +452,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 1h
 
 ### P4.7 — Onboarding banner on first launch
+- **Status**: COMPLETED · commit `ca8a599` · BUILD SUCCEEDED · purple "Collega GIGI al tuo PC" overlay in MainTabView; tap opens pairing sheet
 - **Agent**: frontend-dev
 - **Depends on**: P4.5
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\MainTabView.swift` (or `GIGIApp.swift`)
@@ -466,6 +474,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 45min
 
 ### P4.8 — Connection-loss hint in bridge error
+- **Status**: COMPLETED · commit `ca8a599` · BUILD SUCCEEDED · Tailscale 100.* hint appended on transport error; 401 maps to "Secret non più valido. Ri-pair dal Panel."
 - **Agent**: backend-dev (iOS)
 - **Depends on**: P4.6 (needs new Keychain value shape) but independently verifiable
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiClaudeBridge.swift`
@@ -481,6 +490,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 - **Estimate**: 30min
 
 ### P4.9 — Phase 4 Test Gate (manual E2E from outside home network)
+- **Status**: READY — waiting for user test + Tailscale install (U0). Code is frozen at commit `ca8a599`; `.ipa` available at `C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa` (1.2 MB).
 - **Agent**: qa-tester + USER CHECKPOINT
 - **Depends on**: U0, P4.1 through P4.8
 - **Environment**: harness running on PC, Tailscale up on PC + iPhone
@@ -498,6 +508,194 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 
 ---
 
+## Phase 5 — Cloudflare Tunnel integration (primary transport)
+
+_Source plan: `docs/plans/cloudflare-tunnel-pairing.md` · Research: `docs/research/pairing-landscape-2026.md`_
+_Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goal: zero-app-install UX, works from any network via Cloudflare edge, stable URL persistent pairing._
+
+**Rationale**: il deep-dive research di 2026-04-24 ha mostrato che Iroh FFI è archiviato e Tailscale richiede all'utente di installare una VPN separata. Cloudflare Tunnel rimuove quell'attrito (zero app iPhone, stable URL, free forever), al costo di un possesso dominio da parte dell'utente (~€3-10/anno) per modalità persistente. Supporta anche Quick Tunnel (zero dominio, URL effimero — dev mode) e LAN mDNS (zero config — home mode).
+
+**Relazione con Phase 4**: il codice Phase 4 (GigiPairScanner, GigiPairingSheet, pair QR flow) è tutto riutilizzato. Cambia solo: (a) backend genera URL Cloudflare invece di URL Tailscale, (b) wizard onboarding aggiunto nel Panel, (c) modalità multiple supportate via `tunnel.mode` in config. Phase 4 Tailscale flow diventa "modalità D Advanced" dentro questo Phase 5.
+
+### P5.1 — Bundle `cloudflared` binary + auto-download
+- **Agent**: devops
+- **Depends on**: none (independent of P4.9 user test)
+- **Target files**:
+  - NEW `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\tunnel\install-cloudflared.js`
+- **Changes**:
+  - Node script che al primo avvio detect OS+arch (win32-x64, darwin-arm64, linux-x64, ecc.)
+  - Download release appropriata da `https://github.com/cloudflare/cloudflared/releases/latest`
+  - Verify SHA256 checksum contro release-manifest Cloudflare
+  - Install in `~/.gigi/bin/cloudflared` (platform-specific home dir)
+  - Fallback se la rete è rotta: messaggio chiaro + istruzione manuale
+- **Acceptance criteria**:
+  - [ ] `node install-cloudflared.js` scarica binary funzionante su Win/Mac/Linux
+  - [ ] Checksum verified
+  - [ ] `./cloudflared --version` ritorna versione pinnata
+- **Estimate**: 45min
+
+### P5.2 — Cloudflared process manager
+- **Agent**: backend-dev
+- **Depends on**: P5.1
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\tunnel\cloudflared-manager.js`
+- **Changes**:
+  - Class `CloudflaredManager` con API: `startNamed(uuid)`, `startQuick()`, `stop()`, `getStatus()`, `isRunning()`
+  - Spawn child process, cattura stdout/stderr (per detect quick tunnel URL da log output)
+  - Auto-restart on crash (max 3 retries, poi emit error event)
+  - Writer su `~/.gigi/tunnel-current-url.txt` quando URL cambia
+- **Acceptance criteria**:
+  - [ ] `startQuick()` → `getStatus()` ritorna URL trycloudflare.com entro 15s
+  - [ ] `stop()` termina il processo cleanly
+  - [ ] Kill-9 del processo figlio → manager rileva, auto-restart
+- **Estimate**: 2h
+
+### P5.3 — Cloudflare API client
+- **Agent**: backend-dev
+- **Depends on**: none (standalone)
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\tunnel\cf-api.js`
+- **Changes**:
+  - Wrapper minimo per endpoint CF API v4 necessari:
+    - `GET /user/tokens/verify` (valida cert)
+    - `GET /accounts` (lista account)
+    - `GET /zones?name=<domain>` (lookup zone)
+    - `POST /accounts/{id}/cfd_tunnel` (crea tunnel)
+    - `POST /zones/{id}/dns_records` (DNS CNAME)
+  - Usa cert OAuth salvato (`~/.gigi/cloudflare-cert.json`)
+  - Retry esponenziale su 5xx, niente retry su 4xx
+- **Acceptance criteria**:
+  - [ ] Creazione tunnel end-to-end con account reale funziona
+  - [ ] Errore "dominio non in zona" detecta correttamente
+- **Estimate**: 1.5h
+
+### P5.4 — Setup wizard API endpoints
+- **Agent**: backend-dev
+- **Depends on**: P5.2, P5.3
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\setup.js`
+- **Changes**: endpoint documentati in plan doc AC-1, AC-3, AC-4, AC-5
+- **Acceptance criteria**:
+  - [ ] `GET /api/setup/status` ritorna stato corretto in ogni modalità
+  - [ ] OAuth flow Cloudflare completa e salva cert
+  - [ ] `POST /api/setup/named/configure` crea tunnel+DNS+avvia cloudflared
+- **Estimate**: 2h
+
+### P5.5 — Setup wizard HTML page
+- **Agent**: frontend-dev (web)
+- **Depends on**: P5.4
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\setup.html`
+- **Changes**: UI con 4 card modalità (A/B/C/D), stepper 5 step per modalità A, progress + error states
+- **Acceptance criteria**:
+  - [ ] Stepper navigabile avanti/indietro
+  - [ ] Stato persistito in sessionStorage (resume after browser close)
+  - [ ] Error UI chiari per ogni fallimento possibile
+- **Estimate**: 2h
+
+### P5.6 — mDNS advertise (LAN mode)
+- **Agent**: backend-dev
+- **Depends on**: none
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\server.js` (modifica) + new `tunnel/mdns.js`
+- **Changes**:
+  - `npm install bonjour-service`
+  - Avvia advertise `_gigi._tcp.local` quando `tunnel.mode === "lan"`
+  - TXT record con `{deviceName, port, version}`
+- **Acceptance criteria**:
+  - [ ] `dns-sd -B _gigi._tcp` (macOS) o equivalente vede il servizio
+  - [ ] Deregister on SIGTERM
+- **Estimate**: 45min
+
+### P5.7 — iOS mDNS discovery
+- **Agent**: frontend-dev
+- **Depends on**: P5.6
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiMDNSDiscovery.swift`
+- **Changes**:
+  - `NWBrowser` per `_gigi._tcp`
+  - Callback con lista device trovati
+  - Integration con `GigiPairingSheet`: se QR contiene `mode=lan`, avvia discovery invece di usare URL fisso
+  - Info.plist: aggiungi `NSBonjourServices = ["_gigi._tcp"]`
+- **Acceptance criteria**:
+  - [ ] Su stessa Wi-Fi iPhone trova harness entro 10s
+  - [ ] Timeout con messaggio "harness non trovato sulla LAN"
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1.5h
+
+### P5.8 — WebSocket heartbeat ping/pong
+- **Agent**: backend-dev (parallel server + iOS)
+- **Depends on**: none
+- **Target files**:
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\ios-stream.js`
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiHarnessClient.swift` (GigiHarnessStream)
+- **Changes**:
+  - Server: risponde pong a ping client; cleanup inactivity >120s
+  - iOS: `URLSessionWebSocketTask.sendPing` ogni 60s; 2 miss → reconnect
+- **Acceptance criteria**:
+  - [ ] Cloudflare Tunnel tiene connessione > 5 minuti senza drop
+  - [ ] Su drop, reconnect automatico < 3s
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1h
+
+### P5.9 — Config schema extension
+- **Agent**: backend-dev
+- **Depends on**: P5.2, P5.4
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\config.json` + loader
+- **Changes**: aggiungi sezione `tunnel` con `mode`, `cloudflared_binary`, `named.{tunnel_uuid, hostname, cert_path}`, `quick.{last_url}`
+- **Acceptance criteria**:
+  - [ ] Backward compatible: config esistenti senza `tunnel` default a `mode: "manual"` (flow Phase 4)
+  - [ ] Cambio mode via API reflektato su disco
+- **Estimate**: 30min
+
+### P5.10 — Service installer (Windows/macOS/Linux)
+- **Agent**: devops
+- **Depends on**: P5.2
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\tunnel\service-installer.js`
+- **Changes**:
+  - Windows: NSSM wrapper per registrare cloudflared come servizio
+  - macOS: genera `~/Library/LaunchAgents/com.gigi.cloudflared.plist`
+  - Linux: genera `~/.config/systemd/user/gigi-tunnel.service`
+  - API `install()`, `uninstall()`, `status()`
+- **Acceptance criteria**:
+  - [ ] Dopo install e reboot PC: tunnel parte automaticamente
+  - [ ] Uninstall pulisce artifacts
+- **Estimate**: 2h
+
+### P5.11 — Migration banner in iOS app
+- **Agent**: frontend-dev
+- **Depends on**: P5.5 working E2E
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
+- **Changes**:
+  - Se `GigiKeychain.load(.harnessBaseURL)` comincia con `http://100.` (Tailscale): mostra banner informativo "Vuoi provare Cloudflare Tunnel? Reachability migliore e zero app extra"
+  - Link opens pairing sheet che guida a setup CF
+- **Acceptance criteria**:
+  - [ ] Banner appare solo per utenti Tailscale esistenti
+  - [ ] Dismiss persistente (UserDefaults `gigi.migration.cf.dismissed`)
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 30min
+
+### P5.12 — Docs: "Getting started guide"
+- **Agent**: documenter
+- **Depends on**: P5.5 funzionante
+- **Target files** (NEW):
+  - `docs/guides/cloudflare-tunnel-setup.md`
+  - `docs/guides/getting-a-domain.md`
+  - `docs/guides/cloudflare-tunnel-troubleshooting.md`
+- **Changes**: step-by-step con screenshot per utente target "tech-literate ma non dev"
+- **Estimate**: 1.5h
+
+### P5.13 — Phase 5 Test Gate (manual E2E)
+- **Agent**: qa-tester + USER CHECKPOINT
+- **Depends on**: P5.1 through P5.12
+- **Environment**: harness fresh install su Windows + dominio CF attivo + iPhone con app GIGI
+- **Test matrix** (estratto da plan §Verification Steps):
+  - [ ] Modalità A end-to-end con dominio nuovo
+  - [ ] Modalità B Quick Tunnel (dev mode)
+  - [ ] Modalità C LAN mDNS
+  - [ ] Switch tra modalità runtime
+  - [ ] Reboot PC → autostart tutto
+  - [ ] Test da 3 reti diverse (casa / 4G / hotspot)
+  - [ ] Migration banner da config Tailscale funziona
+- **Gate outcome**: PASS → Phase 5 complete, Phase 4 diventa "advanced option"
+- **Estimate**: 2h
+
+---
+
 ## Test Gates
 
 | Gate | Agent | Blocks | Criteria |
@@ -505,6 +703,7 @@ _Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal:
 | **P1.10** — Phase 1 E2E | qa-tester | Phase 2 start | All 6 scenarios pass in source plan §Verification Steps |
 | **P2.4** — Phase 2 E2E | qa-tester | Phase 3 (if un-deferred) | Force Claude toggle behaves per AC-3 |
 | **P4.9** — Phase 4 E2E from outside home network | qa-tester + USER | Phase 4 completion | Cross-network reachability + QR flow work; ≥ 7/7 scenarios PASS |
+| **P5.13** — Phase 5 E2E Cloudflare Tunnel multi-mode | qa-tester + USER | Phase 5 completion | All 4 modes (named/quick/lan/manual) working + cross-network + auto-start |
 
 ---
 
@@ -527,15 +726,37 @@ No cross-phase parallelism between P1 and P2: P2.x must wait for P1.10 gate.
 
 ## Next Action
 
-**TASK P1.4 — Wire `GigiClaudeBridge.run` to streaming harness + memory** (IN PROGRESS)
-- **Agent**: backend-dev
-- **Status**: started 2026-04-24 by orchestrator, in the same turn as the P1.1/P1.2/P1.3 completion report
-- **Why now**: P1.2 (UI) and P1.3 (bridge skeleton) are both code-complete and compile. The last missing piece to unlock full end-to-end testing of the escalation path is the real WebSocket wire-up. Cannot be validated E2E until the harness is running on the PC.
+**State snapshot (2026-04-24 post-`ca8a599`)**:
+- Phase 1 code: P1.1–P1.3 DONE, P1.4 IN PROGRESS, P1.5–P1.9 PENDING, P1.10 test gate blocked on physical device.
+- Phase 2: not started (depends on P1.10).
+- Phase 4 code: P4.1–P4.8 ALL COMPLETED in commit `ca8a599`. BUILD SUCCEEDED. `.ipa` at `C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa`.
+- Phase 4 test: P4.9 READY, waiting for U0 (Tailscale install by user) + physical device test.
 
-**Queued Next (unblocked once P1.4 lands)**
-**TASK P1.5 — Register `AskClaudeTool` in `GigiToolRegistry`**
-- **Agent**: backend-dev
-- **Why next**: once the bridge actually streams, we need Groq to be able to call it. P1.5 is the declaration + registry wiring. 30 min scope. Can run in parallel with P1.7 (prompt update) once P1.4 is green.
+**Recommended next step — OPTION (b): start Phase 2 now (Force Claude toggle)**
+
+Rationale:
+- Phase 2 is orthogonal to Phase 4: different code surfaces (SettingsView has a mergeable overlap, resolvable by hand). Phase 2 is a short 1–2h phase; finishing it now keeps the code lane productive while Armando installs Tailscale and tests Phase 4 on device.
+- Phase 2 depends on P1.10 (Phase 1 E2E gate). P1.10 is currently blocked on physical device, same as P4.9. So strictly by the plan, Phase 2 is GATED on P1.10. If Armando wants to keep momentum without waiting, we should FIRST unblock P1.10 by finishing P1.4 → P1.9, THEN run P1.10 + P4.9 together on-device (option (a)).
+- Pure-code progress right now: focus on **P1.4 completion** and **P1.5 + P1.7 in parallel** immediately after. That is the cleanest path to having both Phase 1 and Phase 4 ready for the same on-device test session.
+
+**Concrete recommendation — HYBRID of (a) and (c)**:
+1. **Continue P1.4 now** (backend-dev is already mid-flight) — unblocks P1.5/P1.7/P1.9.
+2. **Run P1.5 ∥ P1.7 in parallel** as soon as P1.4 lands (already flagged as parallel-safe in the Parallel Opportunities section).
+3. **Queue P1.6, P1.8, P1.9** sequentially after P1.5.
+4. **When P1.1–P1.9 are all green**, ask Armando to:
+   - Install Tailscale on PC + iPhone (U0, 10 min).
+   - Sideload `GIGI.ipa` to device.
+   - Run P1.10 (Phase 1 E2E) **and** P4.9 (Phase 4 E2E) in a single on-device session, since both need the same environment (paired device + reachable harness).
+5. Only after BOTH gates pass, start **Phase 2 (P2.1 → P2.4)**.
+
+**If Armando prefers option (b) — start Phase 2 immediately**:
+- Technically possible by relaxing the P1.10 dependency (Phase 2 Keychain + Settings toggle code is independent of the Claude bridge's streaming correctness). Acceptable trade-off: Phase 2 is validated at P2.4 regardless of whether P1.10 is green; any Phase 1 bug surfaced later won't invalidate Phase 2 code.
+- Risk: small — Phase 2 reuses `GigiClaudeBridge.shared.run(...)` which is only end-to-end verified in P1.10. If P1.10 fails and requires signature changes to `run(...)`, Phase 2 would need a follow-up touch-up.
+- Payoff: +1–2h of code done while waiting for Armando to install Tailscale + sideload.
+
+**Waiting explicitly on user** (option (c)): only if Armando wants to pause all coding until P1.10 + P4.9 can be tested together. Not recommended unless the user signals fatigue — there is still pure-code work to do (P1.4 → P1.9).
+
+**My call**: proceed with **HYBRID (a)+(c)** — orchestrator should continue P1.4 now. Ask Armando whether he wants to batch-install Tailscale + sideload before or after P1.9 lands.
 
 ---
 
@@ -543,9 +764,9 @@ No cross-phase parallelism between P1 and P2: P2.x must wait for P1.10 gate.
 
 ### BLOCKED BY USER CHECKPOINT — P1.2 visual approval
 - **Scope**: the thought-UI aesthetic (italic grey bubble with 💭 prefix, tool-event bubble with gear icon) cannot be visually validated until a full Phase 1 `.ipa` is sideloaded to Armando's iPhone.
-- **Impact**: code is merged and builds clean (`a400500`, BUILD SUCCEEDED), but the USER CHECKPOINT box in P1.2 acceptance criteria stays unchecked.
-- **Mitigation**: P1.4 is proceeding in parallel because the bridge wire-up does not depend on the aesthetic sign-off. The full USER CHECKPOINT for P1.2 is deferred to the P1.10 Phase-1 E2E gate (where Armando will see the thoughts streaming live for the first time on device).
-- **Unblock condition**: Phase-1 `.ipa` produced + sideloaded OR Armando reviews a simulator screenshot out-of-band and approves.
+- **Status update (2026-04-24 post-`ca8a599`)**: Phase 4 `.ipa` is now available (`C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa`). However, it does NOT yet include the full Phase 1 escalation wiring (P1.4 still IN PROGRESS; P1.5–P1.9 PENDING). So sideloading this `.ipa` will only let Armando verify the Pairing flow (P4.x) and the static MessageBubble rendering (P1.2) in chat — but not the live streaming thoughts, because P1.4 is not finished yet.
+- **Mitigation**: the current `.ipa` is sufficient to sign off the static P1.2 aesthetic by sending any `.thinking` role message through a debug harness. Full live-streaming checkpoint still deferred to P1.10.
+- **Unblock condition (partial)**: Armando sideloads current `.ipa`, inspects MessageBubble rendering (even with a stubbed message). Full unblock at P1.10 E2E.
 
 ### BLOCKED BY INFRA — End-to-end test of the bridge
 - **Scope**: `GigiClaudeBridge.run` cannot be validated end-to-end until (a) P1.4 is complete AND (b) the harness is running locally on the PC at `192.168.1.67:7779` with the bearer secret configured on-device.
@@ -562,3 +783,14 @@ One-line entries per task transition, ISO-8601 timestamps (local date, no TZ nee
 - `2026-04-24` — P1.2 COMPLETED (code+build) · commit `a400500` · MessageBubble renders `.thinking` (italic grey + 💭) and `.toolEvent` (gear icon) · BUILD SUCCEEDED · USER CHECKPOINT deferred to P1.10 E2E
 - `2026-04-24` — P1.3 COMPLETED · commit `a400500` · `GigiClaudeBridge.swift` skeleton + `buildContextSnapshot()` (profile + 7-day calendar + 10 recent memories + optional location) · BUILD SUCCEEDED
 - `2026-04-24` — P1.4 IN PROGRESS · orchestrator started wire-up of `run(task:context:)` to `GigiHarnessStream` WebSocket + memory callbacks
+- `2026-04-24` — P4.1 COMPLETED · commit `ca8a599` · NEW `03_HARNESS/server/api/pair.js` + `qrcode` dep + route wired in `server.js`; loopback-only; Tailscale IP auto-detection via `os.networkInterfaces()`; `curl http://127.0.0.1:7779/api/pair` verified HTTP 200 JSON + SVG format
+- `2026-04-24` — P4.2 COMPLETED · commit `ca8a599` · NEW `03_HARNESS/server/public/pair.html` + route in `panel-routes.js`; `localhost:7777/pair` verified HTTP 200
+- `2026-04-24` — P4.3 COMPLETED · commit `ca8a599` · `NSCameraUsageDescription` added to `02_GIGI_APP/GIGI/Info.plist`
+- `2026-04-24` — P4.4 COMPLETED · commit `ca8a599` · NEW `GigiPairScanner.swift` (SwiftUI wrapper over VisionKit `DataScannerViewController`) with camera permission flow and denied/restricted fallback · BUILD SUCCEEDED
+- `2026-04-24` — P4.5 COMPLETED · commit `ca8a599` · NEW `GigiPairingSheet.swift` state machine (scanning → validating → success/failure); Keychain save + health check + rollback on fail · BUILD SUCCEEDED
+- `2026-04-24` — P4.6 COMPLETED · commit `ca8a599` · `SettingsView.harnessSection` rewritten: primary "Pair con Harness" button + status line + "Rimuovi pairing"; manual config retained under DisclosureGroup "Configurazione manuale (avanzata)" · BUILD SUCCEEDED
+- `2026-04-24` — P4.7 COMPLETED · commit `ca8a599` · `MainTabView` overlays purple "Collega GIGI al tuo PC" banner when `!GigiHarnessClient.shared.isConfigured`; tap opens pairing sheet · BUILD SUCCEEDED
+- `2026-04-24` — P4.8 COMPLETED · commit `ca8a599` · `GigiClaudeBridge.userFacingError` appends "Controlla Tailscale attivo su PC e iPhone" when saved URL is `100.*` CGNAT; maps 401 → "Secret non più valido. Ri-pair dal Panel." · BUILD SUCCEEDED
+- `2026-04-24` — P4.9 READY · all Phase 4 code complete; waiting for U0 (Tailscale install by user) + physical device test. `.ipa` built at `C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa` (1.2 MB)
+- `2026-04-24` — U0 PENDING USER · Tailscale install on PC + iPhone (10 min user action) required before P4.9 can run
+- `2026-04-24` — Phase 4 CODE COMPLETE · commit `ca8a599` · BUILD SUCCEEDED · only P4.9 test gate + U0 user action remain
