@@ -7,3 +7,7 @@
 
 # Gemini / segreti locali (iOS)
 02_GIGI_APP/Config.xcconfig
+
+# Contesto dev privato (host MacInCloud, workflow SSH) — non committare
+/CLAUDE.md
+bug/
