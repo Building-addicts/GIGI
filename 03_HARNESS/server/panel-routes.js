@@ -283,6 +283,15 @@ export async function handleRequest(req, res, deps) {
     });
     return;
   }
+  // Setup wizard: serves public/setup.html, uses /api/setup/* backend on 7779
+  if (p === '/setup') {
+    fs.readFile(path.join(PUBLIC_DIR, 'setup.html'), (err, data) => {
+      if (err) { res.writeHead(404); return res.end('setup.html missing'); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(data);
+    });
+    return;
+  }
 
   let filePath = p === '/' ? '/index.html' : p;
   filePath = path.join(PUBLIC_DIR, filePath);
