@@ -281,12 +281,11 @@ struct SetupDiagnosticView: View {
         Button {
             isFinalizing = true
             GigiHarnessClient.shared.cacheDiagnostics(report)
+            // The parent (GigiPairingSheet) is responsible for dismissing
+            // the sheet — we just notify it. When SetupDiagnosticView is
+            // presented standalone (e.g. from Settings to re-check), the
+            // parent receiver still calls dismiss() in its callback.
             onFinalize()
-            // Tiny beat for visual feedback before parent dismisses us.
-            Task {
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                await MainActor.run { dismiss() }
-            }
         } label: {
             HStack {
                 Spacer()

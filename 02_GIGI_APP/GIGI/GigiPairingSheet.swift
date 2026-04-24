@@ -19,6 +19,10 @@ struct GigiPairingSheet: View {
     enum Phase {
         case scanning
         case validating
+        // Stage 2 (Phase 6): bootstrap pair OK → run diagnostics before
+        // we tell the rest of the app the harness is "ready".
+        case diagnostic(deviceName: String)
+        // Stage 3: diagnostic OK + user tapped finalize.
         case success(deviceName: String)
         case failure(message: String)
     }
@@ -45,6 +49,15 @@ struct GigiPairingSheet: View {
                     Text("Connecting to your harness…")
                         .font(.footnote)
                         .foregroundColor(.white.opacity(0.8))
+                }
+
+            case .diagnostic(let device):
+                // Stage 2 — present the diagnostic view as a fullscreen
+                // child. Once the user taps Finalize, we transition to
+                // .success which dismisses our sheet entirely.
+                SetupDiagnosticView {
+                    phase = .success(deviceName: device)
+                    onPaired(device)
                 }
 
             case .success(let device):
@@ -134,18 +147,17 @@ struct GigiPairingSheet: View {
         GigiKeychain.save(trimmedSecret, forKey: GigiKeychain.Key.harnessSecret)
         _ = GigiHarnessClient.ensureDeviceId() // creates one if missing
 
-        // Verify reachability
+        // Verify reachability — this is the bootstrap pair (Stage 1).
+        // On success we DO NOT call onPaired yet; we transition to
+        // Stage 2 (.diagnostic) and let the user finalize after the
+        // diagnostic view confirms all critical checks are green.
         let health = await GigiHarnessClient.shared.health()
         switch health {
         case .success:
             let device = (decoded.deviceName?.trimmingCharacters(in: .whitespaces)).flatMap { $0.isEmpty ? nil : $0 } ?? "Harness"
             await MainActor.run {
-                phase = .success(deviceName: device)
-                onPaired(device)
+                phase = .diagnostic(deviceName: device)
             }
-            // Auto-dismiss after a short beat so the user sees the success state.
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
-            await MainActor.run { dismiss() }
 
         case .failure(let err):
             // Rollback on health failure so a bad pair doesn't leave stale keys.
