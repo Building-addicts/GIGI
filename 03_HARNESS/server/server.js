@@ -31,6 +31,7 @@ import * as watchers from './watchers.js';
 import { startRpc } from './bridge-rpc.js';
 import { handleIosRequest } from './api/ios-router.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
+import * as channelRouter from './api/channel-router.js';
 
 // ─────────────────────────────────────────────────────────────
 // Lock file: evita istanze duplicate
@@ -148,6 +149,8 @@ async function main() {
   log('config:', CONFIG_PATH);
   log('logs:', LOGS_DIR);
 
+  channelRouter.init(LOGS_DIR);
+
   try {
     watchers.start(cfg, log);
     log('watchers started');
@@ -170,7 +173,8 @@ async function main() {
   const iosHost = cfg.server?.host || '127.0.0.1';
   const iosServer = http.createServer(async (req, res) => {
     try {
-      const handled = await handleIosRequest(req, res, { cfg, gigiServer });
+      const handled = await handleIosRequest(req, res, { cfg, gigiServer })
+        || await channelRouter.handle(req, res, { cfg, gigiServer, log });
       if (!handled) {
         res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'endpoint sconosciuto' } }));

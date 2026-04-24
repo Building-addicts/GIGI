@@ -35,6 +35,23 @@
     "backend": "json",
     "upgrade_target": "lancedb"
   },
+  "groq": {
+    "api_key": "gsk_... (same key used for brain — enables Whisper STT)"
+  },
+  "openai": {
+    "api_key": "sk-... (optional — for OpenAI TTS voice replies)"
+  },
+  "telegram": {
+    "bot_token": "... (from BotFather — enables Telegram Voice channel)",
+    "_setup": "Register webhook: curl 'https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://YOUR_DOMAIN/api/channels/telegram'"
+  },
+  "whatsapp": {
+    "access_token": "... (Meta Business Cloud API access token)",
+    "phone_number_id": "...",
+    "verify_token": "... (any random string you set in Meta Dashboard)",
+    "app_secret": "... (Meta App Secret for webhook signature verification)",
+    "_setup": "Register webhook in Meta Developer Console → WhatsApp → Configuration → Webhook URL: https://YOUR_DOMAIN/api/channels/whatsapp"
+  },
   "browser": {
     "enabled": true,
     "chrome_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",

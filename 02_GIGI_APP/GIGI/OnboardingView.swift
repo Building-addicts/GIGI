@@ -540,13 +540,7 @@ struct OnboardingView: View {
         if (try? await cn.requestAccess(for: .contacts)) == true { contactsGranted = true }
         // Calendar
         let ek = EKEventStore()
-        if #available(iOS 17, *) {
-            _ = try? await ek.requestFullAccessToEvents()
-        } else {
-            _ = await withCheckedContinuation { cont in
-                ek.requestAccess(to: .event) { ok, _ in cont.resume(returning: ok) }
-            }
-        }
+        _ = try? await ek.requestFullAccessToEvents()
         calendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
         // Notifications
         let nc = UNUserNotificationCenter.current()

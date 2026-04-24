@@ -83,6 +83,48 @@ final class GigiLiveActivityController {
         lastPhase = .listening
     }
 
+    // MARK: - Presence Mode session activity
+
+    private var presenceActivity: Activity<GigiActivityAttributes>?
+
+    @MainActor
+    func startPresenceActivity(sessionId: String) async {
+        guard enabled else { return }
+        await endPresenceActivity()   // clean up any stale
+        let attrs = GigiActivityAttributes(sessionID: sessionId)
+        let state = GigiActivityAttributes.ContentState(
+            phase: .sleeping, message: "Ready", lastTranscript: nil, sessionId: sessionId
+        )
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(3600))
+        do {
+            presenceActivity = try Activity.request(attributes: attrs, content: content, pushType: nil)
+        } catch {
+            print("GIGI Live Activity: presence start failed — \(error)")
+        }
+    }
+
+    @MainActor
+    func updatePresence(state: GigiPhase, message: String, transcript: String? = nil) async {
+        guard enabled, let act = presenceActivity else { return }
+        let cs = GigiActivityAttributes.ContentState(
+            phase: state, message: message,
+            lastTranscript: transcript, sessionId: nil
+        )
+        let content = ActivityContent(state: cs, staleDate: Date().addingTimeInterval(3600))
+        await act.update(content)
+    }
+
+    @MainActor
+    func endPresenceActivity() async {
+        guard let act = presenceActivity else { return }
+        let cs = GigiActivityAttributes.ContentState(
+            phase: .done, message: "Session ended", lastTranscript: nil, sessionId: nil
+        )
+        let content = ActivityContent(state: cs, staleDate: nil)
+        await act.end(content, dismissalPolicy: .immediate)
+        presenceActivity = nil
+    }
+
     // MARK: - Live Activity snapshot
 
     /// Snapshot dell’activity corrente per aggiornamenti inline.

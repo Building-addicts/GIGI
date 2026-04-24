@@ -559,13 +559,7 @@ struct FindFreeSlotTool: GigiTool {
     }
 
     private func requestCalendarAccess(store: EKEventStore) async -> Bool {
-        if #available(iOS 17, *) {
-            return (try? await store.requestFullAccessToEvents()) ?? false
-        } else {
-            return await withCheckedContinuation { cont in
-                store.requestAccess(to: .event) { ok, _ in cont.resume(returning: ok) }
-            }
-        }
+        (try? await store.requestFullAccessToEvents()) ?? false
     }
 
     private func resolveDate(_ dateStr: String) -> (Date, Date) {

@@ -282,7 +282,7 @@ final class GigiMemory {
         guard iCloudAvailable else { return }
         let recordID = CKRecord.ID(recordName: normalizedKey)
         guard let db = db else { return }
-        try? await db.deleteRecord(withID: recordID)
+        _ = try? await db.deleteRecord(withID: recordID)
         print("GIGI Memory: forgot '\(normalizedKey)'")
     }
 
@@ -372,6 +372,6 @@ final class GigiMemory {
             useCountByKey[k] = next
         }
         guard let db = db else { return }
-        try? await db.save(record)
+        _ = try? await db.save(record)
     }
 }

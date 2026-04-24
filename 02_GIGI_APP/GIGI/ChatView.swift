@@ -2,11 +2,13 @@ import SwiftUI
 
 struct ChatView: View {
 
-    @StateObject private var gigi    = GigiSmartOrchestrator.shared
-    @StateObject private var memory  = GigiConversationMemory.shared
-    @State private var userInput     = ""
+    @StateObject private var gigi        = GigiSmartOrchestrator.shared
+    @StateObject private var memory      = GigiConversationMemory.shared
+    @StateObject private var quickTalk   = QuickTalkController.shared
+    @State private var userInput         = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
     @State private var pulseScale: CGFloat = 1.0
+    @State private var showQuickTalk     = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -187,9 +189,29 @@ struct ChatView: View {
                 .onChange(of: gigi.isListening) { _, listening in
                     pulseScale = listening ? 1.12 : 1.0
                 }
+
+                // Quick Talk button
+                Button {
+                    showQuickTalk = true
+                    quickTalk.start()
+                } label: {
+                    Image(systemName: "bolt.circle.fill")
+                        .font(.system(size: 34))
+                        .foregroundColor(.purple.opacity(0.7))
+                }
+                .disabled(quickTalk.phase.isActive || gigi.isListening)
             }
             .padding(.horizontal, 16)
             .animation(.easeInOut(duration: 0.15), value: userInput.isEmpty)
+            .sheet(isPresented: $showQuickTalk) {
+                QuickTalkView()
+                    .presentationDetents([.fraction(0.55)])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(.black)
+            }
+            .onChange(of: quickTalk.phase) { _, phase in
+                if phase == .idle { showQuickTalk = false }
+            }
 
             // Thinking indicator
             if gigi.isThinking {
@@ -306,7 +328,6 @@ private struct BubbleShape: Shape {
     let radius: CGFloat = 18
 
     func path(in rect: CGRect) -> Path {
-        let tailR: CGFloat = 5
         var path = Path()
 
         if isUser {

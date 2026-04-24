@@ -3,9 +3,9 @@ import Foundation
 // MARK: - JSONAny — arbitrary JSON value
 
 struct JSONAny: Codable {
-    let value: Any
+    nonisolated(unsafe) let value: Any
 
-    init(_ value: Any) { self.value = value }
+    nonisolated init(_ value: Any) { self.value = value }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()

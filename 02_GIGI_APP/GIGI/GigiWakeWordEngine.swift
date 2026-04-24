@@ -77,7 +77,7 @@ final class GigiWakeWordEngine {
     // MARK: - Screen dark timer
 
     private func handleBrightnessChange() {
-        let screenIsOn = UIScreen.main.brightness > 0
+        let screenIsOn = currentScreenBrightness > 0
         if screenIsOn {
             // Screen lit up — cancel dark timer and restart if enabled
             screenDarkTimer?.cancel()
@@ -130,10 +130,10 @@ final class GigiWakeWordEngine {
     private func shouldSuppressWake() -> Bool {
         let o = GigiSmartOrchestrator.shared
         if o.isThinking || o.isListening || hasActivePhoneCall() { return true }
+        // Presence Mode: user explicitly started a session — bypass battery/screen suppressions
+        if o.isPresenceActive { return false }
         // Low Power Mode: don't run continuous neural inference
         if ProcessInfo.processInfo.isLowPowerModeEnabled { return true }
-        // Screen has been dark long enough that the dark timer already fired
-        // (stopMonitoringHard was called) — screenDarkTimer nil + screen off = paused
         return false
     }
 
@@ -176,7 +176,7 @@ final class GigiWakeWordEngine {
             try AVAudioSession.sharedInstance().setCategory(
                 .playAndRecord,
                 mode: .measurement,
-                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
+                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP]
             )
             try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
             return true
@@ -274,7 +274,7 @@ final class GigiWakeWordEngine {
     // Screen on  → 50s (shorter → lower risk of missing a keyword at the boundary).
     private func scheduleRestart() {
         restartTimer?.cancel()
-        let screenIsOn = UIScreen.main.brightness > 0
+        let screenIsOn = currentScreenBrightness > 0
         let interval: UInt64 = screenIsOn ? 50_000_000_000 : 58_000_000_000
         restartTimer = Task { [weak self] in
             try? await Task.sleep(nanoseconds: interval)
@@ -285,6 +285,15 @@ final class GigiWakeWordEngine {
                 self.scheduleRestart()
             }
         }
+    }
+
+    private var currentScreenBrightness: CGFloat {
+        if let screen = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.screen })
+            .first {
+            return screen.brightness
+        }
+        return 1
     }
 
     func stopMonitoringHard() {
