@@ -20,7 +20,7 @@ import { pipeline } from 'node:stream/promises';
 
 // Bump this when we validate a newer release. Keep behind `--version` override
 // for experimenters; default release is the pinned one.
-export const PINNED_VERSION = '2026.10.1';
+export const PINNED_VERSION = '2026.3.0';
 
 const GITHUB_RELEASE_BASE = 'https://github.com/cloudflare/cloudflared/releases/download';
 
