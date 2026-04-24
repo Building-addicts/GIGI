@@ -27,7 +27,7 @@ struct SettingsView: View {
     @State private var harnessStatus = "—"
     @State private var isTestingHarness = false
     @State private var showPairingSheet = false
-    @State private var showChecklistSheet = false
+    @State private var showDiagnosticSheet = false
     @State private var pairedDeviceName: String? = nil
     @FocusState var focusedField: SettingsField?
 
@@ -126,24 +126,6 @@ struct SettingsView: View {
 
     private var harnessSection: some View {
         Section {
-            // Pre-pair education: visible only when not paired yet so the
-            // user knows what they need before scanning a QR.
-            if !harnessIsPaired {
-                Button {
-                    showChecklistSheet = true
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "checklist")
-                            .font(.system(size: 18))
-                        Text("View requirements")
-                            .font(.body.weight(.medium))
-                        Spacer()
-                    }
-                    .foregroundColor(.purple)
-                    .padding(.vertical, 4)
-                }
-            }
-
             // Primary action: pair via QR
             Button {
                 showPairingSheet = true
@@ -172,13 +154,18 @@ struct SettingsView: View {
                 }
             }
 
-            // Re-test + unpair
+            // Re-test + diagnostics + unpair
             if harnessIsPaired {
                 Button("Test connection") {
                     Task { await testHarnessHealthOnly() }
                 }
                 .foregroundColor(.purple)
                 .disabled(isTestingHarness)
+
+                Button("Run diagnostics") {
+                    showDiagnosticSheet = true
+                }
+                .foregroundColor(.purple)
 
                 Button(role: .destructive) {
                     removePairing()
@@ -215,17 +202,19 @@ struct SettingsView: View {
         } header: {
             Text("🖥 Harness Backend")
         } footer: {
-            Text("Not sure what's needed? Tap 'View requirements'. Open localhost:7777/setup in your PC browser to choose the tunnel mode, then localhost:7777/pair for the QR. One-time setup, then works from any network.")
+            Text("Open localhost:7777/setup in your PC browser to choose the tunnel mode, then localhost:7777/pair for the QR. One-time setup, then works from any network.")
                 .font(.caption)
         }
         .sheet(isPresented: $showPairingSheet) {
             GigiPairingSheet { deviceName in
                 pairedDeviceName = deviceName
-                harnessStatus = "✓ Connesso a \(deviceName)"
+                harnessStatus = "✓ Connected to \(deviceName)"
             }
         }
-        .sheet(isPresented: $showChecklistSheet) {
-            SetupChecklistView()
+        .sheet(isPresented: $showDiagnosticSheet) {
+            // Re-running diagnostics from Settings: when the user taps
+            // Finalize we just close the sheet (no pair side-effect).
+            SetupDiagnosticView { showDiagnosticSheet = false }
         }
     }
 
