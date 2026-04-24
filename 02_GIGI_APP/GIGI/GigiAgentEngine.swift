@@ -373,6 +373,16 @@ final class GigiAgentEngine {
                 contents:          contents,
                 tools:             toolDeclarations
             )
+        } catch GigiCloudError.httpError(429, _) {
+            // Token rate limit on llama-3.3-70b — wait 3s then retry with fast model (30k TPM)
+            GigiDebugLogger.log("Groq 429 rate limit — waiting 3s, falling back to llama-3.1-8b-instant")
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            return try await GigiCloudService.shared.callWithFunctions(
+                systemInstruction: systemInstruction,
+                contents:          contents,
+                tools:             toolDeclarations,
+                model:             "llama-3.1-8b-instant"
+            )
         }
     }
 

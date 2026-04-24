@@ -128,7 +128,8 @@ final class GigiCloudService {
         systemInstruction: String = GigiFoundationAgent.systemPrompt,
         contents: [GigiContent],
         tools: [FunctionDeclaration],
-        cacheId: String? = nil  // ignored — Groq has no context cache
+        cacheId: String? = nil,  // ignored — Groq has no context cache
+        model: String? = nil     // nil = default agentModel; pass fastModel for 429 fallback
     ) async throws -> GigiLLMResponse {
         let apiKey = GigiConfig.groqAPIKey
         guard !apiKey.isEmpty else { throw GigiCloudError.missingAPIKey }
@@ -143,7 +144,7 @@ final class GigiCloudService {
         req.timeoutInterval = 15
 
         var body: [String: Any] = [
-            "model":       agentModel,
+            "model":       model ?? agentModel,
             "messages":    messages,
             "max_tokens":  1024,
             "temperature": 0.1
