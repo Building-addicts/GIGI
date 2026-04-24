@@ -93,9 +93,16 @@ final class GigiHarnessClient {
         let output_tokens: Int?
     }
 
-    func agentRun(text: String, stream: Bool = false) async -> Result<AgentResult, Error> {
+    func agentRun(
+        text: String,
+        domain: String? = nil,
+        schema: String? = nil,
+        stream: Bool = false
+    ) async -> Result<AgentResult, Error> {
         guard let c = cfg else { return .failure(.notConfigured) }
-        let body: [String: Any] = ["deviceId": c.deviceId, "text": text, "stream": stream]
+        var body: [String: Any] = ["deviceId": c.deviceId, "text": text, "stream": stream]
+        if let d = domain { body["domain"] = d }
+        if let s = schema { body["schema"] = s }
         return await postJSON(path: "/api/ios/agent/run", body: body, as: AgentResult.self, cfg: c)
     }
 

@@ -1102,7 +1102,12 @@ struct AskHarnessTool: GigiTool {
         "research", "find online", "flight", "hotel", "ticket", "prenotazione", "volo",
         "cerca online", "compra", "acquista", "ordina online", "complex task",
         "summarize", "riassumi", "analizza", "analyze", "report", "compare",
-        "book", "prenota", "schedule meeting", "agenda", "mac", "computer"
+        "book", "prenota", "schedule meeting", "agenda", "mac", "computer",
+        "cheapest", "price", "availability", "current", "latest",
+        "web", "online", "search", "find", "look up", "check", "browse",
+        "restaurant", "table", "reservation", "menu", "open",
+        "news", "article", "read", "translate", "form",
+        "deliveroo", "uber eats", "glovo", "amazon", "farfetch", "booking"
     ]
 
     let declaration = FunctionDeclaration(
@@ -1191,6 +1196,12 @@ final class GigiToolRegistry {
                 if words.contains(tag) { score += 5 }
             }
             return (tool, score)
+        }
+
+        // Always include ask_harness when harness is configured — it handles what other tools can't.
+        if GigiHarnessClient.shared.isConfigured,
+           let idx = scored.firstIndex(where: { $0.tool.name == "ask_harness" }) {
+            scored[idx] = (scored[idx].tool, max(scored[idx].score, 50))
         }
 
         scored.sort { $0.score > $1.score }

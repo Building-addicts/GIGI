@@ -77,10 +77,11 @@ function runParallelTaskWithMemo(cfg, deviceId, prompt, onProgress) {
   return claudeRunner.runParallelTask(cfg, deviceId, prompt, onProgress, memorySnapshot.saveMemorySnapshot);
 }
 
-function runClaudeWithExpiryMemo(cfg, prompt, deviceId, onEvent, onSpawn) {
+function runClaudeWithExpiryMemo(cfg, prompt, deviceId, onEvent, onSpawn, options) {
   return claudeRunner.runClaude(cfg, prompt, deviceId, onEvent, onSpawn,
     (expiredId) => memorySnapshot.saveMemorySnapshot(cfg, deviceId, expiredId, 'expiry')
-      .catch(e => log('auto-memo on expiry error:', e.message))
+      .catch(e => log('auto-memo on expiry error:', e.message)),
+    options
   );
 }
 

@@ -19,6 +19,8 @@ export async function handleAgentRun(req, res, deps) {
   const deviceId = String(body.deviceId || '').trim();
   const text = String(body.text || '').trim();
   const wantStream = !!body.stream;
+  const domain = String(body.domain || '').trim() || null;
+  const schema = String(body.schema || '').trim() || null;
   if (!deviceId) return sendJson(res, 400, { ok: false, error: { code: 'MISSING_DEVICE', message: 'deviceId mancante' } });
   if (!text) return sendJson(res, 400, { ok: false, error: { code: 'MISSING_TEXT', message: 'text mancante' } });
 
@@ -44,7 +46,7 @@ export async function handleAgentRun(req, res, deps) {
         return { error: 'CANCELLED' };
       }
       try {
-        return await gigiServer.runClaude(cfg, text, deviceId, onEvent, onSpawn);
+        return await gigiServer.runClaude(cfg, text, deviceId, onEvent, onSpawn, null, { domain, schema });
       } finally {
         untrackChild(deviceId);
       }
