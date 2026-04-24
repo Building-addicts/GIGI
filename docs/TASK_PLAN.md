@@ -23,6 +23,7 @@ Wire Claude (via existing harness) as a second brain inside GIGI. Groq remains t
 _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says "analizza il mio calendario" → Groq calls `ask_claude` → Claude thoughts stream in chat → final TTS._
 
 ### P1.1 — Add `.thinking` and `.toolEvent` roles to conversation memory
+- **Status**: COMPLETED · commit `0a8316d` · BUILD SUCCEEDED via SSH Mac
 - **Agent**: backend-dev (Swift data model, no UI)
 - **Depends on**: none
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiConversationMemory.swift`
@@ -40,6 +41,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 30min
 
 ### P1.2 — Render `.thinking` and `.toolEvent` in MessageBubble
+- **Status**: COMPLETED (code+build) · commit `a400500` · BUILD SUCCEEDED · **BLOCKED BY USER CHECKPOINT** (thought-UI aesthetic approval pending — see Blockers section)
 - **Agent**: frontend-dev
 - **Depends on**: P1.1
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\ChatView.swift`
@@ -66,6 +68,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 45min
 
 ### P1.3 — Create `GigiClaudeBridge.swift` coordinator (skeleton + context snapshot)
+- **Status**: COMPLETED · commit `a400500` · BUILD SUCCEEDED
 - **Agent**: backend-dev
 - **Depends on**: P1.1
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiClaudeBridge.swift`
@@ -87,6 +90,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 1h
 
 ### P1.4 — Wire `GigiClaudeBridge.run` to streaming harness + memory
+- **Status**: IN PROGRESS (started 2026-04-24 by orchestrator)
 - **Agent**: backend-dev
 - **Depends on**: P1.3, P1.2
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiClaudeBridge.swift`
@@ -311,12 +315,196 @@ Placeholder scope for future decomposition:
 
 ---
 
+## Phase 4 — Pairing UX (Tailscale + QR code)
+
+_Source plan: `docs/plans/tailscale-qr-pairing.md`_
+_Estimated: ~6h code · Independent from Phase 1-2 (can start any time) · Goal: zero manual typing, works from any network (4G, Barcellona, hotel Wi-Fi), scalable to future VPS._
+
+**Dependency notes**:
+- User setup (Tailscale install on PC + iPhone) is a prerequisite but NOT a coding task — tracked as U0 below, estimated 10 min user time.
+- Phase 4 is orthogonal to Phase 1 & 2. It can be implemented in parallel — no shared files except `SettingsView.swift` (modified by both P2.2 and P4.6, but in different sections). Resolve any merge conflict by hand.
+
+### U0 — User installs Tailscale (prerequisite, no code)
+- **Owner**: Armando
+- **Steps**:
+  1. PC: download Tailscale from https://tailscale.com/download, install, login (Google/GitHub/Microsoft account)
+  2. PC: verify `tailscale status` shows own IP `100.x.y.z`
+  3. iPhone: install Tailscale from App Store, login **same account**
+  4. iPhone: open Tailscale app, toggle connection ON, verify green status
+  5. From PC: `curl http://<iphone-tailscale-ip>` returns timeout (expected — iPhone has no server)
+- **Estimate**: 10 min
+- **Gate**: without this, P4.9 test cannot pass
+
+### P4.1 — Add `qrcode` dep + `/api/pair` endpoint
+- **Agent**: backend-dev
+- **Depends on**: none
+- **Target files**:
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\package.json` (add dep)
+  - NEW `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\pair.js`
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\server.js` (route registration)
+- **Changes**:
+  - `npm install qrcode` in `03_HARNESS/server/`
+  - New file `api/pair.js` exporting `handlePair(req, res, { cfg })`:
+    - Enforce loopback-only: `if (!['::1', '127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) return 403`
+    - Auto-detect Tailscale IP: scan `os.networkInterfaces()` for an address matching `^100\.` and family `IPv4`; fallback to `cfg.server.host` if none
+    - If `req.url` ends with `?format=svg` → return `image/svg+xml` QR via `qrcode.toString(payload, { type: 'svg', errorCorrectionLevel: 'H' })`
+    - Otherwise return JSON payload: `{ url, secret: cfg.ios.shared_secret, deviceName: os.hostname(), createdAt: new Date().toISOString() }`
+  - In `server.js`: register the route before `/api/ios/*` dispatch (since `/api/pair` is loopback-only)
+- **Acceptance criteria**:
+  - [ ] `curl http://localhost:7779/api/pair` returns HTTP 200 JSON with correct fields
+  - [ ] `curl http://localhost:7779/api/pair?format=svg` returns an SVG rendering of a scannable QR
+  - [ ] `curl http://100.x.y.z:7779/api/pair` (from another Tailscale device) returns HTTP 403
+  - [ ] `url` field in payload uses Tailscale IP, not `localhost` or `0.0.0.0`
+- **Estimate**: 1h
+
+### P4.2 — Panel page `/pair` with QR render
+- **Agent**: frontend-dev (web, not iOS)
+- **Depends on**: P4.1
+- **Target files**:
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\panel-routes.js` (new route handler)
+  - NEW `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\pair.html`
+- **Changes**:
+  - `panel-routes.js`: handle `GET /pair` → serve `public/pair.html` with MIME `text/html`
+  - `pair.html`: minimal dark-theme page with:
+    - Title "Pair your iPhone with GIGI Harness"
+    - `<img src="http://localhost:7779/api/pair?format=svg" alt="QR">` (inline SVG from P4.1)
+    - Readable URL text `<code>http://100.x.y.z:7779</code>`
+    - Secret obfuscated: first 4 + `...` + last 4 chars
+    - Instructions ordered list: "Apri GIGI → Settings → Pair con Harness → inquadra il QR"
+    - Button "Copy URL" (JS clipboard)
+    - Auto-refresh on `onfocus` so IP detection is fresh
+- **Acceptance criteria**:
+  - [ ] `http://localhost:7777/pair` in browser shows QR + instructions + obfuscated secret
+  - [ ] "Copy URL" button copies the Tailscale URL to clipboard
+  - [ ] Page loads in < 500ms
+- **Estimate**: 45min
+
+### P4.3 — iOS Info.plist camera permission
+- **Agent**: frontend-dev
+- **Depends on**: none (independent of backend)
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\Info.plist`
+- **Changes**:
+  - Add `NSCameraUsageDescription` key with value: `"GIGI usa la fotocamera per leggere il QR code del tuo Harness backend."`
+- **Acceptance criteria**:
+  - [ ] Key appears in Info.plist
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 15min
+
+### P4.4 — `GigiPairScanner.swift` (VisionKit wrapper)
+- **Agent**: frontend-dev
+- **Depends on**: P4.3
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiPairScanner.swift`
+- **Changes**:
+  - `struct GigiPairScannerView: View` using `DataScannerViewController` via `UIViewControllerRepresentable` (iOS 16+)
+  - Configure scanner: `recognizedDataTypes: [.barcode(symbologies: [.qr])]`, `isHighlightingEnabled: true`
+  - Prop `onScan: (String) -> Void`, `onCancel: () -> Void`
+  - Before initializing camera: `AVCaptureDevice.requestAccess(for: .video)`; if denied show "Vai in Impostazioni → GIGI → Camera" overlay
+  - First successful scan fires `onScan` and stops the scanner (debounce duplicates)
+- **Acceptance criteria**:
+  - [ ] Scanning a QR triggers `onScan` exactly once
+  - [ ] Denying camera permission shows the fallback overlay, doesn't crash
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1.5h
+
+### P4.5 — `GigiPairingSheet.swift` (validation + Keychain save)
+- **Agent**: frontend-dev
+- **Depends on**: P4.4
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiPairingSheet.swift`
+- **Changes**:
+  - SwiftUI view presented as sheet
+  - State enum: `scanning`, `validating`, `success(deviceName: String)`, `failure(String)`
+  - On scan: `JSONDecoder` attempts to parse payload into `PairPayload` (url, secret, deviceName, createdAt)
+  - Validate URL: must start with `http://` or `https://`, parse via `URL(string:)` → non-nil
+  - Save to Keychain: `harnessBaseURL`, `harnessSecret` (use existing `GigiKeychain.Key` enum entries)
+  - If `harnessDeviceID` absent: `GigiHarnessClient.ensureDeviceId()`
+  - Call `GigiHarnessClient.shared.health()` → on `.success`: state → `.success(deviceName)`, auto-dismiss after 1.5s
+  - On `.failure`: state → `.failure(message)` with "Riprova" button returning to `.scanning`
+- **Acceptance criteria**:
+  - [ ] Valid QR scan ends with Keychain populated and sheet dismissed
+  - [ ] Invalid payload (malformed JSON, missing fields, non-reachable URL) shows clear error
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1.5h
+
+### P4.6 — `SettingsView` integration: "Pair con Harness" button
+- **Agent**: frontend-dev
+- **Depends on**: P4.5
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
+- **Anchor**: `private var harnessSection` around line 124 (will be rewritten)
+- **Changes**:
+  - Replace the two `TextField` inputs with a primary button "Pair con Harness" that presents `GigiPairingSheet`
+  - Below button: if paired show `"Connesso a <deviceName> · ultimo check <timestamp>"`, else show `"Non configurato"`
+  - Secondary "Rimuovi pairing" button that clears `harnessBaseURL`, `harnessSecret`, `harnessDeviceID` from Keychain and resets state
+  - Keep the raw TextField version under a DisclosureGroup "Configurazione manuale (avanzata)" collapsed by default
+  - `@State private var pairingSheetVisible = false` + `.sheet(isPresented: $pairingSheetVisible) { GigiPairingSheet(...) }`
+- **Acceptance criteria**:
+  - [ ] Settings shows the new button layout (primary button + status line + collapsible advanced)
+  - [ ] After successful pair, status line updates without app restart
+  - [ ] "Rimuovi pairing" clears Keychain + UI returns to "Non configurato"
+  - [ ] USER CHECKPOINT: verify wording and layout OK
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1h
+
+### P4.7 — Onboarding banner on first launch
+- **Agent**: frontend-dev
+- **Depends on**: P4.5
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\MainTabView.swift` (or `GIGIApp.swift`)
+- **Changes**:
+  - At top of `MainTabView.body`, overlay a banner when `!GigiHarnessClient.shared.isConfigured`:
+    ```
+    VStack {
+      HStack { ... CTA "Collega GIGI al tuo PC" ... }
+        .background(purple)
+      Spacer()
+    }
+    ```
+  - Tap → presents `GigiPairingSheet`
+  - Banner auto-hides as soon as `isConfigured` becomes true
+- **Acceptance criteria**:
+  - [ ] Fresh install (Keychain empty) → banner visible on launch
+  - [ ] After successful pair → banner disappears
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 45min
+
+### P4.8 — Connection-loss hint in bridge error
+- **Agent**: backend-dev (iOS)
+- **Depends on**: P4.6 (needs new Keychain value shape) but independently verifiable
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiClaudeBridge.swift`
+- **Anchor**: `userFacingError(for:)` around line ~170
+- **Changes**:
+  - In the `.transport` case, check if `GigiKeychain.load(forKey: .harnessBaseURL)?.starts(with: "http://100.")` is true
+  - If yes: append "Controlla Tailscale attivo su PC e iPhone" to the error message
+  - If no: keep existing message
+- **Acceptance criteria**:
+  - [ ] With Tailscale URL (`http://100.x.y.z:7779`) configured and harness down: message includes Tailscale hint
+  - [ ] With manual LAN URL (`http://192.168.x.y:7779`) configured and harness down: message unchanged
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 30min
+
+### P4.9 — Phase 4 Test Gate (manual E2E from outside home network)
+- **Agent**: qa-tester + USER CHECKPOINT
+- **Depends on**: U0, P4.1 through P4.8
+- **Environment**: harness running on PC, Tailscale up on PC + iPhone
+- **Test matrix**:
+  - [ ] Home Wi-Fi: fresh install → banner visible → scan QR → connected ✓ → ask_claude query works end-to-end
+  - [ ] **Switch iPhone to 4G/5G only (disable Wi-Fi)**: same queries still work, same latency +/- 100ms
+  - [ ] Put iPhone in airplane mode → bring back with cellular → Tailscale reconnects → next query works
+  - [ ] Kill Tailscale on iPhone → next query shows "🔌 Controlla Tailscale attivo"
+  - [ ] Restart Tailscale → query succeeds
+  - [ ] Test from a different physical location (café, different Wi-Fi) → works
+  - [ ] Remove pairing → banner reappears → re-pair → works
+- **Gate outcome**: PASS → Phase 4 complete · FAIL → debug with specific P4.x as needed
+- **USER CHECKPOINT**: Armando verifies scan UX feel and cross-network reachability subjectively
+- **Estimate**: 45min
+
+---
+
 ## Test Gates
 
 | Gate | Agent | Blocks | Criteria |
 |---|---|---|---|
 | **P1.10** — Phase 1 E2E | qa-tester | Phase 2 start | All 6 scenarios pass in source plan §Verification Steps |
 | **P2.4** — Phase 2 E2E | qa-tester | Phase 3 (if un-deferred) | Force Claude toggle behaves per AC-3 |
+| **P4.9** — Phase 4 E2E from outside home network | qa-tester + USER | Phase 4 completion | Cross-network reachability + QR flow work; ≥ 7/7 scenarios PASS |
 
 ---
 
@@ -328,13 +516,49 @@ These task pairs have no direct dependency and can run in parallel if two agents
 - **P1.5** (tool registry) ∥ **P1.7** (prompt update) — independent files, both depend on P1.4 only loosely (P1.7 can even start right after P1.1 if prompt wording doesn't rely on bridge shape)
 - **P1.8** (WS URL sanity) ∥ **P1.9** (error polish) — both post-P1.4, independent
 - **P2.1** (keychain) ∥ (nothing else in Phase 2 — P2.2 depends on P2.1)
+- **P4.1** (backend pair endpoint) ∥ **P4.3** (iOS Info.plist camera) — entirely different stacks, both zero-dep
+- **P4.2** (panel /pair page) ∥ **P4.4** (iOS scanner view) — backend vs iOS, independent after their respective roots
+- **Phase 4 entire ∥ Phase 2 entire** — orthogonal features, different code surfaces (except a small overlap in `SettingsView.swift` which can be resolved by hand)
 
-No cross-phase parallelism: P2.x must wait for P1.10 gate.
+No cross-phase parallelism between P1 and P2: P2.x must wait for P1.10 gate.
+**Phase 4 can start at any time**, even concurrently with P1 / P2 — it does not depend on Claude-bridge plumbing.
 
 ---
 
 ## Next Action
 
-**TASK P1.1 — Add `.thinking` and `.toolEvent` roles to conversation memory**
+**TASK P1.4 — Wire `GigiClaudeBridge.run` to streaming harness + memory** (IN PROGRESS)
 - **Agent**: backend-dev
-- **Why first**: zero dependencies, foundational for every subsequent UI/bridge task, 30 min scope. Blocks P1.2 (UI rendering) and P1.3 (bridge skeleton). Once P1.1 is green on the remote Mac build, the two parallel tracks (UI in P1.2 + bridge in P1.3) can start simultaneously.
+- **Status**: started 2026-04-24 by orchestrator, in the same turn as the P1.1/P1.2/P1.3 completion report
+- **Why now**: P1.2 (UI) and P1.3 (bridge skeleton) are both code-complete and compile. The last missing piece to unlock full end-to-end testing of the escalation path is the real WebSocket wire-up. Cannot be validated E2E until the harness is running on the PC.
+
+**Queued Next (unblocked once P1.4 lands)**
+**TASK P1.5 — Register `AskClaudeTool` in `GigiToolRegistry`**
+- **Agent**: backend-dev
+- **Why next**: once the bridge actually streams, we need Groq to be able to call it. P1.5 is the declaration + registry wiring. 30 min scope. Can run in parallel with P1.7 (prompt update) once P1.4 is green.
+
+---
+
+## Blockers
+
+### BLOCKED BY USER CHECKPOINT — P1.2 visual approval
+- **Scope**: the thought-UI aesthetic (italic grey bubble with 💭 prefix, tool-event bubble with gear icon) cannot be visually validated until a full Phase 1 `.ipa` is sideloaded to Armando's iPhone.
+- **Impact**: code is merged and builds clean (`a400500`, BUILD SUCCEEDED), but the USER CHECKPOINT box in P1.2 acceptance criteria stays unchecked.
+- **Mitigation**: P1.4 is proceeding in parallel because the bridge wire-up does not depend on the aesthetic sign-off. The full USER CHECKPOINT for P1.2 is deferred to the P1.10 Phase-1 E2E gate (where Armando will see the thoughts streaming live for the first time on device).
+- **Unblock condition**: Phase-1 `.ipa` produced + sideloaded OR Armando reviews a simulator screenshot out-of-band and approves.
+
+### BLOCKED BY INFRA — End-to-end test of the bridge
+- **Scope**: `GigiClaudeBridge.run` cannot be validated end-to-end until (a) P1.4 is complete AND (b) the harness is running locally on the PC at `192.168.1.67:7779` with the bearer secret configured on-device.
+- **Impact**: P1.4 acceptance criteria "calling run(...) emits ≥1 .thinking bubble" requires a live harness. Dev-only stub validation is possible but not sufficient for close-out.
+- **Unblock condition**: start `03_HARNESS` on the PC + confirm `GET /api/ios/health` returns 200 with the stored secret.
+
+---
+
+## Progress Log
+
+One-line entries per task transition, ISO-8601 timestamps (local date, no TZ needed at this granularity).
+
+- `2026-04-24` — P1.1 COMPLETED · commit `0a8316d` · conversation memory role enum extended to `{user, gigi, thinking, toolEvent}` + addThought/addToolEvent/updateToolEvent helpers · BUILD SUCCEEDED on MacInCloud
+- `2026-04-24` — P1.2 COMPLETED (code+build) · commit `a400500` · MessageBubble renders `.thinking` (italic grey + 💭) and `.toolEvent` (gear icon) · BUILD SUCCEEDED · USER CHECKPOINT deferred to P1.10 E2E
+- `2026-04-24` — P1.3 COMPLETED · commit `a400500` · `GigiClaudeBridge.swift` skeleton + `buildContextSnapshot()` (profile + 7-day calendar + 10 recent memories + optional location) · BUILD SUCCEEDED
+- `2026-04-24` — P1.4 IN PROGRESS · orchestrator started wire-up of `run(task:context:)` to `GigiHarnessStream` WebSocket + memory callbacks
