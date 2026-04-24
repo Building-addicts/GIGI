@@ -1096,6 +1096,59 @@ struct ComputerUseTool: GigiTool {
     }
 }
 
+// MARK: - Claude bridge escalation tool (Phase 1.5)
+//
+// Exposed to Groq so the LLM can delegate a task to Claude on the harness
+// backend. Execution does NOT call the iOS action dispatcher — it goes
+// through GigiClaudeBridge which opens a streaming WebSocket to Claude
+// and appends thoughts/tool-events to the conversation memory in flight.
+
+struct AskClaudeTool: GigiTool {
+    let name = "ask_claude"
+    let requiresConfirmation = false
+    let tags = [
+        "analizza", "analyze", "ricerca", "research", "prenota", "book",
+        "trova", "find", "cerca", "search", "computer", "browser",
+        "deep", "complex", "multi-step"
+    ]
+
+    let declaration = FunctionDeclaration(
+        name: "ask_claude",
+        description: """
+        Delegate to Claude (on the harness backend) for tasks that need deep \
+        reasoning, web research, computer-use browsing, or analysis of large \
+        data. Do NOT use this for direct device actions (calls, navigation, \
+        HomeKit, reminders, timers) — prefer the dedicated tool. Claude thoughts \
+        stream live into the chat while it works.
+        """,
+        parameters: JSONSchema(
+            type: "object",
+            properties: [
+                "task":    JSONSchemaProperty(
+                    type: "string",
+                    description: "Full natural-language description of what Claude should do. Include the goal and any explicit constraints.",
+                    enumValues: nil
+                ),
+                "context": JSONSchemaProperty(
+                    type: "string",
+                    description: "Optional extra context Claude will not get from the user snapshot (e.g. data copied from a previous turn).",
+                    enumValues: nil
+                )
+            ],
+            required: ["task"]
+        )
+    )
+
+    func execute(args: [String: Any]) async -> ToolResult {
+        let task    = str(args, "task")
+        let context = (args["context"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        guard !task.isEmpty else {
+            return ToolResult.failure("ask_claude: task vuoto")
+        }
+        return await GigiClaudeBridge.shared.run(task: task, context: context)
+    }
+}
+
 // MARK: - GigiToolRegistry
 
 @MainActor
@@ -1115,12 +1168,16 @@ final class GigiToolRegistry {
         HomekitTempTool(), HomekitSceneTool(),
         RememberTool(), RecallTool(), SearchGroupsTool(),
         WebWhatsAppTool(), WebBookRestaurantTool(), WebOrderFoodTool(),
-        WebSearchAndReadTool(), WebVisionTaskTool(), ComputerUseTool()
+        WebSearchAndReadTool(), WebVisionTaskTool(), ComputerUseTool(),
+        AskClaudeTool()
     ]
 
-    // Always included regardless of text (high frequency, low cost)
+    // Always included regardless of text (high frequency, low cost).
+    // `ask_claude` is always present so Groq can escalate on ANY complex
+    // request, not only those whose wording matches its tag list.
     private let alwaysIncluded: Set<String> = [
-        "make_call", "send_message", "ask_time", "ask_date", "weather"
+        "make_call", "send_message", "ask_time", "ask_date", "weather",
+        "ask_claude"
     ]
 
     private lazy var byName: [String: any GigiTool] = {

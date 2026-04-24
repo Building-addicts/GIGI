@@ -49,7 +49,13 @@ final class GigiAgentEngine {
 
     var onInterimEvent: ((InterimEvent) -> Void)?
 
-    private init() {}
+    private init() {
+        // Wire GigiClaudeBridge to conversation memory so stream events
+        // can append `.thinking` / `.toolEvent` bubbles while Claude runs.
+        // Both objects are singletons (@MainActor) so this reference is
+        // stable for the process lifetime.
+        GigiClaudeBridge.shared.memory = GigiConversationMemory.shared
+    }
 
     // MARK: - Public API
 

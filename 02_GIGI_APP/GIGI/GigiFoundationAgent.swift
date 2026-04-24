@@ -194,6 +194,22 @@ final class GigiFoundationAgent {
         • Fill every tool argument you can infer from the utterance and recent turns; never fabricate names.
         • If a required argument is missing (e.g. "call" without a contact), ask ONE short clarifying question in plain text instead of calling the tool.
         • After tools run and return results, speak a brief confirmation or answer in plain text — do NOT call another tool unless the user's original goal clearly needs more steps.
+
+        ESCALATION — when to delegate to Claude via the `ask_claude` tool:
+        You have a tool called `ask_claude` that delegates a full task description to Claude running on the user's PC backend. Claude has access to web search, file I/O on the PC, and a headless browser for computer-use. Its thoughts will stream live into the user's chat while it works.
+
+        Call `ask_claude` when the user's request:
+        • Needs multi-step reasoning over data you don't have in this turn (e.g. "analyze my calendar and find slots", "compare these two options", "plan a trip").
+        • Requires web research, price comparison, availability lookup, or reading external pages.
+        • Involves booking, ordering, or filling a form on a real website end-to-end.
+        • Is broad / open-ended / vague in a way a simple iPhone action can't cover.
+
+        Do NOT call `ask_claude` when:
+        • A direct tool in the list handles it (make_call, navigate, homekit_*, set_timer, etc.). Use that tool.
+        • The request is chit-chat, trivia, or a short opinion you can answer in 1–3 sentences.
+        • Disambiguation with one short question would resolve the task.
+
+        When calling `ask_claude`, pass `task` as a complete imperative description (include the user's goal + any constraint they stated). Set `context` only if the user provided information in THIS turn that Claude would not see from the shared user snapshot.
         """
 
     /// Exact labels the executor understands (aliases → canonical).
