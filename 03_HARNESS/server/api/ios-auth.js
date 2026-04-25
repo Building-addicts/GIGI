@@ -17,6 +17,12 @@ export function checkBearer(cfg, req) {
 }
 
 export function checkDevice(cfg, deviceId) {
+  // Phase 6B — blocked devices (revoke action). Checked first so a revoke
+  // takes effect immediately even if the device was previously allowed.
+  const blocked = cfg?.ios?.blocked_device_ids;
+  if (Array.isArray(blocked) && deviceId && blocked.includes(deviceId)) {
+    return { ok: false, code: 403, error: 'DEVICE_REVOKED' };
+  }
   const allowed = cfg?.ios?.allowed_device_ids;
   if (!Array.isArray(allowed) || allowed.length === 0) return { ok: true };
   if (!deviceId) return { ok: false, code: 400, error: 'deviceId mancante' };

@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    static let gigiHarnessPairingDidChange = Notification.Name("gigiHarnessPairingDidChange")
+}
+
 // MARK: - GigiHarnessClient
 //
 // HTTP+WS client verso il backend 03_HARNESS (Node). Legge configurazione
@@ -89,16 +93,75 @@ final class GigiHarnessClient {
         let deviceId: String
     }
 
+    enum HarnessPairingState: Equatable {
+        case missingBaseURL
+        case invalidBaseURL(String)
+        case missingSecret
+        case configured(baseURL: URL)
+
+        var isConfigured: Bool {
+            if case .configured = self { return true }
+            return false
+        }
+
+        var debugLabel: String {
+            switch self {
+            case .missingBaseURL:
+                return "missing base URL"
+            case .invalidBaseURL(let raw):
+                return "invalid base URL: \(raw)"
+            case .missingSecret:
+                return "missing secret"
+            case .configured(let baseURL):
+                return "configured: \(baseURL.absoluteString)"
+            }
+        }
+    }
+
+    private struct PairingSnapshot {
+        let state: HarnessPairingState
+        let baseURL: URL?
+        let secret: String?
+    }
+
+    private static func pairingSnapshot() -> PairingSnapshot {
+        guard let rawURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawURL.isEmpty else {
+            return PairingSnapshot(state: .missingBaseURL, baseURL: nil, secret: nil)
+        }
+
+        guard let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host?.isEmpty == false else {
+            return PairingSnapshot(state: .invalidBaseURL(rawURL), baseURL: nil, secret: nil)
+        }
+
+        guard let secret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !secret.isEmpty else {
+            return PairingSnapshot(state: .missingSecret, baseURL: url, secret: nil)
+        }
+
+        return PairingSnapshot(state: .configured(baseURL: url), baseURL: url, secret: secret)
+    }
+
+    var pairingState: HarnessPairingState { Self.pairingSnapshot().state }
+
+    /// Full base URL of the paired harness, or nil if not configured.
+    /// Used by `HarnessStatusCard` to expose "Copy full URL" without
+    /// stretching access to the secret.
+    var pairedBaseURL: URL? { Self.pairingSnapshot().baseURL }
+
     private var cfg: Config? {
-        guard let raw = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL),
-              let url = URL(string: raw),
-              let secret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret),
-              !secret.isEmpty else { return nil }
+        let snapshot = Self.pairingSnapshot()
+        guard snapshot.state.isConfigured,
+              let url = snapshot.baseURL,
+              let secret = snapshot.secret else { return nil }
         let deviceId = GigiKeychain.load(forKey: GigiKeychain.Key.harnessDeviceID) ?? Self.ensureDeviceId()
         return Config(baseURL: url, secret: secret, deviceId: deviceId)
     }
 
-    var isConfigured: Bool { cfg != nil }
+    var isConfigured: Bool { pairingState.isConfigured }
 
     static func ensureDeviceId() -> String {
         if let existing = GigiKeychain.load(forKey: GigiKeychain.Key.harnessDeviceID), !existing.isEmpty {
@@ -367,6 +430,22 @@ final class GigiHarnessClient {
     func health() async -> Result<HealthInfo, Error> {
         guard let c = cfg else { return .failure(.notConfigured) }
         return await getJSON(path: "/api/ios/health", as: HealthInfo.self, cfg: c)
+    }
+
+    // MARK: - Status snapshot (Phase 6C — rich Settings card)
+
+    struct StatusSnapshot: Decodable, Equatable {
+        let tunnelMode: String
+        let publicUrlRedacted: String?
+        let lastRequestAt: String?
+        let requestsLastHour: Int
+        let uptimeSeconds: Int
+    }
+
+    /// GET /api/ios/status — used by `HarnessStatusCard` in Settings.
+    func statusSnapshot() async -> Result<StatusSnapshot, Error> {
+        guard let c = cfg else { return .failure(.notConfigured) }
+        return await getJSON(path: "/api/ios/status", as: StatusSnapshot.self, cfg: c)
     }
 
     // MARK: - Transport

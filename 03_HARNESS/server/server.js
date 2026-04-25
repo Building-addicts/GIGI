@@ -35,6 +35,7 @@ import { handleSetup } from './api/setup.js';
 import { handleDiagnostics } from './api/diagnostics.js';
 import { handleAutofix } from './api/autofix.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
+import { handlePanelRequest } from './api/panel-connections.js';
 
 // ─────────────────────────────────────────────────────────────
 // Lock file: evita istanze duplicate
@@ -185,6 +186,10 @@ async function main() {
       // /api/setup/autofix — Bearer-authed batch fixer. Same reasoning
       // as diagnostics: matches /api/setup/* but bypasses loopback gate.
       if (await handleAutofix(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
+      // /api/panel/* — Connections tab (loopback-only). Lives in the bridge
+      // process because it inspects in-memory state (cloudflared, WS rooms,
+      // request log) that the panel process can't reach directly.
+      if (await handlePanelRequest(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
       // /api/setup/* — wizard endpoints, also loopback-only + bearer-free.
       if (await handleSetup(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
       const handled = await handleIosRequest(req, res, { cfg, gigiServer });

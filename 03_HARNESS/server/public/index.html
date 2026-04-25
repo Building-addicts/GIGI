@@ -18,6 +18,7 @@
     </div>
     <div class="controls">
       <span class="status" id="status-pill">—</span>
+      <a class="btn" href="/setup" title="Tunnel mode chooser & setup quiz">Setup</a>
       <button class="btn primary" id="btn-start">Avvia</button>
       <button class="btn" id="btn-stop">Ferma</button>
       <button class="btn" id="btn-restart">Riavvia</button>
@@ -26,6 +27,7 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="status">Stato</button>
+    <button class="tab" data-tab="connections">Connections</button>
     <button class="tab" data-tab="config">Configurazione</button>
     <button class="tab" data-tab="browsers">Browsers</button>
     <button class="tab" data-tab="workers">Workers</button>
@@ -90,6 +92,46 @@
             <span class="slider"></span>
           </label>
         </div>
+      </div>
+    </section>
+
+    <section id="tab-connections" class="panel">
+      <div class="card">
+        <h3>Tunnel</h3>
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <div id="conn-tunnel-mode" style="font-size:15px;font-weight:600">—</div>
+            <div class="sub" id="conn-tunnel-url">—</div>
+            <div class="sub" id="conn-tunnel-meta">—</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="btn-tunnel-restart">Restart</button>
+            <button class="btn" id="btn-tunnel-stop">Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>WebSocket clients</h3>
+        <div id="conn-ws-list" class="conn-list">
+          <div class="sub">Nessun client WS connesso</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>Known devices</h3>
+        <div id="conn-devices-list" class="conn-list">
+          <div class="sub">Nessun device noto</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>Recent requests</h3>
+        <div class="sub" style="margin-bottom:8px">Ultime 50 richieste su /api/ios/* (in-memory, perse al restart)</div>
+        <table class="conn-requests" id="conn-requests-table">
+          <thead><tr><th>Time</th><th>Device</th><th>Method</th><th>Path</th><th>Status</th><th>Latency</th></tr></thead>
+          <tbody id="conn-requests-body"></tbody>
+        </table>
       </div>
     </section>
 

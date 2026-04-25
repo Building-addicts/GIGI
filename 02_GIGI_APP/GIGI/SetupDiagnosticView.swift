@@ -39,6 +39,7 @@ struct SetupDiagnosticView: View {
     @State private var isManualRefreshing = false
     @State private var nextRefreshIn: Int = 5
     @State private var manuallyCollapsedIds: Set<String> = []   // user-tapped to close
+    @State private var walkthroughOpenIds: Set<String> = []     // P6.12
 
     // Autofix state (P6.11.2)
     @State private var isAutofixing = false
@@ -46,6 +47,7 @@ struct SetupDiagnosticView: View {
     @State private var showSecretRotateConfirm = false
     @State private var pendingAutofixIds: [String] = []
     @State private var needsRepairAfterAutofix = false
+    @State private var needsUserWalkthroughIds: Set<String> = []
 
     /// Per-step row shown during the .fixing animation.
     struct AutofixStep: Identifiable, Equatable {
@@ -237,17 +239,24 @@ struct SetupDiagnosticView: View {
         // Filter checks that are currently failing AND auto-fixable.
         let fixable = report.checks.filter { !$0.ok && ($0.autoFixable ?? false) }
         let manual  = report.checks.filter { !$0.ok && !($0.autoFixable ?? false) }
-        if fixable.isEmpty || isAutofixing { return AnyView(EmptyView()) as Any as! AnyView }
-
-        return AnyView(
+        let assisted = fixable.filter { $0.id == "claude_cli_authenticated" }
+        let automaticCount = fixable.count - assisted.count
+        if !fixable.isEmpty && !isAutofixing {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "wand.and.stars")
                         .font(.system(size: 18))
                         .foregroundColor(.purple)
-                    Text("\(fixable.count) issue\(fixable.count == 1 ? "" : "s") can be fixed automatically")
+                    Text(automaticCount > 0
+                         ? "\(automaticCount) issue\(automaticCount == 1 ? "" : "s") can be fixed automatically"
+                         : "\(assisted.count) issue\(assisted.count == 1 ? "" : "s") can be started for you")
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(.white)
+                }
+                if !assisted.isEmpty {
+                    Text("\(assisted.count) will still need you on the PC to finish (for example Claude sign-in in the browser).")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.55))
                 }
                 if !manual.isEmpty {
                     Text("After auto-fix, \(manual.count) issue\(manual.count == 1 ? "" : "s") will still need you.")
@@ -284,7 +293,7 @@ struct SetupDiagnosticView: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.purple.opacity(0.4), lineWidth: 1)
             )
-        )
+        }
     }
 
     private var autofixProgressCard: some View {
@@ -344,6 +353,7 @@ struct SetupDiagnosticView: View {
             return [:]
         }()
         await MainActor.run {
+            needsRepairAfterAutofix = false
             autofixProgress = ids.map {
                 AutofixStep(id: $0, label: labelMap[$0] ?? $0, status: .pending, detail: nil)
             }
@@ -377,6 +387,11 @@ struct SetupDiagnosticView: View {
                         }
                     }
                 }
+                needsUserWalkthroughIds = Set(
+                    report.results
+                        .filter { $0.needsUser != nil }
+                        .map(\.id)
+                )
                 if report.results.contains(where: { $0.needsRepair == true }) {
                     needsRepairAfterAutofix = true
                 }
@@ -423,6 +438,7 @@ struct SetupDiagnosticView: View {
         let icon = check.ok ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
         let iconColor = check.ok ? Color.green : severityColor(check.severity)
         let canExpand = !check.ok && (check.hint != nil || check.action != nil)
+        let shouldOfferWalkthrough = !(check.autoFixable ?? false) || needsUserWalkthroughIds.contains(check.id)
         // Failing rows are expanded by default so the user sees the action
         // immediately. Tapping collapses it (we remember that explicit choice
         // in `manuallyCollapsedIds`). Tapping a never-expanded row that
@@ -481,12 +497,7 @@ struct SetupDiagnosticView: View {
                     }
                     if let action = check.action {
                         Button {
-                            UIPasteboard.general.string = action
-                            withAnimation { copiedToast = "Action copied" }
-                            Task {
-                                try? await Task.sleep(nanoseconds: 1_400_000_000)
-                                await MainActor.run { withAnimation { copiedToast = nil } }
-                            }
+                            copyToPasteboard(action, toast: "Action copied", clearAfterNs: 1_400_000_000)
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "doc.on.doc")
@@ -507,6 +518,12 @@ struct SetupDiagnosticView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    // Inline walkthrough — only for checks the harness CAN'T
+                    // auto-fix, plus semi-auto checks that returned
+                    // needsUser after a batch autofix (P6.12 / P6.11).
+                    if shouldOfferWalkthrough, let wt = Walkthroughs.forCheck(check.id) {
+                        walkthroughBlock(wt, key: check.id)
+                    }
                 }
                 .padding(.leading, 32)
             }
@@ -520,12 +537,107 @@ struct SetupDiagnosticView: View {
         )
     }
 
+    // MARK: - Inline walkthrough
+
+    @ViewBuilder
+    private func walkthroughBlock(_ wt: Walkthrough, key: String) -> some View {
+        let isOpen = walkthroughOpenIds.contains(key)
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    if isOpen { walkthroughOpenIds.remove(key) }
+                    else { walkthroughOpenIds.insert(key) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isOpen ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                    Text(isOpen ? "Hide full instructions" : "Show full instructions")
+                        .font(.caption.weight(.medium))
+                    Spacer()
+                }
+                .foregroundColor(.purple)
+                .padding(.top, 2)
+            }
+            .buttonStyle(.plain)
+
+            if isOpen {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let intro = wt.intro {
+                        Text(intro)
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    ForEach(wt.steps) { step in
+                        walkthroughStepRow(step)
+                    }
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.04))
+                .cornerRadius(8)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func walkthroughStepRow(_ step: WalkthroughStep) -> some View {
+        switch step {
+        case .text(let label, let body):
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.85))
+                Text(body)
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .copyable(let label, let body, let command):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.85))
+                Text(body)
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    copyToPasteboard(command, toast: "Copied")
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.on.doc").font(.caption2)
+                        Text(command)
+                            .font(.system(.caption2, design: .monospaced))
+                        Spacer()
+                    }
+                    .foregroundColor(.purple)
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .background(Color.purple.opacity(0.08))
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     private func severityColor(_ s: String) -> Color {
         switch s {
         case "critical": return .pink
         case "warning":  return .yellow
         case "info":     return .blue
         default:         return .gray
+        }
+    }
+
+    private func copyToPasteboard(_ value: String, toast: String, clearAfterNs: UInt64 = 1_200_000_000) {
+        UIPasteboard.general.string = value
+        withAnimation { copiedToast = toast }
+        Task {
+            try? await Task.sleep(nanoseconds: clearAfterNs)
+            await MainActor.run {
+                withAnimation { copiedToast = nil }
+            }
         }
     }
 
@@ -616,6 +728,9 @@ struct SetupDiagnosticView: View {
             case .success(let report):
                 phase = .running(report)
                 GigiHarnessClient.shared.cacheDiagnostics(report)
+                needsUserWalkthroughIds = needsUserWalkthroughIds.intersection(
+                    Set(report.checks.filter { !$0.ok }.map(\.id))
+                )
             case .failure(let err):
                 phase = .error(String(describing: err))
             }

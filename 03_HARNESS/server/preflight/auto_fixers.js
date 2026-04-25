@@ -13,9 +13,49 @@
 //
 // Adding a new fixer: add a function here + register it in `FIXERS`.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { install as installCloudflared } from '../tunnel/install-cloudflared.js';
+
+function spawnClaudeAuthLogin(bin) {
+  if (process.platform === 'win32') {
+    // Claude Code is a console executable. Launching it directly from the
+    // background harness can produce a terminal that flashes and disappears,
+    // while stdout is ignored and the user never sees the OAuth URL/prompt.
+    // Start a persistent cmd window. Avoid `start "" "path"` here: when
+    // invoked through Node/cmd /s it can be parsed incorrectly and Windows
+    // may try to open a bogus "\\" path.
+    const scriptPath = path.join(os.tmpdir(), 'gigi-claude-auth-login.cmd');
+    const script = [
+      '@echo off',
+      'title GIGI Claude Login',
+      'echo Starting Claude sign-in for GIGI...',
+      'echo.',
+      `"${bin}" auth login`,
+      'echo.',
+      'echo Claude login command exited.',
+      'echo If the browser opened, finish sign-in there, then close this window.',
+      'echo If nothing opened, run this command manually:',
+      'echo claude auth login',
+      'echo.',
+      'pause'
+    ].join('\r\n');
+    fs.writeFileSync(scriptPath, script, 'utf8');
+
+    return spawn('cmd.exe', ['/d', '/s', '/k', scriptPath], {
+      stdio: 'ignore',
+      detached: true,
+      windowsHide: false
+    });
+  }
+
+  return spawn(bin, ['auth', 'login'], {
+    stdio: 'ignore',
+    detached: true
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Fixers
@@ -151,7 +191,7 @@ async function fix_cloudflared_binary() {
 }
 
 /**
- * Spawns `claude /login` on the server. The claude CLI opens the
+ * Spawns `claude auth login` on the server. The claude CLI opens the
  * default browser, the OAuth flow has to be completed by a human in
  * front of the PC. So we return needsUser, not fixed:true.
  */
@@ -164,23 +204,17 @@ async function fix_claude_cli_authenticated({ cfg }) {
     };
   }
   try {
-    // Detached so claude can keep running after we return; ignored stdio
-    // because the OAuth flow goes via the browser, not stdin/stdout.
-    const child = spawn(bin, ['/login'], {
-      stdio: 'ignore',
-      detached: true,
-      windowsHide: false
-    });
+    const child = spawnClaudeAuthLogin(bin);
     child.unref();
     return {
       fixed: false,
-      needsUser: 'Browser opened on your PC for Claude sign-in. Complete the login there, then come back. The check will turn green within ~5 seconds.'
+      needsUser: 'Opened a Claude sign-in terminal on your PC. If no window stays open, run %TEMP%\\gigi-claude-auth-login.cmd manually. Complete the browser login, then come back.'
     };
   } catch (e) {
     return {
       fixed: false,
       error: e.message,
-      needsUser: 'Could not auto-launch claude /login. Open a terminal on your PC and run: claude /login'
+      needsUser: 'Could not auto-launch Claude auth. Open a terminal on your PC and run: claude auth login'
     };
   }
 }

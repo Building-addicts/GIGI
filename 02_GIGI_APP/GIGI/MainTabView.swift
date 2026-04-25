@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject var auth = GigiAuthManager.shared
     @ObservedObject private var orchestrator = GigiSmartOrchestrator.shared
 
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "gigi.onboarding.complete")
     @State private var selection: Int = 0
     @State private var showPairingSheet = false
-    @State private var harnessReady = GigiHarnessClient.shared.isReady
+    @State private var harnessConfigured = GigiHarnessClient.shared.pairingState.isConfigured
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -53,7 +54,7 @@ struct MainTabView: View {
                     }
             )
 
-            if !harnessReady && !showOnboarding {
+            if !harnessConfigured && !showOnboarding {
                 pairingBanner
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(50)
@@ -66,13 +67,31 @@ struct MainTabView: View {
             }
         }
         .animation(.easeInOut(duration: 0.4), value: showOnboarding)
-        .animation(.easeInOut(duration: 0.3), value: harnessReady)
+        .animation(.easeInOut(duration: 0.3), value: harnessConfigured)
         .sheet(isPresented: $showPairingSheet) {
             GigiPairingSheet { _ in
-                harnessReady = GigiHarnessClient.shared.isReady
+                refreshHarnessConfiguredState()
             }
         }
-        .onAppear { harnessReady = GigiHarnessClient.shared.isReady }
+        .onAppear { refreshHarnessConfiguredState() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshHarnessConfiguredState() }
+        }
+        .onChange(of: selection) { _, _ in
+            refreshHarnessConfiguredState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gigiHarnessPairingDidChange)) { _ in
+            refreshHarnessConfiguredState()
+        }
+    }
+
+
+    private func refreshHarnessConfiguredState() {
+        // Do not use `isReady` for this banner. `isReady` depends on the
+        // in-memory diagnostics cache, which is intentionally lost when the
+        // app is killed. The top banner only means "pair this phone with a
+        // PC", so persisted Keychain config is the correct source of truth.
+        harnessConfigured = GigiHarnessClient.shared.pairingState.isConfigured
     }
 
     private var pairingBanner: some View {

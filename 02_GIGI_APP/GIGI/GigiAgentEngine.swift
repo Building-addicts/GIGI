@@ -66,6 +66,48 @@ final class GigiAgentEngine {
         // Record user turn in persistent multi-turn history
         mem.addUserTurn(text)
 
+        // Phase 2 — Force Claude toggle: bypass the Groq agent loop entirely
+        // when Brain Mode → Force Claude is on. The harness streams Claude's
+        // thoughts as `.thinking` bubbles directly into memory.
+        if GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude) {
+            let autoFallback = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
+            if GigiHarnessClient.shared.isConfigured {
+                let result = await GigiClaudeBridge.shared.run(task: text, context: nil)
+                if let err = result.error {
+                    if !autoFallback {
+                        return AgentResult(
+                            speech: err,
+                            executedTools: [],
+                            isFollowUp: false,
+                            costEstimate: 0,
+                            requiresConfirm: nil,
+                            isError: true
+                        )
+                    }
+                    // else: silent fallback to Groq agent loop below
+                } else {
+                    return AgentResult(
+                        speech: result.value,
+                        executedTools: ["ask_claude"],
+                        isFollowUp: false,
+                        costEstimate: Double(result.tokenEstimate) * costPerToken,
+                        requiresConfirm: nil,
+                        isError: false
+                    )
+                }
+            } else if !autoFallback {
+                return AgentResult(
+                    speech: "Force Claude is on but harness is not paired. Pair it from Settings or enable Auto Fallback.",
+                    executedTools: [],
+                    isFollowUp: false,
+                    costEstimate: 0,
+                    requiresConfirm: nil,
+                    isError: true
+                )
+            }
+            // else: fall through to Groq agent loop
+        }
+
         // Build initial contents from pruned history (user turn already appended above)
         let history = mem.contents(pruningIfNeeded: true)
 

@@ -1,11 +1,12 @@
 // Router principale /api/ios/*. Chiamato dal server HTTP iOS in server.js.
 // Auth Bearer applicato qui; se fallisce, chiude la risposta senza delegare.
-import { checkBearer } from './ios-auth.js';
+import { checkBearer, checkDevice } from './ios-auth.js';
 import * as agent from './ios-agent.js';
 import * as computerUse from './ios-computer-use.js';
 import * as memory from './ios-memory.js';
 import * as push from './ios-push-register.js';
 import { handlePushTest } from './ios-push-test.js';
+import { handleStatus, recordRequest } from './ios-status.js';
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -36,6 +37,23 @@ export async function handleIosRequest(req, res, ctx) {
   const auth = checkBearer(ctx.cfg, req);
   if (!auth.ok) { json(res, auth.code, { ok: false, error: { code: 'UNAUTHORIZED', message: auth.error } }); return true; }
 
+  // Blocked-device check (Phase 6B revoke action). Best-effort deviceId
+  // extraction from URL query or X-Device-Id header. Body-only deviceIds
+  // for POST endpoints are revalidated by their handlers via checkDevice.
+  const deviceIdFromQuery = url.searchParams.get('deviceId');
+  const deviceIdFromHeader = req.headers['x-device-id'] ? String(req.headers['x-device-id']) : null;
+  const earlyDeviceId = deviceIdFromQuery || deviceIdFromHeader;
+  if (earlyDeviceId) {
+    const dev = checkDevice(ctx.cfg, earlyDeviceId);
+    if (!dev.ok && dev.error === 'DEVICE_REVOKED') {
+      json(res, 403, { ok: false, error: { code: 'DEVICE_REVOKED', message: 'Device revoked by admin' } });
+      return true;
+    }
+  }
+
+  // Record every authenticated iOS request for the rich Settings card (P6C.1).
+  recordRequest();
+
   const deps = { readBody, sendJson: json, cfg: ctx.cfg, gigiServer: ctx.gigiServer };
 
   // agent
@@ -65,6 +83,9 @@ export async function handleIosRequest(req, res, ctx) {
 
   // health
   if (p === '/api/ios/health' && m === 'GET') { json(res, 200, { ok: true, data: { pid: process.pid, uptime_s: Math.floor(process.uptime()) } }); return true; }
+
+  // status (rich Settings card — Phase 6C)
+  if (p === '/api/ios/status' && m === 'GET') { await handleStatus(req, res, deps); return true; }
 
   json(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: `${m} ${p} non esiste` } });
   return true;

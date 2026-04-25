@@ -90,7 +90,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 1h
 
 ### P1.4 — Wire `GigiClaudeBridge.run` to streaming harness + memory
-- **Status**: IN PROGRESS (started 2026-04-24 by orchestrator)
+- **Status**: COMPLETED (verified 2026-04-25 — `GigiClaudeBridge.swift:72-94` has full `run()` impl with stream wiring, snapshot context, error mapping; `GigiHarnessStream` connect + `handleStreamEvent` translate live events to `.thinking`/`.toolEvent` bubbles)
 - **Agent**: backend-dev
 - **Depends on**: P1.3, P1.2
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiClaudeBridge.swift`
@@ -115,6 +115,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 2h
 
 ### P1.5 — Register `AskClaudeTool` in `GigiToolRegistry`
+- **Status**: COMPLETED (verified 2026-04-25 — `GigiToolRegistry.swift:1106-1180` defines `AskClaudeTool`, registered in `all` array, present in `selectRelevant` carry-forward)
 - **Agent**: backend-dev
 - **Depends on**: P1.4
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiToolRegistry.swift`
@@ -135,6 +136,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 30min
 
 ### P1.6 — Intercept `ask_claude` in `GigiAgentEngine` execution loop
+- **Status**: COMPLETED (verified 2026-04-25 — `GigiAgentEngine.swift:57` wires `GigiClaudeBridge.shared.memory = GigiConversationMemory.shared` at init; agent loop dispatches via `tool.execute()` which routes ask_claude → bridge.run() through `AskClaudeTool.execute`)
 - **Agent**: backend-dev
 - **Depends on**: P1.5
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiAgentEngine.swift`
@@ -154,6 +156,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 1h
 
 ### P1.7 — Update Groq prompt (`agentToolPrompt`) with `ask_claude` capabilities + heuristics
+- **Status**: COMPLETED (verified 2026-04-25 — `GigiFoundationAgent.swift:198-212` ESCALATION block describes ask_claude tool, when to use, when not to use, and parameter shape)
 - **Agent**: backend-dev (prompt engineering)
 - **Depends on**: P1.5
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiFoundationAgent.swift`
@@ -181,6 +184,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 45min
 
 ### P1.8 — Sanity-check WebSocket URL build for streaming
+- **Status**: COMPLETED (verified 2026-04-25 — `GigiHarnessStream.makeWebSocketURL()` swaps http→ws/https→wss correctly; verified working end-to-end via Quick Tunnel `wss://*.trycloudflare.com/ws/ios/stream`)
 - **Agent**: qa-tester
 - **Depends on**: P1.4
 - **Target file (read-only)**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiHarnessClient.swift`
@@ -195,6 +199,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 - **Estimate**: 30min
 
 ### P1.9 — Error-path UX polish (AC-5 messages)
+- **Status**: COMPLETED (verified 2026-04-25 — `GigiClaudeBridge.userFacingError(for:)` maps `.notConfigured`/`.transport`/`.badResponse`/`.apiError`/`.decodeFailed` to user-visible English strings; `SoundEngine.play(.error)` fires before return on failure)
 - **Agent**: frontend-dev
 - **Depends on**: P1.4
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiClaudeBridge.swift`
@@ -233,6 +238,7 @@ _Estimated: 4-6 hours · Covers Steps 1-8 of the source plan · Goal: user says 
 _Estimated: 1-2 hours · Covers Steps 9-11 of the source plan · Goal: Settings toggle bypasses Groq entirely._
 
 ### P2.1 — Add Keychain keys for Brain Mode
+- **Status**: COMPLETED · 2026-04-25 · `Key.forceClaude` + `Key.autoFallback` added to `GigiKeychain`, plus `loadBool`/`saveBool` helpers
 - **Agent**: backend-dev
 - **Depends on**: P1.10 (Phase 1 gate green)
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiKeychain.swift`
@@ -247,6 +253,7 @@ _Estimated: 1-2 hours · Covers Steps 9-11 of the source plan · Goal: Settings 
 - **Estimate**: 20min
 
 ### P2.2 — Add Brain Mode section to SettingsView
+- **Status**: COMPLETED · 2026-04-25 · `brainModeSection` added with Force Claude + Auto Fallback toggles, persisted to Keychain via `onChange`
 - **Agent**: frontend-dev
 - **Depends on**: P2.1
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
@@ -267,6 +274,7 @@ _Estimated: 1-2 hours · Covers Steps 9-11 of the source plan · Goal: Settings 
 - **Estimate**: 30min
 
 ### P2.3 — Bypass Groq when Force Claude is on
+- **Status**: COMPLETED · 2026-04-25 · `GigiAgentEngine.process(text:)` short-circuits to `GigiClaudeBridge.shared.run` when `forceClaude == true`; respects `autoFallback` for harness-down case
 - **Agent**: backend-dev
 - **Depends on**: P2.2
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiAgentEngine.swift`
@@ -518,6 +526,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 **Relazione con Phase 4**: il codice Phase 4 (GigiPairScanner, GigiPairingSheet, pair QR flow) è tutto riutilizzato. Cambia solo: (a) backend genera URL Cloudflare invece di URL Tailscale, (b) wizard onboarding aggiunto nel Panel, (c) modalità multiple supportate via `tunnel.mode` in config. Phase 4 Tailscale flow diventa "modalità D Advanced" dentro questo Phase 5.
 
 ### P5.1 — Bundle `cloudflared` binary + auto-download
+- **Status**: COMPLETED · commit `9033dc7` (version fix `d378317`) · NEW `03_HARNESS/server/tunnel/install-cloudflared.js`
 - **Agent**: devops
 - **Depends on**: none (independent of P4.9 user test)
 - **Target files**:
@@ -535,6 +544,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 45min
 
 ### P5.2 — Cloudflared process manager
+- **Status**: COMPLETED · commit `8d0d995` · NEW `03_HARNESS/server/tunnel/cloudflared-manager.js` singleton with `startQuick`/`startNamed`/`stop`/`status`, stdout parsing for trycloudflare URL, restart-loop detection
 - **Agent**: backend-dev
 - **Depends on**: P5.1
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\tunnel\cloudflared-manager.js`
@@ -550,6 +560,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 2h
 
 ### P5.3 — Cloudflare API client
+- **Status**: COMPLETED (scaffolded, will be wired in Phase 5.2 named OAuth) · commit `9033dc7` · NEW `03_HARNESS/server/tunnel/cf-api.js`
 - **Agent**: backend-dev
 - **Depends on**: none (standalone)
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\tunnel\cf-api.js`
@@ -568,6 +579,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 1.5h
 
 ### P5.4 — Setup wizard API endpoints
+- **Status**: COMPLETED · commit `8d0d995` · `GET /api/setup/status` + `POST /api/setup/{quick,lan,manual}/{start,stop}`. Named endpoints return 501 NOT_IMPLEMENTED (deferred to Phase 5.2 OAuth)
 - **Agent**: backend-dev
 - **Depends on**: P5.2, P5.3
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\setup.js`
@@ -579,6 +591,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 2h
 
 ### P5.5 — Setup wizard HTML page
+- **Status**: COMPLETED · commit `8d0d995` · `/setup` served on Panel 7777; 4 cards (quick/lan/named-disabled/manual); 3s auto-refresh
 - **Agent**: frontend-dev (web)
 - **Depends on**: P5.4
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\setup.html`
@@ -590,6 +603,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 2h
 
 ### P5.6 — mDNS advertise (LAN mode)
+- **Status**: COMPLETED · commit `9033dc7` · NEW `03_HARNESS/server/tunnel/mdns.js` + `bonjour-service` dep
 - **Agent**: backend-dev
 - **Depends on**: none
 - **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\server.js` (modifica) + new `tunnel/mdns.js`
@@ -603,6 +617,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 45min
 
 ### P5.7 — iOS mDNS discovery
+- **Status**: COMPLETED · commit `bce814d` · NEW `02_GIGI_APP/GIGI/GigiMDNSDiscovery.swift` with `NWBrowser` for `_gigi._tcp.local` + `NSBonjourServices` added to Info.plist
 - **Agent**: frontend-dev
 - **Depends on**: P5.6
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiMDNSDiscovery.swift`
@@ -618,6 +633,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 1.5h
 
 ### P5.8 — WebSocket heartbeat ping/pong
+- **Status**: COMPLETED · commit `9033dc7` · server `ios-stream.js` 30s sweep; iOS `GigiHarnessClient.swift` (GigiHarnessStream) ping 60s + 2-miss reconnect
 - **Agent**: backend-dev (parallel server + iOS)
 - **Depends on**: none
 - **Target files**:
@@ -633,6 +649,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 1h
 
 ### P5.9 — Config schema extension
+- **Status**: COMPLETED · commit `8d0d995` · `tunnel.{mode,named,quick,lan}` added to `config.example.json`
 - **Agent**: backend-dev
 - **Depends on**: P5.2, P5.4
 - **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\config.json` + loader
@@ -643,6 +660,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 30min
 
 ### P5.10 — Service installer (Windows/macOS/Linux)
+- **Status**: COMPLETED · 2026-04-25 · NEW `server/tunnel/install-service.js` — cross-platform CLI: macOS launchd plist, Linux systemd user unit, Windows Startup VBS. `node install-service.js install|uninstall|status`
 - **Agent**: devops
 - **Depends on**: P5.2
 - **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\tunnel\service-installer.js`
@@ -657,6 +675,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 2h
 
 ### P5.11 — Migration banner in iOS app
+- **Status**: COMPLETED · 2026-04-25 · `migrationBannerIfNeeded` view in `SettingsView.harnessSection`; shows when `pairedBaseURL.host` starts with `100.` (Tailscale CGNAT); persistent dismiss via `UserDefaults("gigi.migration.cf.dismissed")`
 - **Agent**: frontend-dev
 - **Depends on**: P5.5 working E2E
 - **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
@@ -670,6 +689,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 30min
 
 ### P5.12 — Docs: "Getting started guide"
+- **Status**: COMPLETED · 2026-04-25 · NEW `docs/GETTING_STARTED.md` — install harness, pick tunnel mode, run diagnostic, generate QR, sideload IPA, pair, test, troubleshoot, autostart
 - **Agent**: documenter
 - **Depends on**: P5.5 funzionante
 - **Target files** (NEW):
@@ -680,6 +700,7 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 - **Estimate**: 1.5h
 
 ### P5.13 — Phase 5 Test Gate (manual E2E)
+- **Status**: READY (partial — Quick/LAN/manual modes only; Named mode deferred to Phase 5.2) · `.ipa` rebuilt at `C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa` (1.2 MB). Quick Tunnel verified end-to-end: public URL `https://*.trycloudflare.com` reachable from internet with bearer auth, `/api/ios/health` returns 200 in ~310ms. Waiting for USER to run the full manual test matrix.
 - **Agent**: qa-tester + USER CHECKPOINT
 - **Depends on**: P5.1 through P5.12
 - **Environment**: harness fresh install su Windows + dominio CF attivo + iPhone con app GIGI
@@ -696,6 +717,858 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 
 ---
 
+## Phase 5.2 — Named Cloudflare Tunnel with OAuth (DEFERRED)
+
+- **Status**: DEFERRED
+- **Rationale**: Quick Tunnel ships a URL that changes on every `cloudflared` restart; true "setup once, stable URL" requires a **named tunnel**, which needs Cloudflare OAuth app registration + user-owned domain. Deferred to next iteration after user validates the Quick Tunnel flow (P5.13) and confirms the need for URL stability.
+- **Prerequisites**:
+  - User owns a domain routed to Cloudflare (free Cloudflare zone is fine — cost is only registrar fee, ~€3-10/yr)
+  - `cf-api.js` (P5.3 — already scaffolded) gets wired into setup flow
+- **Scope placeholders** (to be broken out when un-deferred):
+  - P5.2.1 — OAuth app registration flow on Cloudflare developer portal + cert retrieval endpoint
+  - P5.2.2 — `POST /api/setup/named/start` implementation (currently returns 501): wires `cf-api.js` → create tunnel → create DNS CNAME → `cloudflared-manager.startNamed(uuid)`
+  - P5.2.3 — Setup wizard: un-disable "Named" card on `/setup`; stepper for domain picker + OAuth browser redirect
+  - P5.2.4 — Persist `{tunnel_uuid, hostname, cert_path}` in `config.json` under `tunnel.named.*`
+  - P5.2.5 — Test gate: named tunnel survives cloudflared restart with stable URL
+- **Estimate (when un-deferred)**: ~6h backend + 1h wizard + 1h QA
+
+---
+
+## Phase 6 — Usability Roadmap (Phase 6 + 6B + 6C) — post-pivot 2026-04-25
+
+_Source plan: `docs/plans/phase-6-usability-roadmap.md` (overview, see §Architectural pivot 2026-04-25) + `docs/plans/panel-observability.md` (6B detail)_
+_Estimated: ~21h total (9 + 10 + 2) · Independent from Phase 1-5 · Goal: GIGI usabile da chi non è Armando._
+
+**Architectural pivot (2026-04-25 evening)**: la vecchia Phase 6A (Setup
+Checklist iOS) è stata **buttata via** dopo che Armando ha testato il
+risultato e ha concluso che era "molto generica" — 3 checkbox manuali ciechi
+(CF account, Claude CLI, harness installed) che l'app non poteva verificare.
+È stata sostituita da un **flusso di pair a due stadi guidato da diagnostica
+live** del PC (new Phase 6, no suffix). La vecchia Phase 6D (preflight
+blocking startup) è stata **fusa** nella new Phase 6: stesse primitive di
+check, ma ora endpoint queryable (`/api/setup/diagnostics`) invece di gate
+bloccante all'avvio.
+
+**Stato sotto-fasi post-pivot**:
+- **Phase 6** (new, iOS + harness) — Diagnostic-driven pair flow · 9 tasks (P6.1 → P6.9) · ~9h
+- **Phase 6A** — DEPRECATED · 3 tasks committati in `872b7d0`/`1235e32`/`0b33062` · cleanup via P6.8 · test gate P6A.4 CANCELLED
+- **6B** (Panel web) — Connections tab · invariato · Card 0 consuma `/api/setup/diagnostics` (P6.3)
+- **6C** (iOS post-pair) — Rich Settings card · invariato
+- **Phase 6D** — FUSED in new Phase 6 · tutti 5 task CANCELLED (P6D.1/2/3/4/5)
+
+Ordering raccomandato: **Phase 6 → 6C → 6B**. Vedi roadmap §3.
+
+---
+
+### ~~Phase 6A — Setup Checklist nell'app iOS~~ (DEPRECATED 2026-04-25 evening)
+
+_~~Goal: utente fresh install capisce in 30s cosa gli serve (PC + harness + Claude Code CLI + account Cloudflare) PRIMA di provare a pair. Stato live su "PC raggiungibile", checkbox manuali sugli altri tre requisiti.~~_
+
+**Status**: DEPRECATED — replaced by new Phase 6 (diagnostic-driven pair flow).
+**Reason**: "Architectural pivot — replaced by Phase 6 diagnostic-driven flow". Checkbox manuali ciechi senza verifica reale; abbandonato la sera stessa del commit.
+**Date**: 2026-04-25 (sera, stesso giorno del commit)
+**Preservazione git history**: i commit `872b7d0`, `1235e32`, `0b33062` NON vengono riscritti. Il file `SetupChecklistView.swift` verrà rimosso via P6.8 (non tramite revert).
+
+#### P6A.1 — NEW `SetupChecklistView.swift` (view SwiftUI)
+- **Status**: DEPRECATED (was COMPLETED 2026-04-25 commit `872b7d0`) — architectural pivot, file will be removed via P6.8
+- **Agent**: frontend-dev
+- **Depends on**: none
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SetupChecklistView.swift`
+- **Anchor**: file-new
+- **Changes**:
+  - `struct SetupChecklistView: View` con:
+    - Header "Benvenuto in GIGI" + paragrafo esplicativo (cosa è GIGI + perché serve un harness)
+    - 4 righe requisito, ognuna: icona stato (`checkmark.circle.fill` verde se done / `circle` grey se pending), titolo, descrizione breve, link action
+    - Requisito 1 — "PC sempre acceso + harness raggiungibile" → live check (health su URL configurato o mDNS discovery); no checkbox
+    - Requisito 2 — "Account Cloudflare (gratuito)" → link `https://dash.cloudflare.com/sign-up` + checkbox manuale "ho creato l'account"
+    - Requisito 3 — "Claude Code CLI installato" → link `https://docs.anthropic.com/claude-code` + checkbox manuale
+    - Requisito 4 — "Harness GIGI installato sul PC" → link a repo README + checkbox manuale
+    - Bottone "Procedi al Pair" in fondo, abilitato SOLO se requisito 1 è ✓ E le 3 checkbox manuali sono spuntate
+    - Tap bottone presenta `GigiPairingSheet`
+  - Stato checkbox persistito in `UserDefaults` con chiavi `gigi.checklist.cf`, `gigi.checklist.claudecli`, `gigi.checklist.harness`
+- **Acceptance criteria**:
+  - [ ] View compila come standalone (Preview renderable)
+  - [ ] Checkbox toggle persiste attraverso relaunch app
+  - [ ] Requisito 1 check live: se URL configurato (Keychain), esegui `GigiHarnessClient.shared.health()`; se risposta .success → ✓; altrimenti ☐
+  - [ ] Bottone "Procedi al Pair" disabilitato se requisito 1 ☐ o qualsiasi checkbox unchecked
+  - [ ] Tap bottone → `sheet(isPresented:) { GigiPairingSheet(...) }` viene presentato
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1.5h
+
+#### P6A.2 — Mount `SetupChecklistView` da `MainTabView` banner
+- **Status**: DEPRECATED (was COMPLETED 2026-04-25 commit `1235e32`) — architectural pivot, wiring will be replaced via P6.7
+- **Agent**: frontend-dev
+- **Depends on**: P6A.1
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\MainTabView.swift`
+- **Anchor**: overlay banner "Collega GIGI al tuo PC" (introdotto in P4.7)
+- **Changes**:
+  - Il banner già esistente (visibile quando `!GigiHarnessClient.shared.isConfigured`) ora presenta `SetupChecklistView` invece di `GigiPairingSheet` direttamente
+  - Aggiungi `@State private var showChecklist = false` e `.sheet(isPresented: $showChecklist) { SetupChecklistView() }`
+  - Tap banner → `showChecklist = true`
+- **Acceptance criteria**:
+  - [ ] Fresh install: tap banner → apre `SetupChecklistView` (non più pairing sheet diretto)
+  - [ ] `SetupChecklistView` → tap "Procedi al Pair" → presenta `GigiPairingSheet`
+  - [ ] Dopo pair riuscito: banner scompare (isConfigured diventa true), flow chiuso
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 30min
+
+#### P6A.3 — Mount "Vedi requisiti" in `SettingsView.harnessSection` quando non paired
+- **Status**: DEPRECATED (was COMPLETED 2026-04-25 commit `0b33062`) — architectural pivot, wiring will be replaced via P6.7
+- **Agent**: frontend-dev
+- **Depends on**: P6A.1
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
+- **Anchor**: `private var harnessSection` line 126
+- **Changes**:
+  - Aggiungi bottone "Vedi requisiti" visibile quando `!harnessIsPaired`, posizionato SOPRA il bottone "Pair con Harness"
+  - Tap → presenta `SetupChecklistView` come sheet (stesso stile di `showPairingSheet`)
+  - Footer della section aggiornato: "Non sei sicuro di cosa serve? Tap 'Vedi requisiti'."
+- **Acceptance criteria**:
+  - [ ] Se non paired: il bottone "Vedi requisiti" è visibile
+  - [ ] Tap → apre `SetupChecklistView`
+  - [ ] Se paired: bottone nascosto (non serve più)
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 30min
+
+#### P6A.4 — TEST GATE — Phase 6A end-to-end
+- **Status**: CANCELLED (2026-04-25 evening) — architectural pivot, new test gate is P6.9 against the diagnostic-driven flow
+- **Agent**: qa-tester
+- **Type**: TEST_GATE
+- **Gate**: HARD — Phase 6C e 6B non sono gated da questo, ma il pair flow via banner sì
+- **Depends on**: P6A.1, P6A.2, P6A.3
+- **Test matrix**:
+  - [ ] Fresh install (Keychain empty) → lancio app → banner "Collega GIGI" visibile
+  - [ ] Tap banner → `SetupChecklistView` appare con tutti i requisiti ☐
+  - [ ] Spunto manualmente i 3 checkbox (CF, claude-cli, harness) senza avere harness running → bottone "Procedi al Pair" resta disabled perché requisito 1 è ☐
+  - [ ] Avvio harness sul PC, torno in app → requisito 1 passa a ✓ → bottone si abilita
+  - [ ] Tap "Procedi al Pair" → `GigiPairingSheet` appare
+  - [ ] Riavvio app: checkbox restano spuntate (persistiti in UserDefaults)
+  - [ ] Settings → non-paired → "Vedi requisiti" visibile e funzionante
+  - [ ] Post-pair: banner scompare, "Vedi requisiti" in Settings non più visibile
+  - [ ] USER CHECKPOINT: Armando valuta wording e layout checklist su device
+- **Acceptance criteria**:
+  - [ ] ≥ 7/8 scenarios PASS
+  - [ ] No crash, no UI layout broken
+- **Gate outcome**: PASS → Phase 6A complete · FAIL → return to P6A.x
+- **Estimate**: 45min
+
+---
+
+### Phase 6B — Panel Connections tab
+
+_Goal: Armando (admin) ispeziona tutto lo stato runtime dell'harness dal Panel + azioni management. Piano completo in `docs/plans/panel-observability.md` (10 ACs, 7 backend task, 3 frontend task, 1 QA). Qui decomposizione numerata._
+
+#### P6B.1 — NEW `server/request-log.js` (ring buffer + middleware)
+- **Status**: COMPLETED · 2026-04-25 · NEW `server/request-log.js` exporting `logRequest`/`recentRequests`/`wrapRequestHandler`; ring buffer 100 FIFO
+- **Agent**: backend-dev
+- **Depends on**: none
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\request-log.js`
+- **Changes**: da plan §B1 — export `logRequest({...})`, `recentRequests()`, `wrapRequestHandler(h)`; ring buffer size 100 FIFO
+- **Acceptance criteria**: AC-8 del plan (tutte le righe)
+- **Estimate**: 45min
+
+#### P6B.2 — Tunnel status aggregator in `api/setup.js`
+- **Status**: COMPLETED · 2026-04-25 · `cloudflared.status()` extended with `restartCount`; aggregator inlined into `panel-connections.js` (lighter than separate module)
+- **Agent**: backend-dev
+- **Depends on**: none
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\setup.js` + `tunnel/cloudflared-manager.js`
+- **Changes**: da plan §B2 — `getTunnelSnapshot()` → `{mode, publicUrl, uptime_s, restartCount, lastError, cloudflaredPid}`; aggiungere restart counter in cloudflared-manager
+- **Acceptance criteria**: AC-2 del plan
+- **Estimate**: 30min
+
+#### P6B.3 — WS clients introspection in `api/ios-stream.js`
+- **Status**: COMPLETED · 2026-04-25 · `activeClients()` exported, tracks `_connectedAt` + `_remoteAddress`; `closeForDevice()` helper for revoke action
+- **Agent**: backend-dev
+- **Depends on**: none
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\ios-stream.js`
+- **Changes**: da plan §B3 — `activeClients()` → `[{deviceId, connected_since, remote_address}]`; track `_connectedAt`
+- **Acceptance criteria**: AC-3 del plan
+- **Estimate**: 30min
+
+#### P6B.4 — NEW `api/panel-connections.js` (aggregator + action router)
+- **Status**: COMPLETED · 2026-04-25 · NEW `server/api/panel-connections.js`; `handlePanelRequest` dispatcher + 6 endpoints (1 GET aggregator + 5 POST actions); loopback gating + CORS for cross-port panel UI fetch
+- **Agent**: backend-dev
+- **Depends on**: P6B.1, P6B.2, P6B.3
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\panel-connections.js`
+- **Changes**: da plan §B4 + §B5 — `knownDevices()` helper + `handlePanelRequest(req, res, {cfg, cfgPath})` dispatcher; 6 endpoint (1 GET + 5 POST action)
+- **Acceptance criteria**: AC-4, AC-6, AC-7 del plan
+- **Estimate**: 3h (1h aggregator + 2h router e 5 action endpoint)
+
+#### P6B.5 — Wire `handlePanelRequest` + `wrapRequestHandler` in `server.js`
+- **Status**: COMPLETED · 2026-04-25 · `handlePanelRequest` wired before `handleSetup` in iOS HTTP server; `recordRequest()` (lightweight equivalent) in router after Bearer for activity feed
+- **Agent**: backend-dev
+- **Depends on**: P6B.4
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\server.js`
+- **Changes**: da plan §B6 — import + route dispatch + wrap ios handlers con request logger
+- **Acceptance criteria**: AC-1 del plan (endpoint risponde)
+- **Estimate**: 20min
+
+#### P6B.6 — Blocked device check in `api/ios-auth.js`
+- **Status**: COMPLETED · 2026-04-25 · `checkDevice` rejects blocked deviceIds with code `DEVICE_REVOKED`; router applies it after Bearer using deviceId from query/X-Device-Id header
+- **Agent**: backend-dev
+- **Depends on**: P6B.4
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\ios-auth.js`
+- **Changes**: da plan §B7 — check `cfg.ios.blocked_device_ids` in Bearer auth path; 403 `DEVICE_REVOKED` se match
+- **Acceptance criteria**: AC-9 del plan
+- **Estimate**: 20min
+
+#### P6B.7 — Panel UI: nuova tab "Connections" HTML
+- **Status**: COMPLETED · 2026-04-25 · tab + section in `index.html` with 4 sub-cards (tunnel, WS, devices, requests)
+- **Agent**: frontend-dev (web)
+- **Depends on**: P6B.5 (endpoint must respond before UI)
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\index.html`
+- **Changes**: da plan §F1 — `<button class="tab" data-tab="connections">`; `<section id="tab-connections">` con 4 sub-card (tunnel, ws, devices, requests)
+- **Acceptance criteria**: AC-1 del plan (tab visibile, click attiva pannello)
+- **Estimate**: 45min
+
+#### P6B.8 — Panel UI: CSS per Connections
+- **Status**: COMPLETED · 2026-04-25 · `.conn-list`, `.conn-row`, `.pill` (green/red), `.conn-requests` table, `.toast` styles appended to `style.css`
+- **Agent**: frontend-dev
+- **Depends on**: P6B.7
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\style.css`
+- **Changes**: da plan §F2 — tabella requests mono font, error rows red, status pills (green/gray/red), device row + action buttons
+- **Acceptance criteria**: stile consistente con tab esistenti
+- **Estimate**: 30min
+
+#### P6B.9 — Panel UI: JS client polling + actions
+- **Status**: COMPLETED · 2026-04-25 · `loadConnections()` fetches `localhost:7779/api/panel/connections` cross-port; 3s polling on tab active, paused on switch; click handlers for stop/restart tunnel, ws disconnect, device revoke, reset-session with `confirm()` + toast feedback
+- **Agent**: frontend-dev
+- **Depends on**: P6B.7, P6B.8
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\app.js`
+- **Changes**: da plan §F3 — `loadConnections()` fetch + render 4 card; polling 3s (pause on tab switch); handler click per tutte 5 azioni destructive con `confirm()` popup; toast feedback
+- **Acceptance criteria**: AC-10 del plan + AC-7 end-to-end via click
+- **Estimate**: 2h
+
+#### P6B.10 — TEST GATE — Phase 6B end-to-end
+- **Status**: PENDING
+- **Agent**: qa-tester
+- **Type**: TEST_GATE
+- **Gate**: HARD — Phase 6D integration sezione preflight in Card tunnel status dipende da questo gate PASS
+- **Depends on**: P6B.1 through P6B.9
+- **Environment**: harness + Panel running, iPhone paired via Quick Tunnel
+- **Test matrix**: tutti 10 scenarios da `docs/plans/panel-observability.md` §Verification Steps
+- **Gate outcome**: PASS → Phase 6B complete · FAIL → debugger + return a specific P6B.x
+- **Estimate**: 1h
+
+---
+
+### Phase 6C — Stato sintetico ricco nelle Settings iOS
+
+_Goal: post-pair, card Settings → Harness mostra modalità tunnel, URL offuscato, ultima richiesta, counter, bottone test latenza. L'utente capisce stato sistema a colpo d'occhio._
+
+#### P6C.1 — NEW `api/ios-status.js` (server endpoint GET /api/ios/status)
+- **Status**: COMPLETED · 2026-04-25 · NEW `server/api/ios-status.js` with in-memory ring buffer + URL redaction; `recordRequest()` wired into `ios-router.js` after Bearer auth; `GET /api/ios/status` route added
+- **Agent**: backend-dev
+- **Depends on**: P6B.1 (riusa `recentRequests()` per popolare `requestsLastHour` e `lastRequestAt`) OR può essere standalone con contatore ad-hoc
+- **Target files**:
+  - NEW `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\ios-status.js`
+  - MODIFY `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\server.js` (route wiring)
+- **Changes**:
+  - Handler Bearer-auth che ritorna JSON:
+    ```json
+    {
+      "tunnelMode": "quick" | "named" | "lan" | "manual",
+      "publicUrlRedacted": "https://abc...xyz.trycloudflare.com",
+      "lastRequestAt": "2026-04-25T14:32:10Z" | null,
+      "requestsLastHour": 42,
+      "uptimeSeconds": 3600
+    }
+    ```
+  - `tunnelMode` letto da `cfg.tunnel.mode`
+  - `publicUrlRedacted` → per URL `https://foobar.trycloudflare.com` mostra `https://foo...com`
+  - `lastRequestAt` e `requestsLastHour` aggregati da `recentRequests()` (se P6B.1 ready) o da contatore semplice in memory
+- **Acceptance criteria**:
+  - [ ] `curl -H "Authorization: Bearer <secret>" http://localhost:7779/api/ios/status` ritorna JSON con tutti i campi
+  - [ ] Richiesta senza Bearer → 401
+  - [ ] `publicUrlRedacted` è davvero offuscato (middle omesso)
+  - [ ] Modalità manual con URL Tailscale `http://100.x.y.z:7779` → `tunnelMode = "manual"` (o "tailscale" se vogliamo dedurre), URL redacted funzionante
+- **Estimate**: 45min
+
+#### P6C.2 — NEW `HarnessStatusCard.swift` (SwiftUI component)
+- **Status**: COMPLETED · 2026-04-25 · NEW `02_GIGI_APP/GIGI/HarnessStatusCard.swift`; `GigiHarnessClient.statusSnapshot()` + `pairedBaseURL` exposed; tunnel mode/icon, redacted URL with copy button, last/last-hour metrics, latency probe, 15s polling
+- **Agent**: frontend-dev
+- **Depends on**: P6C.1
+- **Target files**:
+  - NEW `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\HarnessStatusCard.swift`
+  - MODIFY `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiHarnessClient.swift` (aggiungere `func statusSnapshot() async throws -> HarnessStatus`)
+- **Changes**:
+  - `struct HarnessStatusCard: View`:
+    - Row 1: icona tunnel + label modalità (Quick / Named / LAN / Manual / Tailscale) + colore (verde se running)
+    - Row 2: URL offuscato + bottone "Copia URL completo" (clipboard); toast conferma copia
+    - Row 3: "Ultima richiesta: HH:mm" (o "Nessuna ancora")
+    - Row 4: "X richieste nell'ultima ora"
+    - Row 5: bottone "Test latenza" → chiama `health()` misurando `Date().timeIntervalSince(start) * 1000` → mostra inline "312 ms" (o errore)
+  - Pull `statusSnapshot()` on appear + ogni 15s (Timer) quando visibile
+  - `GigiHarnessClient.statusSnapshot()` decodifica `/api/ios/status` in `HarnessStatus` struct
+- **Acceptance criteria**:
+  - [ ] Card compila e renderizza in Preview con mock status
+  - [ ] Tap "Copia URL" copia URL completo (non offuscato) in clipboard
+  - [ ] Tap "Test latenza" mostra ms effettivi
+  - [ ] Poll 15s effettivo (verifica via log/breakpoint)
+  - [ ] Gestisce stato "non paired" o "error" gracefully (mostra messaggio, non crash)
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1h
+
+#### P6C.3 — Mount `HarnessStatusCard` in `SettingsView.harnessSection`
+- **Status**: COMPLETED · 2026-04-25 · `HarnessStatusCard(deviceName:)` mounted right under the Status row when paired
+- **Agent**: frontend-dev
+- **Depends on**: P6C.2
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
+- **Anchor**: dentro `harnessSection` quando `harnessIsPaired == true`, dopo status line attuale (~line 154)
+- **Changes**:
+  - Sostituisci la status line semplice `"✓ Connesso a \(deviceName)"` con `HarnessStatusCard(deviceName: pairedDeviceName)`
+  - Mantieni la status line minimale come fallback se la card fallisce il pull (`AsyncState<HarnessStatus>` pattern)
+- **Acceptance criteria**:
+  - [ ] Settings → Harness (paired) → card ricca visibile invece di sola status line
+  - [ ] Se harness down: card mostra "Impossibile caricare stato — verifica pairing"
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 30min
+
+#### P6C.4 — TEST GATE — Phase 6C end-to-end
+- **Status**: PENDING
+- **Agent**: qa-tester
+- **Type**: TEST_GATE
+- **Gate**: HARD — nessuna fase dipende da questo gate, ma USER CHECKPOINT per validare UX
+- **Depends on**: P6C.1, P6C.2, P6C.3
+- **Test matrix**:
+  - [ ] `curl` endpoint → tutti i campi presenti, latenza < 50ms
+  - [ ] Settings post-pair con harness running → card mostra modalità, URL, ultima richiesta recente
+  - [ ] Invio chat dall'iPhone → Settings → card aggiornata entro 15s (request count incrementa)
+  - [ ] Tap "Test latenza" → mostra ms realistici (<500 su LAN, <1500 su CF)
+  - [ ] Tap "Copia URL" → clipboard contiene URL completo (verifica via paste in Notes)
+  - [ ] Kill harness → card mostra errore/stato degradato (no crash)
+  - [ ] Restart harness → card torna healthy nel polling successivo
+  - [ ] Modalità manual/Tailscale → card riconosce e mostra correttamente
+  - [ ] USER CHECKPOINT: Armando valuta leggibilità card
+- **Gate outcome**: PASS → Phase 6C complete · FAIL → return to P6C.x
+- **Estimate**: 45min
+
+---
+
+### Phase 6 (NEW, post-pivot 2026-04-25) — Diagnostic-driven pair flow
+
+_Goal: sostituire la vecchia Setup Checklist (P6A, buttata) con un pair flow a due stadi dove l'iPhone polla diagnostica live dell'harness e mostra ✓/⚠/❌ per ogni check. Sostituisce anche l'ex Phase 6D (preflight blocking startup): stesse primitive di check, endpoint queryable invece di gate bloccante._
+_Consume path: `/api/setup/diagnostics` (P6.3) · used by iPhone pre-pair (P6.5) + Panel Card 0 (6B post-merge)._
+_Estimated: ~9h totali · Ordering: backend (P6.1 → P6.2 → P6.3) PRIMA; iOS frontend (P6.4 → P6.8) DOPO; test gate (P6.9) ultimo._
+
+**Two-stage pair (contract)**:
+1. **Stage 1 — Bootstrap**: utente scansiona QR → URL+secret in Keychain → `/api/ios/health` 200 OK → `isConfigured = true` MA `isReady = false`.
+2. **Stage 2 — Diagnostic gate**: `SetupDiagnosticView` polla `/api/setup/diagnostics` ogni 5s → utente fixa problemi in terminal → vede ✓ live.
+3. **Stage 3 — Finalize**: quando tutti i check `severity:"critical"` sono ok, button "Finalize pair" si abilita → tap → `isReady = true` → banner sparisce.
+
+**Decisione tecnica — `isConfigured` vs `isReady`**:
+- `GigiHarnessClient.isConfigured` (esistente, semantica legacy preservata) = URL+secret in Keychain.
+- `GigiHarnessClient.isReady` (NEW, introdotta in P6.4) = `isConfigured && lastDiagnosticsSnapshot?.allCriticalOk == true`.
+- Banner `MainTabView` e gate chat input usano `isReady` (non più solo `isConfigured`).
+- Settings "Diagnostica harness" button è primario finché `!isReady`.
+- `lastDiagnosticsSnapshot` persistito in `AppStorage` con TTL 5 min; refresh on app foreground + on SetupDiagnosticView dismiss.
+
+**10 check tecnici (definitivi, implementati in P6.1)**:
+
+| Check ID | Severity | Cosa testa | Hint |
+|---|---|---|---|
+| `claude_cli_installed` | critical | `claude --version` exit 0 | "Install Claude Code from claude.com/code" |
+| `claude_cli_authenticated` | critical | `claude --print --model haiku "ok"` timeout 10s | "Run `claude auth login` in your terminal" |
+| `config_secret_strength` | critical | secret >= 32 chars, no spaces | "Regenerate secret with `openssl rand -hex 16`" |
+| `tunnel_mode_active` | critical | cfg.tunnel.mode != "manual" | "Open localhost:7777/setup and pick Quick or Named" |
+| `tunnel_running` | critical | cloudflared.status().running | "Restart tunnel from /setup" |
+| `cloudflared_binary` | warning | `~/.gigi/bin/cloudflared` exists+executable | "Auto-downloaded on first tunnel start" |
+| `outbound_https` | warning | fetch `https://api.cloudflare.com/client/v4/` < 5s | "Check Wi-Fi/Ethernet" |
+| `port_7779_bound` | info | server listening | (debug only) |
+| `disk_space` | info | logs dir parent > 2GB free | "Low disk space" |
+| `last_request_ago` | info | timestamp ultima request iOS | (informativo) |
+
+---
+
+#### P6.1 — NEW `server/preflight/checks.js` (10 async check functions)
+- **Status**: COMPLETED · commit `6b9b04d` · 10 check functions implemented with timeouts, severity classification, autoFixable annotations
+- **Agent**: backend-dev
+- **Depends on**: none
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\preflight\checks.js`
+- **Anchor**: file-new
+- **Changes**:
+  - Export 10 `async` functions, una per check ID (vedi tabella sopra), ognuna con timeout indipendente: `checkClaudeCliInstalled`, `checkClaudeCliAuthenticated`, `checkConfigSecretStrength(cfg)`, `checkTunnelModeActive(cfg)`, `checkTunnelRunning(manager)`, `checkCloudflaredBinary()`, `checkOutboundHttps()`, `checkPort7779Bound(server)`, `checkDiskSpace()`, `checkLastRequestAgo(requestLog?)`
+  - Ogni funzione ritorna `{id, label, severity, ok, hint?, action?, durationMs}` — **shape stabile** consumata da P6.2 runner e P6.3 endpoint
+  - Timeout: `claude_cli_installed` 3s, `claude_cli_authenticated` 10s, `outbound_https` 5s, resto sincroni o <500ms
+  - `action?` è una stringa opzionale che l'iPhone può mostrare come "tap to copy" (es: `"claude auth login"`)
+- **Acceptance criteria**:
+  - [ ] Tutte 10 funzioni exportate, callable standalone
+  - [ ] Ogni funzione con harness running + prerequisiti OK → `ok: true`
+  - [ ] Ogni funzione con condizione di fallimento nota → `ok: false, hint: "<stringa utile>"`
+  - [ ] Nessuna funzione impiega >11s anche worst-case (timeout aggregato ok)
+  - [ ] Nessuna funzione throwa — errori diventano `ok: false` con hint
+- **Estimate**: 2h
+
+---
+
+#### P6.2 — NEW `server/preflight/runner.js` (parallel runner + classification)
+- **Status**: COMPLETED · commit `6b9b04d` · `runDiagnostics` aggregator with Promise.allSettled, severity-sorted output, `allCriticalOk` shortcut
+- **Agent**: backend-dev
+- **Depends on**: P6.1
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\preflight\runner.js`
+- **Changes**:
+  - Export `async function runDiagnostics({cfg, tunnelManager, server, requestLog}) → DiagnosticsReport`
+  - Esegue tutti 10 check in `Promise.allSettled` (parallel) per minimizzare latenza totale (~11s worst-case → ~10s con parallel)
+  - Aggrega risultati in `DiagnosticsReport`:
+    ```js
+    {
+      generatedAt: "2026-04-25T22:00:00Z",
+      durationMs: 9800,
+      checks: [...CheckResult],
+      summary: {
+        critical: { total, ok, failed },
+        warning: { total, ok, failed },
+        info: { total, ok, failed },
+      },
+      allCriticalOk: boolean,  // shortcut per client
+    }
+    ```
+  - Ordina `checks` per severity (critical → warning → info), poi per `ok` (failed first)
+- **Acceptance criteria**:
+  - [ ] `runDiagnostics(...)` ritorna DiagnosticsReport shape completa
+  - [ ] Execution tempo <12s in totale anche con tutti check slow
+  - [ ] `allCriticalOk` è true sse ogni check `critical` ha `ok: true`
+  - [ ] Check falliti non fanno collassare il report (Promise.allSettled)
+- **Estimate**: 45min
+
+---
+
+#### P6.3 — NEW `server/api/diagnostics.js` (Bearer-authed endpoint)
+- **Status**: COMPLETED · commit `6b9b04d` · `GET /api/setup/diagnostics` Bearer-authed with 5s in-memory cache, `?refresh=1` to bypass
+- **Agent**: backend-dev
+- **Depends on**: P6.2
+- **Target files**:
+  - NEW `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\diagnostics.js`
+  - MODIFY `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\server.js` (route wiring)
+- **Changes**:
+  - Handler `async function handleDiagnosticsRequest(req, res, {cfg, cfgPath, tunnelManager, server})`:
+    - Metodo: GET only; altri → 405
+    - Auth: Bearer `cfg.ios.shared_secret` via esistente `checkBearer()` (riusa da `ios-auth.js`)
+    - Body: chiama `runDiagnostics(...)` da P6.2, ritorna JSON del DiagnosticsReport
+    - Caching: 5s in-memory (evita flood da phone che polla), key = nessuna (global)
+  - Route: `GET /api/setup/diagnostics` wired before `handleIosRequest` in `server.js`
+  - Il PANEL (loopback) può anche chiamarlo via token zero-auth locale? **Decisione**: no, anche loopback usa Bearer (semplifica). Panel 6B Card 0 passa `Authorization: Bearer <cfg.ios.shared_secret>` letto server-side.
+- **Acceptance criteria**:
+  - [ ] `curl -H "Authorization: Bearer <secret>" https://<tunnel>/api/setup/diagnostics` → JSON con 10 check
+  - [ ] `curl` senza Bearer → 401
+  - [ ] Cache 5s: due call consecutive <5s apart restituiscono identico timestamp
+  - [ ] Risposta <12s p95 (dipende da P6.2 runner)
+- **Estimate**: 45min
+
+---
+
+#### P6.4 — `GigiHarnessClient.swift` — `diagnostics()` method + `DiagnosticsReport` + `isReady`
+- **Status**: COMPLETED · commit `6b9b04d` · `DiagnosticsReport`/`DiagnosticsCheck` Codable structs, `diagnostics(forceRefresh:)` method, `isReady` computed property, `cacheDiagnostics` setter
+- **Agent**: frontend-dev
+- **Depends on**: P6.3
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiHarnessClient.swift`
+- **Changes**:
+  - NEW struct `DiagnosticsReport: Codable` matching P6.2 shape (`generatedAt`, `durationMs`, `checks: [CheckResult]`, `summary`, `allCriticalOk`)
+  - NEW struct `CheckResult: Codable` (`id`, `label`, `severity`, `ok`, `hint?`, `action?`, `durationMs`)
+  - NEW enum `CheckSeverity: String, Codable { case critical, warning, info }`
+  - NEW method `func diagnostics() async throws -> DiagnosticsReport` — GET `/api/setup/diagnostics` con Bearer; timeout 15s
+  - NEW computed property `var isReady: Bool` = `isConfigured && (lastDiagnosticsSnapshot?.allCriticalOk ?? false)`
+  - NEW `@Published var lastDiagnosticsSnapshot: DiagnosticsReport?` persistito via `AppStorage` (encoded JSON) con TTL 5 min
+  - `diagnostics()` aggiorna `lastDiagnosticsSnapshot` a ogni successful fetch
+- **Acceptance criteria**:
+  - [ ] `diagnostics()` decodifica response JSON correttamente
+  - [ ] `isReady` è false se `isConfigured == false`
+  - [ ] `isReady` è false se `isConfigured == true` ma snapshot manca o ha critical failed
+  - [ ] `isReady` è true sse tutti critical sono ok
+  - [ ] Snapshot persiste attraverso relaunch (encoded in AppStorage)
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 45min
+
+---
+
+#### P6.5 — NEW `SetupDiagnosticView.swift` (polling UI con severity colors + copyable actions)
+- **Status**: COMPLETED · commit `6b9b04d` + `410810b` (Recheck button, auto-expand failures, countdown) · poll loop 5s, severity icons, copyable hints, Finalize gated on allCriticalOk
+- **Agent**: frontend-dev
+- **Depends on**: P6.4
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SetupDiagnosticView.swift`
+- **Changes**:
+  - `struct SetupDiagnosticView: View` con:
+    - Header: "Almost there — let's verify your PC is ready" + subtitle con deviceName corrente
+    - List scrollabile di check rows ordinati critical → warning → info, ognuno:
+      - Icona stato: ✓ verde (ok), ⚠️ gialla (warning+fail), ❌ rossa (critical+fail), spinner se ancora caricando primo snapshot
+      - Label + severity pill
+      - Hint (se fail) in secondary text
+      - Action button (se presente) → tap copia stringa in clipboard + toast "Copied"
+    - Footer: polling indicator "Checking every 5 seconds · last updated XX:XX:XX"
+    - CTA button "Finalize pair" in fondo, abilitato SOLO se `report?.allCriticalOk == true`; tap → chiude view + flippa `isReady` (via P6.6 wiring)
+    - CTA secondario "Cancel" → chiude view senza flippare nulla
+  - Timer `every 5s` chiama `GigiHarnessClient.shared.diagnostics()` e ricarica report
+  - Handle errori (harness unreachable, 401): mostra banner rosso "Can't reach PC — check pairing URL"
+- **Acceptance criteria**:
+  - [ ] View compila + Preview renderable con mock DiagnosticsReport
+  - [ ] Polling 5s effettivo (verifica via log)
+  - [ ] Tap action button copia in UIPasteboard + mostra toast
+  - [ ] "Finalize pair" disabled quando `allCriticalOk == false`
+  - [ ] Tap "Finalize pair" → callback che trigger state change a stage 3 in GigiPairingSheet
+  - [ ] Errore di rete: view non crasha, mostra stato degraded
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 2h
+
+---
+
+#### P6.6 — `GigiPairingSheet.swift` — three-stage state machine (bootstrap → diagnostic → finalize)
+- **Status**: COMPLETED · commit `6b9b04d` · `.scanning → .validating → .diagnostic → .success/.failure` state machine; rollback on health failure; SetupDiagnosticView mounted as fullscreen child in `.diagnostic` stage
+- **Agent**: frontend-dev
+- **Depends on**: P6.5
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiPairingSheet.swift`
+- **Changes**:
+  - Aggiungi stati `.diagnostic` e `.finalizing` alla state machine esistente (già ha `.scanning → .validating → .success/.failure`)
+  - Flow nuovo:
+    1. `.scanning` → QR scan
+    2. `.validating` → salva URL+secret in Keychain, chiama `/api/ios/health`
+    3. Su `200 OK`: **NON** flippa `isReady` ancora. Transizione a `.diagnostic` → presenta `SetupDiagnosticView`.
+    4. Quando utente tap "Finalize pair" in SetupDiagnosticView: transizione a `.finalizing` → flippa `GigiHarnessClient.isReady = true` (equivalente a: salva flag `AppStorage("gigi.harnessReady") = true`).
+    5. `.success` → chiude sheet, banner sparisce.
+  - **Rollback path**: se utente cancella da `.diagnostic`, URL+secret restano in Keychain (pair linked ma non ready). Banner resta, utente può riaprire SetupDiagnosticView da Settings in qualunque momento.
+- **Acceptance criteria**:
+  - [ ] QR scan → health check → diagnostic → finalize flow end-to-end (tutti critical ok) → banner sparisce
+  - [ ] QR scan → health check → diagnostic con critical fail → utente chiude → banner RESTA + URL/secret persistono in Keychain
+  - [ ] Riapro SetupDiagnosticView da Settings → stesso flow, se ora critical ok → Finalize abilita → banner sparisce
+  - [ ] `isReady` flippa a true SOLO in `.finalizing` stage (non in `.validating`)
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 1h
+
+---
+
+#### P6.7 — Wire `SetupDiagnosticView` in `MainTabView.swift` + `SettingsView.swift` (deprecate ChecklistView wiring)
+- **Status**: COMPLETED · commit `6b9b04d` · MainTabView banner gates on `pairingState.isConfigured` (post-P6.14 fix); SettingsView shows "Diagnostica harness" button when paired
+- **Agent**: frontend-dev
+- **Depends on**: P6.5, P6.6
+- **Target files**:
+  - MODIFY `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\MainTabView.swift`
+  - MODIFY `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
+- **Changes**:
+  - **MainTabView**:
+    - Banner visibility: `!GigiHarnessClient.shared.isReady` (era `!isConfigured`) — banner mostra anche quando pair linked ma diagnostic non passed
+    - Tap banner: se `isConfigured == false` → apri `GigiPairingSheet` (flow normale); se `isConfigured == true` ma `isReady == false` → apri direttamente `SetupDiagnosticView`
+    - Rimuovi `@State showChecklist` e lo sheet `SetupChecklistView()` (introdotti in P6A.2)
+  - **SettingsView**:
+    - Rimuovi bottone "Vedi requisiti" (P6A.3) e `@State showChecklistSheet`
+    - Aggiungi bottone "Diagnostica harness" quando `isConfigured == true` (sempre visibile post-pair, non solo quando `!isReady`) → tap apre `SetupDiagnosticView`
+    - Se `isConfigured == true && !isReady`: bottone è primary + badge "⚠️ setup incomplete"
+    - Se `isReady == true`: bottone è secondary
+    - Footer copy aggiornato: "Run diagnostics any time to verify your PC is healthy."
+- **Acceptance criteria**:
+  - [ ] Fresh install: banner → tap → GigiPairingSheet (scan QR)
+  - [ ] Post-QR-scan ma pre-finalize: banner resta → tap → SetupDiagnosticView direttamente (skip QR)
+  - [ ] Post-finalize: banner sparisce
+  - [ ] Settings post-pair (isReady): bottone "Diagnostica harness" secondary visibile
+  - [ ] Settings post-pair-but-unready: bottone primary + badge warning
+  - [ ] Zero riferimenti residui a `SetupChecklistView` in questi due file (grep-clean)
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+- **Estimate**: 30min
+
+---
+
+#### P6.8 — DELETE `SetupChecklistView.swift` (cleanup of deprecated P6A)
+- **Status**: COMPLETED · commit `6b9b04d` · file deleted, no references in MainTabView/SettingsView
+- **Agent**: frontend-dev
+- **Depends on**: P6.7 (verified that MainTabView + SettingsView no longer reference ChecklistView)
+- **Target file** (DELETE): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SetupChecklistView.swift`
+- **Changes**:
+  - `git rm 02_GIGI_APP/GIGI/SetupChecklistView.swift`
+  - Aggiorna `GIGI.xcodeproj/project.pbxproj` se il file è listato (rimuovi reference build)
+  - Commit solo: `revert: refactor pre-pair flow to diagnostic-driven (remove SetupChecklistView)`. **Non** `git revert 872b7d0/1235e32/0b33062` — storia preservata, questa è una rimozione forward.
+- **Acceptance criteria**:
+  - [ ] File `SetupChecklistView.swift` non più presente nel repo
+  - [ ] Grep `SetupChecklistView` nell'intera `02_GIGI_APP/` ritorna zero match
+  - [ ] `GIGI.xcodeproj` apre senza warning/error su reference mancante
+  - [ ] Build verify via ssh → BUILD SUCCEEDED
+  - [ ] Commit history mostra `872b7d0` → ... → `0b33062` → ... → delete-commit (lineare, no rewrite)
+- **Estimate**: 10min
+
+---
+
+#### P6.9 — TEST GATE — Phase 6 end-to-end (diagnostic-driven pair)
+- **Status**: PENDING
+- **Agent**: qa-tester + USER CHECKPOINT
+- **Type**: TEST_GATE
+- **Gate**: HARD — chiude la nuova Phase 6; sblocca P6B.10/P6C.4 dipendenze SOFT
+- **Depends on**: P6.1, P6.2, P6.3, P6.4, P6.5, P6.6, P6.7, P6.8
+- **Environment**: harness running su PC, iPhone fresh install con `.ipa` post-P6.8
+- **Test matrix (simula utente con harness rotto in vari modi)**:
+  - [ ] **Scenario A — happy path**: harness tutto OK → QR scan → diagnostic view mostra 10/10 check ✓ → Finalize abilitato → tap → banner sparisce
+  - [ ] **Scenario B — Claude not authed**: utente ha installato Claude CLI ma mai fatto auth login → scan QR → diagnostic mostra `claude_cli_authenticated` ❌ critical con hint "Run `claude auth login`" + action copiabile → utente esegue `claude auth login` in terminal PC → **entro 5s** (next poll) il check passa a ✓ → Finalize abilita
+  - [ ] **Scenario C — tunnel manual**: `cfg.tunnel.mode = "manual"` → `tunnel_mode_active` ❌ critical + hint "Open /setup and pick Quick or Named" → utente va su `localhost:7777/setup`, picks Quick, starts tunnel → entro 5s `tunnel_mode_active` + `tunnel_running` passano a ✓
+  - [ ] **Scenario D — weak secret**: secret = "test1234" (8 chars) → `config_secret_strength` ❌ critical + hint + action `openssl rand -hex 16` → utente rigenera, riavvia harness, ri-fa pair con nuovo QR → check pass
+  - [ ] **Scenario E — no outbound HTTPS**: simula killing WiFi sul PC → `outbound_https` ⚠️ warning + `tunnel_running` probabilmente ❌ → reattiva WiFi → entro 5s-15s check torna verde
+  - [ ] **Scenario F — persistence**: utente arriva a diagnostic con tutti critical ok MA chiude app (swipe up) senza tap Finalize → riapre app → banner RESTA (isReady false) → Settings > Diagnostica harness → diagnostic view → tap Finalize → banner sparisce
+  - [ ] **Scenario G — regression**: pair fatto e completato pre-pivot (esiste utente paired con SetupChecklistView nella vecchia build) → upgrade `.ipa` → prima apertura → banner può riapparire se isReady è false (snapshot assente) → diagnostic gira → passa → Finalize → banner sparisce. Accettabile one-time friction.
+  - [ ] **No crash, no UI layout broken, no log spam**
+  - [ ] **USER CHECKPOINT**: Armando valuta wording, copy, severity colors, tempi di convergenza live
+- **Acceptance criteria**:
+  - [ ] ≥ 6/7 scenarios PASS
+  - [ ] Scenario B live-convergence (fixa in terminal → iPhone vede ✓ entro 5s) è **mandatory PASS** (dimostra il valore del flow)
+  - [ ] USER CHECKPOINT sign-off from Armando
+- **Gate outcome**: PASS → Phase 6 complete · FAIL → debugger report + route a specific P6.x
+- **Estimate**: 1h
+
+---
+
+### Phase 6 extension — Auto-fix + difficulty tiers + guided walkthroughs (P6.10 → P6.13)
+
+_Source plan: `docs/plans/auto-fix-and-difficulty-tiers.md`_
+_Goal: estendere il diagnostic-driven flow con auto-fix server-side, quiz/badge nel Panel setup, e walkthrough inline per i check che richiedono intervento umano._
+
+#### P6.10.1 — `preflight/auto_fixers.js`
+- **Status**: COMPLETED · commit `1e69bef`
+- **Agent**: backend-dev
+- **Depends on**: P6.3
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\preflight\auto_fixers.js`
+- **Outcome**: registry di fixer per `config_secret_strength`, `tunnel_mode_active`, `tunnel_running`, `cloudflared_binary`, `claude_cli_authenticated`; batch runner seriale con timeout per-fixer e summary aggregata.
+
+#### P6.10.2 — `api/autofix.js`
+- **Status**: COMPLETED · commit `1e69bef`
+- **Agent**: backend-dev
+- **Depends on**: P6.10.1
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\autofix.js`
+- **Outcome**: `POST /api/setup/autofix` Bearer-authed, body `{checkIds}`, risposta `{ok, data:{results,summary}}`, esecuzione seriale per progress UI leggibile.
+
+#### P6.10.3 — `checks.js` / `runner.js` add `autoFixable`
+- **Status**: COMPLETED · commit `1e69bef`
+- **Agent**: backend-dev
+- **Depends on**: P6.10.1
+- **Target files**:
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\preflight\checks.js`
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\preflight\runner.js`
+- **Outcome**: `DiagnosticsCheck` annotato con `autoFixable` derivato dal registry fixers, riusato dalla UI iOS senza round-trip aggiuntivo.
+
+#### P6.10.4 — Panel `/setup` difficulty tiers + "Help me choose"
+- **Status**: COMPLETED · commit `f9aa20c`
+- **Agent**: frontend-dev (web)
+- **Depends on**: P5.5
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\setup.html`
+- **Outcome**: badge Easy / Recommended / Local-only / Advanced su tutte le card, sezione quiz espandibile "Help me choose", pulse/highlight sulla card consigliata, stato open/closed persistito in `sessionStorage`.
+
+#### P6.10.5 — Panel home link to `/setup`
+- **Status**: COMPLETED · 2026-04-25 · added Setup CTA in `index.html` header controls linking to `/setup`
+- **Agent**: frontend-dev (web)
+- **Depends on**: P6.10.4
+- **Target files**:
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\index.html`
+  - `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\app.js`
+- **Acceptance criteria**:
+  - [ ] Control Panel home/status surface exposes a clear link or CTA to `/setup`
+  - [ ] Copy references the setup quiz / tunnel mode chooser coherently
+
+#### P6.11.1 — `DiagnosticsCheck` add `autoFixable`
+- **Status**: COMPLETED · commit `b60e414`
+- **Agent**: frontend-dev
+- **Depends on**: P6.10.3
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiHarnessClient.swift`
+- **Outcome**: iOS diagnostics model decodes `autoFixable`, plus autofix report models and `clearPair()` helper for secret-rotation re-pair flow.
+
+#### P6.11.2 — `SetupDiagnosticView` autofix banner + progress
+- **Status**: COMPLETED · commit `b60e414`
+- **Agent**: frontend-dev
+- **Depends on**: P6.11.1
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SetupDiagnosticView.swift`
+- **Outcome**: sticky "Fix all automatically" banner, secret-rotate confirm popup, per-step autofix progress card, diagnostics refresh after batch.
+
+#### P6.11.3 — Re-pair flow post-secret-rotate
+- **Status**: COMPLETED · commit `b60e414`
+- **Agent**: frontend-dev
+- **Depends on**: P6.11.2
+- **Target files**:
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiHarnessClient.swift`
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SetupDiagnosticView.swift`
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
+- **Outcome**: autofix can emit `needsRepair:true`; iOS clears persisted pair state, resets the Settings form state, dismisses diagnostics, and routes the user back into re-pair.
+
+#### P6.12.1 — `Walkthroughs.swift`
+- **Status**: COMPLETED (2026-04-25 Ralph) · remote iOS build `BUILD SUCCEEDED`
+- **Agent**: frontend-dev
+- **Depends on**: P6.11.2
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\Walkthroughs.swift`
+- **Acceptance criteria**:
+  - [ ] Static dictionary of walkthroughs for `claude_cli_installed`, `claude_cli_authenticated`, `outbound_https`, `disk_space`, fallback
+  - [ ] Supports plain text steps and copyable command steps
+  - [ ] English copy consistent with current Phase 6 UX
+
+#### P6.12.2 — Inline walkthrough rendering in `SetupDiagnosticView`
+- **Status**: COMPLETED (2026-04-25 Ralph) · remote iOS build `BUILD SUCCEEDED`
+- **Agent**: frontend-dev
+- **Depends on**: P6.12.1
+- **Target file**: `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SetupDiagnosticView.swift`
+- **Acceptance criteria**:
+  - [ ] Expanded failing rows can reveal "Show full instructions"
+  - [ ] Copyable walkthrough steps expose copy-to-clipboard buttons
+  - [ ] `claude_cli_authenticated` still shows walkthrough after semi-auto fix returns `needsUser`
+  - [ ] Fallback walkthrough available when a specific mapping is absent
+
+#### P6.13 — TEST GATE — Auto-fix + walkthrough UX
+- **Status**: PENDING
+- **Agent**: qa-tester + USER CHECKPOINT
+- **Type**: TEST_GATE
+- **Depends on**: P6.10.1, P6.10.2, P6.10.3, P6.10.4, P6.11.1, P6.11.2, P6.11.3, P6.12.1, P6.12.2
+- **Test matrix**:
+  - [ ] DiagnosticView with multiple failing checks shows autofix banner with correct split fixable/manual
+  - [ ] Autofix without secret rotation runs with progress and refreshes diagnostics
+  - [ ] Secret rotation path forces re-pair flow cleanly
+  - [ ] `claude_cli_authenticated` walkthrough remains accessible after autofix returns `needsUser`
+  - [ ] Panel `/setup` shows badges + quiz and guides to the right card
+  - [ ] USER CHECKPOINT on wording / clarity / friction
+
+
+#### P6.14 ? Cold-start pairing banner persistence
+- **Status**: COMPLETED (2026-04-25 Ralph) ? remote iOS build `BUILD SUCCEEDED` ? architect verification APPROVED
+- **Agent**: ralph / frontend-dev
+- **Type**: BUGFIX
+- **Source plan**: `.omx/plans/ralplan-persistent-pairing-banner-20260425T051449Z.md`
+- **Depends on**: P6.11.3, P6.12.2
+- **Target files**:
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiHarnessClient.swift`
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\GigiKeychain.swift`
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\MainTabView.swift`
+  - `C:\Users\arman\Desktop\GIGI\02_GIGI_APP\GIGI\SettingsView.swift`
+- **Problem**: dopo force-close/reopen dell'app iOS il banner viola `Connect GIGI to your PC` pu? riapparire anche se il pairing ? gi? stato configurato.
+- **Implementation plan**:
+  - [x] Centralize persisted harness pairing evaluation in a single `HarnessPairingState` API.
+  - [x] Separate persisted pairing (`configured`) from runtime diagnostics readiness (`isReady`).
+  - [x] Make `MainTabView` and `SettingsView` consume the same pairing evaluator.
+  - [x] Add an internal debug/status reason for incomplete pairing states (`missingBaseURL`, `invalidBaseURL`, `missingSecret`).
+- **Acceptance criteria**:
+  - [x] After QR pair + finalize, force-kill/reopen with valid Keychain URL+secret does not render the top pairing banner (covered by centralized persisted-state logic; pending user device re-test).
+  - [x] Removing pairing in Settings makes the banner appear again (Keychain delete notification + shared evaluator).
+  - [x] Settings and MainTabView agree on configured/not-configured state after cold start (both read `pairingState`).
+  - [x] Invalid/partial Keychain state has a precise debug reason.
+  - [x] Remote iOS build succeeds (`BUILD SUCCEEDED`).
+
+
+---
+
+### ~~Phase 6D — Pre-flight diagnostics nell'harness Node~~ (FUSED into Phase 6 on 2026-04-25 evening)
+
+_~~Goal: all'avvio del backend, verifica che claude-cli, config, porte, logs siano tutti a posto. Errori critici → exit(1) con messaggio chiaro. Output esposto come endpoint `/api/panel/preflight` consumato da Phase 6B Card tunnel status.~~_
+
+**Status**: FUSED into new Phase 6.
+**Reason**: blocking startup gate era user-hostile (utente con Claude session scaduta non poteva nemmeno aprire il Panel per vedere cosa c'era che non andava). La stessa logica di check è migrata in `/api/setup/diagnostics` (P6.3) come endpoint queryable in qualunque momento, consumato sia dall'iPhone pre-pair (P6.5) sia dal Panel Card 0 (6B post-merge).
+**Date**: 2026-04-25 evening.
+**Primitives migrate**: check claude CLI, config secret, ports, cloudflared binary, logs dir, outbound HTTPS → riusati in P6.1 `preflight/checks.js`.
+**Primitives dropped**: blocking `exit(1)` behavior; `--skip-preflight` flag; dedicated `/api/panel/preflight` endpoint; unit test file `test/preflight.test.js` (deferred — se necessario, parte di P6.1 QA).
+
+#### P6D.1 — NEW `server/preflight.js` (runPreflight aggregator)
+- **Status**: CANCELLED (2026-04-25 evening — fused into P6.1 + P6.2)
+- **Agent**: backend-dev
+- **Depends on**: none
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\preflight.js`
+- **Changes**:
+  - `export async function runPreflight(cfg, cfgPath)` → esegue sequenziale tutti i check, return `{passed: boolean, critical: Check[], warnings: Check[], details: Check[]}`
+  - Check implementati:
+    - `checkClaudeCli()` → `execSync('claude --version')`; critical se fallisce
+    - `checkConfig(cfg)` → verifica campi required (`ios.shared_secret`, `server.port`, `server.panel_port`); critical se manca
+    - `checkPort(port)` × 2 (7777, 7779) → tenta bind su 127.0.0.1; critical se occupato
+    - `checkLogsDir()` → fs.accessSync(`logs/`, W_OK); critical se non writeable
+    - `checkCloudflared(cfg)` → verifica `~/.gigi/bin/cloudflared` presente se `tunnel.mode !== "manual"`; warning se missing
+  - Ogni Check ha shape `{name, status: 'pass' | 'fail', severity: 'critical' | 'warning', message, fixHint}`
+  - Scrivi ultimo snapshot in `logs/preflight.json` con timestamp ISO
+- **Acceptance criteria**:
+  - [ ] `runPreflight(mockCfgOk)` → `passed: true, critical: []`
+  - [ ] `runPreflight({}) ` (config vuoto) → `critical.length > 0` con nomi campi mancanti
+  - [ ] Con porta 7779 occupata → critical check con messaggio "Porta 7779 già in uso (PID X)"
+  - [ ] Con `claude` non nel PATH → critical check con messaggio "Claude Code CLI non trovato. Installa da https://docs.anthropic.com/claude-code"
+  - [ ] `logs/preflight.json` scritto correttamente
+- **Estimate**: 1.5h
+
+#### P6D.2 — NEW `server/test/preflight.test.js` (unit test)
+- **Status**: CANCELLED (2026-04-25 evening — fused/deferred; new check primitives in P6.1 don't ship with unit tests for v1)
+- **Agent**: qa-tester
+- **Depends on**: P6D.1
+- **Target file** (NEW): `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\test\preflight.test.js`
+- **Changes**: mock di `execSync`, `net.createServer`, `fs.accessSync` e copertura di tutti i failure mode di ogni check
+- **Acceptance criteria**:
+  - [ ] Test suite esegue via `npm test` in `03_HARNESS/server/`
+  - [ ] Coverage di tutti 5 check con almeno 1 pass + 1 fail case ciascuno
+  - [ ] Test cli mock per `claude --version` che simula "command not found"
+- **Estimate**: 45min
+
+#### P6D.3 — Wire `runPreflight` + boot gate in `server.js`
+- **Status**: CANCELLED (2026-04-25 evening — boot gate approach abandoned; diagnostics is now queryable on-demand via P6.3)
+- **Agent**: backend-dev
+- **Depends on**: P6D.1
+- **Target file**: `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\server.js`
+- **Changes**:
+  - All'avvio, PRIMA di `app.listen()` o equivalente: `const pf = await runPreflight(cfg, cfgPath);`
+  - Se `pf.critical.length > 0`:
+    - Print banner chiaro ANSI red con lista errori + fixHint per ognuno
+    - `process.exit(1)`
+  - Se `pf.warnings.length > 0`:
+    - Print warning giallo + continua boot
+    - Se warning è cloudflared missing → force `cfg.tunnel.mode = "manual"` in runtime (no persist)
+  - Flag `--skip-preflight` per dev: se presente, saltare l'intero blocco con warning
+  - Endpoint `GET /api/panel/preflight` (loopback-only) ritorna ultimo snapshot da `logs/preflight.json`
+- **Acceptance criteria**:
+  - [ ] Boot con config OK → preflight pass + server up normalmente
+  - [ ] Boot con config rotta → exit(1) con messaggio in console (non stack trace)
+  - [ ] Boot con porta 7779 occupata → exit(1) con "Porta già in uso"
+  - [ ] `--skip-preflight` salta il blocco e server up anche con config rotta
+  - [ ] `curl http://127.0.0.1:7777/api/panel/preflight` ritorna JSON snapshot
+  - [ ] Chiamata da IP non-loopback → 403
+- **Estimate**: 45min
+
+#### P6D.4 — Integrate preflight output in Panel Connections Card tunnel status
+- **Status**: CANCELLED (2026-04-25 evening — replaced by Panel Card 0 "Preflight" consuming `/api/setup/diagnostics` from P6.3; lives inside Phase 6B scope)
+- **Agent**: frontend-dev (web)
+- **Depends on**: P6D.3 AND P6B.10 (Phase 6B gate must be PASS)
+- **Target files**:
+  - MODIFY `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\api\panel-connections.js` (aggrega `preflight` in response di `/api/panel/connections`)
+  - MODIFY `C:\Users\arman\Desktop\GIGI\03_HARNESS\server\public\app.js` (render sezione "Pre-flight" dentro Card Tunnel status)
+- **Changes**:
+  - `handlePanelRequest` in GET `/api/panel/connections` aggiunge chiave `preflight: <snapshot>`
+  - Panel JS renderizza sotto Card tunnel una mini-list con pass/warn/fail per ogni check (icona + nome + messaggio)
+- **Acceptance criteria**:
+  - [ ] Endpoint include preflight snapshot
+  - [ ] Panel tab Connections mostra sezione "Pre-flight: all good" (verde) o elenco warn/fail
+  - [ ] Se preflight critical aveva bloccato l'avvio, il server non è comunque su — questo path è solo per state post-boot
+- **Estimate**: 30min
+
+#### P6D.5 — TEST GATE — Phase 6D end-to-end
+- **Status**: CANCELLED (2026-04-25 evening — replaced by P6.9 which tests the fused diagnostic-driven flow end-to-end)
+- **Agent**: qa-tester
+- **Type**: TEST_GATE
+- **Gate**: HARD — completes Phase 6 overall
+- **Depends on**: P6D.1, P6D.2, P6D.3, P6D.4
+- **Test matrix**:
+  - [ ] Unit test suite PASSA completamente
+  - [ ] Avvio con config OK → banner "Pre-flight: OK (5/5)" in console + server up
+  - [ ] Avvio con `ios.shared_secret` rimosso da config → exit(1) con messaggio specifico
+  - [ ] Avvio con porta 7779 occupata da altro processo → exit(1) con PID indicato
+  - [ ] Avvio con Claude CLI rimosso dal PATH → exit(1) con link installazione
+  - [ ] Avvio con cloudflared missing + tunnel.mode=quick → warning + fallback a manual mode, server up
+  - [ ] `--skip-preflight` bypassa checks (per dev)
+  - [ ] Panel → Connections → tunnel card mostra sezione preflight popolata
+- **Gate outcome**: PASS → Phase 6D complete · FAIL → return to P6D.x
+- **Estimate**: 45min
+
+---
+
+### AREA CHECKPOINT — Phase 6 (Usability) — post-pivot 2026-04-25
+
+- **Status**: PENDING
+- **Agent**: qa-tester + USER CHECKPOINT
+- **Type**: AREA_CHECKPOINT
+- **Gate**: HARD — segna completamento intera Phase 6
+- **Depends on**: P6.9, P6B.10, P6C.4 tutti PASS (P6A.4 CANCELLED; P6D.5 CANCELLED)
+- **Context**: smoke test integrato del Phase 6 usability stack post-pivot. Simula un utente nuovo che riceve l'app dal nulla, installa harness da zero sul PC, completa setup diagnostic-driven, pair, usa, ispeziona Panel.
+- **Integration scenario end-to-end (post-pivot 2026-04-25)**:
+  - [ ] **Scenario 1 — Fresh user diagnostic-driven**: utente fresh install app iOS → banner → scansiona QR → SetupDiagnosticView mostra 1-2 check falliti (es: claude non authed) → utente fixa nel terminal del PC → entro 5s vede ✓ → Finalize → banner sparisce → chat usabile
+  - [ ] **Scenario 2 — Persistent unready pair**: utente scansiona QR ma chiude app prima di Finalize → riapre → banner ancora lì → Settings > Diagnostica → diagnostic view → Finalize → banner sparisce
+  - [ ] **Scenario 3 — Rich settings state**: post-pair (isReady true), Settings → Harness card mostra modalità, URL, richieste, latency → invio 5 chat → counter aggiornato
+  - [ ] **Scenario 4 — Panel admin view**: Armando apre `localhost:7777` → tab Connections → vede tunnel, WS, device, requests, **Card 0 preflight** (via `/api/setup/diagnostics`) → esegue revoke su device di test → iPhone di test riceve 403 alla richiesta successiva
+  - [ ] **Scenario 5 — No regression**: flow Phase 1-5 (claude bridge, force claude toggle, pair QR, Cloudflare Tunnel) invariati
+- **Acceptance criteria**:
+  - [ ] Tutti 5 scenarios PASS
+  - [ ] USER CHECKPOINT: Armando valuta UX complessiva di un "onboarding da zero"
+  - [ ] Nessuna regressione su Phase 1-5
+- **Gate outcome**: PASS → Phase 6 chiusa, ship candidate · FAIL → specificare quale scenario fallisce + route a relative P6x.y
+- **Estimate**: 1.5h
+
+---
+
 ## Test Gates
 
 | Gate | Agent | Blocks | Criteria |
@@ -704,6 +1577,12 @@ _Estimated: 8-12h backend + iOS core, 4h QA · Independent from Phase 1-2 · Goa
 | **P2.4** — Phase 2 E2E | qa-tester | Phase 3 (if un-deferred) | Force Claude toggle behaves per AC-3 |
 | **P4.9** — Phase 4 E2E from outside home network | qa-tester + USER | Phase 4 completion | Cross-network reachability + QR flow work; ≥ 7/7 scenarios PASS |
 | **P5.13** — Phase 5 E2E Cloudflare Tunnel multi-mode | qa-tester + USER | Phase 5 completion | All 4 modes (named/quick/lan/manual) working + cross-network + auto-start |
+| ~~P6A.4~~ | — | — | **CANCELLED 2026-04-25** (architectural pivot → replaced by P6.9) |
+| **P6.9** — Phase 6 diagnostic-driven pair flow | qa-tester + USER | AREA CHECKPOINT | ≥ 6/7 scenarios PASS + **mandatory** Scenario B live-convergence PASS + USER sign-off |
+| **P6B.10** — Phase 6B Panel Connections tab | qa-tester | AREA CHECKPOINT | All 10 plan scenarios PASS (tunnel / ws / devices / requests + actions); Card 0 preflight consumes P6.3 |
+| **P6C.4** — Phase 6C Rich Settings card | qa-tester + USER | Closed sub-phase | 8 scenarios + USER CHECKPOINT sign-off |
+| ~~P6D.5~~ | — | — | **CANCELLED 2026-04-25** (fused into P6.9) |
+| **AREA CHECKPOINT Phase 6** | qa-tester + USER | Ship candidate | All 5 integration scenarios (diagnostic-driven) + no regression Phase 1-5 |
 
 ---
 
@@ -721,6 +1600,21 @@ These task pairs have no direct dependency and can run in parallel if two agents
 
 No cross-phase parallelism between P1 and P2: P2.x must wait for P1.10 gate.
 **Phase 4 can start at any time**, even concurrently with P1 / P2 — it does not depend on Claude-bridge plumbing.
+
+### Phase 6 parallelism (post-pivot 2026-04-25)
+
+**Cross sub-phase**:
+- **Phase 6 backend (P6.1-P6.3)** ∥ **6B backend** ∥ **6C backend (P6C.1)** sono completamente orthogonal: stack Node server-side su file diversi. Se 3 agenti backend-dev disponibili, partono tutti e 3 in parallelo.
+- **Phase 6 iOS (P6.4-P6.8)** dipende SOFT da P6.3 (endpoint response necessaria per testare P6.4 decoding) ma P6.4 codice può essere stubbato con mock response fino a P6.3 ready.
+- **6B Card 0** (nuova card preflight) ha dipendenza SOFT su P6.3 — se P6.3 non è pronto, Card 0 è stub; se pronto, Card 0 fetcha endpoint.
+
+**Intra sub-phase**:
+- **Phase 6 backend**: P6.1 → P6.2 → P6.3 è serializzato (ognuno build on precedente, stesso file tree)
+- **Phase 6 iOS**: P6.4 → P6.5 → P6.6 → P6.7 → P6.8 è serializzato (state machine dipende da UI dipende da client)
+- **Phase 6B**: P6B.1 ∥ P6B.2 ∥ P6B.3 (tutti e 3 indipendenti, su file diversi)
+- **Phase 6B**: P6B.7 ∥ P6B.8 (HTML struttura + CSS, agente frontend può spezzare)
+
+**Legacy (reference only)**: P6A.1/2/3 erano parallelizzabili (P6A.2 ∥ P6A.3 dopo P6A.1) — già shipped 2026-04-25 mattina, ora DEPRECATED.
 
 ---
 
@@ -758,6 +1652,49 @@ Rationale:
 
 **My call**: proceed with **HYBRID (a)+(c)** — orchestrator should continue P1.4 now. Ask Armando whether he wants to batch-install Tailscale + sideload before or after P1.9 lands.
 
+### Next Action — Phase 6 (2026-04-25 evening post-pivot)
+
+Dopo il pivot architetturale del 2026-04-25 sera, Phase 6 è stata
+ristrutturata: 6A DEPRECATED (3 commit shipped la mattina + cancellati la
+sera), 6D FUSED nella nuova Phase 6, ed è stata introdotta una **new Phase
+6** (no suffix) con 9 task (P6.1 → P6.9) che implementa il flow pair
+diagnostic-driven concordato. Totale Phase 6 usability: ~21h (9 nuova + 10
+6B + 2 6C).
+
+**Ordering raccomandato post-pivot**: **Phase 6 → 6C → 6B**
+
+**Primo passo concreto**: **P6.1 — NEW `03_HARNESS/server/preflight/checks.js`** (backend-dev, 2h, zero-dep)
+
+Rationale:
+- La nuova Phase 6 è il blocker numero 1 per qualunque utente esterno: senza il
+  diagnostic-driven flow il pair può "riuscire" ma lasciare l'app non-funzionale
+  (Claude non authed, tunnel off, secret debole) senza che l'utente sappia
+  perché il chat non risponde.
+- P6.1 è backend, zero deps su iOS, immediatamente produttivo. Una volta
+  completato, P6.2 (45min) + P6.3 (45min) serializzano rapidamente e sbloccano
+  tutto il lato iOS (P6.4-P6.8).
+- **Secondo agente (se disponibile)**: P6B.1 (ring buffer backend, 45min,
+  zero-dep) — completamente orthogonal, 6B resta invariata.
+- **Terzo agente (se disponibile)**: P6C.1 (status endpoint, 45min) — orthogonal
+  se si rinuncia all'integrazione con P6B.1 (usare contatore ad-hoc).
+
+**Task immediatamente successivo a P6.1**: P6.2 stesso agente (45min,
+dipendenza stretta file tree `preflight/`).
+
+**Task post-backend-P6.1-P6.2-P6.3**: switch agente su frontend-dev per
+P6.4 → P6.5 → P6.6 → P6.7 → P6.8 in sequenza. Il passaggio backend→frontend è il
+cambio di stack più naturale.
+
+**Precedenza assoluta** (invariata): Phase 1-2 E2E gate (P1.10 + P2.4) e Phase
+4-5 user test (P4.9 + P5.13) rimangono priorità se Armando può testare su
+device. Phase 6 è code-lane parallelo al QA di Phase 1-5.
+
+**Archive (pre-pivot)**: il vecchio Next Action pre-pivot raccomandava P6A.1
+come primo passo. P6A.1/2/3 sono state shipped nella mattina 2026-04-25
+(commit `872b7d0`/`1235e32`/`0b33062`) ma il flow risultante è stato
+rigettato dall'utente la sera stessa come "molto generico", da cui il pivot.
+Il cleanup avviene via P6.8.
+
 ---
 
 ## Blockers
@@ -767,6 +1704,17 @@ Rationale:
 - **Status update (2026-04-24 post-`ca8a599`)**: Phase 4 `.ipa` is now available (`C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa`). However, it does NOT yet include the full Phase 1 escalation wiring (P1.4 still IN PROGRESS; P1.5–P1.9 PENDING). So sideloading this `.ipa` will only let Armando verify the Pairing flow (P4.x) and the static MessageBubble rendering (P1.2) in chat — but not the live streaming thoughts, because P1.4 is not finished yet.
 - **Mitigation**: the current `.ipa` is sufficient to sign off the static P1.2 aesthetic by sending any `.thinking` role message through a debug harness. Full live-streaming checkpoint still deferred to P1.10.
 - **Unblock condition (partial)**: Armando sideloads current `.ipa`, inspects MessageBubble rendering (even with a stubbed message). Full unblock at P1.10 E2E.
+
+### CRITICAL — "Setup once, works always" vision NOT satisfiable with Quick Tunnel alone
+- **Surfaced**: 2026-04-24 after Phase 5 waves 1-4 E2E verification
+- **Scope**: Quick Tunnel (Phase 5 modalità B) ships a URL of the form `https://<random-words>.trycloudflare.com`. **This URL is re-generated on every `cloudflared` restart** (PC reboot, crash, or manual restart). The iPhone pairing stores the URL in Keychain at pair time — if the URL changes, every paired iPhone loses connectivity and must be re-paired via QR.
+- **Impact on user vision**: the stated vision is "setup once, always on". Quick Tunnel alone does NOT satisfy this — the user would need to re-pair roughly weekly (or whenever their PC reboots / cloudflared restarts).
+- **Path (a) — accept Quick Tunnel limitation**: ship current Phase 5, user re-pairs on every URL rotation. Cheap, works today, poor UX.
+- **Path (b) — wait for Phase 5.2 (named tunnel with OAuth)**: URL is a fixed hostname on a user-owned domain. Stable across restarts forever. Requires ~6h backend + 1h wizard + 1h QA + Cloudflare OAuth app registration + user purchasing a domain (~€3-10/yr).
+- **Complementary — P5.10 service installer**: reduces restart frequency (cloudflared runs as a Windows service / LaunchAgent / systemd unit), but does NOT fix the URL-rotates-on-restart problem. Still useful.
+- **Unblock conditions**:
+  - (a) user consciously accepts Quick Tunnel + weekly-ish re-pair → mark accepted and close
+  - (b) user commits to buying a domain → un-defer Phase 5.2 → implement named-mode stack
 
 ### BLOCKED BY INFRA — End-to-end test of the bridge
 - **Scope**: `GigiClaudeBridge.run` cannot be validated end-to-end until (a) P1.4 is complete AND (b) the harness is running locally on the PC at `192.168.1.67:7779` with the bearer secret configured on-device.
@@ -794,3 +1742,27 @@ One-line entries per task transition, ISO-8601 timestamps (local date, no TZ nee
 - `2026-04-24` — P4.9 READY · all Phase 4 code complete; waiting for U0 (Tailscale install by user) + physical device test. `.ipa` built at `C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa` (1.2 MB)
 - `2026-04-24` — U0 PENDING USER · Tailscale install on PC + iPhone (10 min user action) required before P4.9 can run
 - `2026-04-24` — Phase 4 CODE COMPLETE · commit `ca8a599` · BUILD SUCCEEDED · only P4.9 test gate + U0 user action remain
+- `2026-04-24` — P5.1 COMPLETED · commit `9033dc7` (version fix `d378317`) · NEW `03_HARNESS/server/tunnel/install-cloudflared.js` (OS+arch detect, SHA256 verify, install to `~/.gigi/bin/cloudflared`)
+- `2026-04-24` — P5.3 COMPLETED (scaffolded) · commit `9033dc7` · NEW `03_HARNESS/server/tunnel/cf-api.js` — wiring into setup flow deferred to Phase 5.2 (named OAuth)
+- `2026-04-24` — P5.6 COMPLETED · commit `9033dc7` · NEW `03_HARNESS/server/tunnel/mdns.js` + `bonjour-service` dep; advertises `_gigi._tcp.local` with TXT `{deviceName, port, version}`
+- `2026-04-24` — P5.8 COMPLETED · commit `9033dc7` · server `ios-stream.js` inactivity sweep 30s; iOS `GigiHarnessStream` ping 60s + 2-miss reconnect · BUILD SUCCEEDED
+- `2026-04-24` — P5.2 COMPLETED · commit `8d0d995` · `CloudflaredManager` singleton (`startQuick`/`startNamed`/`stop`/`status`); stdout parser extracts trycloudflare URL; restart-loop detection
+- `2026-04-24` — P5.4 COMPLETED · commit `8d0d995` · `GET /api/setup/status` + `POST /api/setup/{quick,lan,manual}/{start,stop}`; named endpoints return 501 NOT_IMPLEMENTED (Phase 5.2 OAuth)
+- `2026-04-24` — P5.5 COMPLETED · commit `8d0d995` · `/setup` page on Panel 7777; 4 cards (quick/lan/named-disabled/manual); 3s auto-refresh
+- `2026-04-24` — P5.9 COMPLETED · commit `8d0d995` · `tunnel.{mode,named,quick,lan}` added to `config.example.json`
+- `2026-04-24` — P5.7 COMPLETED · commit `bce814d` · NEW `02_GIGI_APP/GIGI/GigiMDNSDiscovery.swift` with `NWBrowser` on `_gigi._tcp.local`; Info.plist `NSBonjourServices` added · BUILD SUCCEEDED
+- `2026-04-24` — Phase 5 waves 1-4 CODE COMPLETE · latest commit `d378317` · E2E VERIFIED: Quick Tunnel starts via API, public URL `https://*.trycloudflare.com` reachable from internet with bearer auth, `/api/ios/health` 200 in ~310ms · `.ipa` rebuilt at `C:\Users\arman\Desktop\GIGI\bug\GIGI.ipa` (1.2 MB)
+- `2026-04-24` — P5.10 PENDING · service installer (auto-start cloudflared at boot) NOT started — critical for "setup once, always on"
+- `2026-04-24` — P5.11 PENDING · iOS migration banner for Tailscale users NOT started
+- `2026-04-24` — P5.12 PENDING · docs guides NOT started
+- `2026-04-24` — P5.13 READY · Quick/LAN/manual test matrix ready for USER; named-mode row deferred to Phase 5.2
+- `2026-04-24` — Phase 5.2 DEFERRED · Named Cloudflare Tunnel with OAuth — required for stable URL across cloudflared restarts; blocked on Cloudflare OAuth app registration + user-owned domain
+- `2026-04-25` — Phase 6 CONSOLIDATION · project-manager · creato `docs/plans/phase-6-usability-roadmap.md` (overview 4 sotto-fasi: 6A Setup Checklist iOS, 6B Panel Connections tab, 6C Rich Settings card, 6D Pre-flight diagnostics). TASK_PLAN aggiornato: 19 task numerate P6A.1→P6D.5 + 5 test gate + 1 area checkpoint. Phase 6 originale "flat" (Panel Observability) rinominata Phase 6B; `docs/plans/panel-observability.md` resta IMMUTABLE come fonte di dettaglio. Stima totale Phase 6: ~18h (3+10+2+3). Recommended ordering: 6A → 6C → 6B → 6D. Next Action → P6A.1 (SetupChecklistView.swift).
+- `2026-04-25` — P6A.1 COMPLETED · commit `872b7d0` · NEW `02_GIGI_APP/GIGI/SetupChecklistView.swift` (4 requisiti, 1 live check + 3 checkbox manuali, @AppStorage persist) · BUILD SUCCEEDED · (later DEPRECATED same day, see pivot entry)
+- `2026-04-25` — P6A.2 COMPLETED · commit `1235e32` · `MainTabView.swift` banner routes to `SetupChecklistView` instead of direct `GigiPairingSheet` · BUILD SUCCEEDED · (later DEPRECATED same day)
+- `2026-04-25` — P6A.3 COMPLETED · commit `0b33062` · `SettingsView.swift` "Vedi requisiti" button added for non-paired users · footer copy updated to Cloudflare guidance · BUILD SUCCEEDED · (later DEPRECATED same day)
+- `2026-04-25` — Phase 6 ARCHITECTURAL PIVOT · project-manager · Armando ha rigettato il risultato P6A.1/2/3 la sera stessa del commit: la checklist statica con 3 checkbox manuali (CF account, Claude CLI, harness installed) è stata giudicata "molto generica" perché l'app non poteva verificare alcuna delle 3 auto-dichiarazioni dell'utente. Sostituita con un **flusso di pair a due stadi guidato da diagnostica live** del PC: iPhone polla `/api/setup/diagnostics` ogni 5s, mostra ✓/⚠/❌ per 10 check (claude CLI authenticated, tunnel mode, tunnel running, secret strength, cloudflared binary, outbound HTTPS, disk space, port bound, ...), utente fixa nel terminal e vede ✓ comparire live, "Finalize pair" si abilita solo quando tutti i critical sono ok. P6A.1/2/3 → DEPRECATED (history preserved, cleanup via P6.8). P6A.4 test gate → CANCELLED. P6D.1-5 (preflight blocking startup) → CANCELLED (fused: stesse check primitives, ora endpoint queryable invece di gate bloccante). Introdotta new **Phase 6** (no suffix) con 9 task P6.1→P6.9, ~9h: P6.1 checks.js (10 async check fn), P6.2 runner.js (parallel + classification), P6.3 api/diagnostics.js (Bearer-authed endpoint), P6.4 GigiHarnessClient `diagnostics()` + `isReady` property (distinta da `isConfigured`), P6.5 SetupDiagnosticView.swift (polling UI), P6.6 GigiPairingSheet two-stage state machine, P6.7 wire MainTabView+SettingsView (rimuove SetupChecklistView wiring), P6.8 DELETE SetupChecklistView.swift, P6.9 test gate E2E con USER CHECKPOINT (Scenario B "fix claude auth login nel terminal → iPhone vede ✓ entro 5s" è mandatory PASS). Decisione tecnica chiave: `isConfigured` preserva semantica legacy (URL+secret in Keychain), nuova property `isReady = isConfigured && lastDiagnosticsSnapshot.allCriticalOk` gating banner+chat. Totale Phase 6 post-pivot: ~21h (9 nuova + 10 6B + 2 6C, era 18h pre-pivot). Ordering: Phase 6 → 6C → 6B. Next Action → P6.1 (backend, 2h, zero-dep, orthogonal a 6B/6C). Panel 6B Card 0 riuserà `/api/setup/diagnostics` di P6.3 invece dell'ex endpoint dedicato `/api/panel/preflight` (fonte di verità unificata iPhone+admin).
+- `2026-04-25` — P6.10.1/P6.10.2/P6.10.3 COMPLETED · commit `1e69bef` · backend autofix lane shipped: fixer registry + serial `/api/setup/autofix` endpoint + `autoFixable` annotation in diagnostics runner
+- `2026-04-25` — P6.10.4 COMPLETED · commit `f9aa20c` · `/setup` Panel now shows difficulty tiers + “Help me choose” quiz with card highlight guidance
+- `2026-04-25` — P6.11.1/P6.11.2/P6.11.3 COMPLETED · commit `b60e414` · iOS diagnostics gained autofix models/banner/progress plus secret-rotate → re-pair flow
+- `2026-04-25` — P6.12.1/P6.12.2 COMPLETED · Ralph · NEW `Walkthroughs.swift` + inline walkthrough rendering in `SetupDiagnosticView`; `claude_cli_authenticated` keeps instructions after `needsUser` autofix; Settings repair callback now clears form state before reopening pairing · BUILD SUCCEEDED via SSH Mac · architect verification APPROVED

@@ -30,18 +30,20 @@ class CloudflaredManager {
     this.startedAt = null;
     this.restartAttempts = 0;
     this.restartWindow  = [];          // rolling 60s window of restart timestamps
+    this.totalRestarts  = 0;            // monotonic counter (Phase 6B), reset on stop()
     this.lastError = null;
     this.onStatusChange = null;        // setter for the setup wizard UI
   }
 
   status() {
     return {
-      running:   !!this.proc,
-      mode:      this.mode,
-      publicUrl: this.publicUrl,
-      pid:       this.proc?.pid || null,
-      uptime_s:  this.startedAt ? Math.floor((Date.now() - this.startedAt) / 1000) : 0,
-      lastError: this.lastError
+      running:      !!this.proc,
+      mode:         this.mode,
+      publicUrl:    this.publicUrl,
+      pid:          this.proc?.pid || null,
+      uptime_s:     this.startedAt ? Math.floor((Date.now() - this.startedAt) / 1000) : 0,
+      restartCount: this.totalRestarts,
+      lastError:    this.lastError
     };
   }
 
@@ -258,6 +260,7 @@ class CloudflaredManager {
       return;
     }
     log(`[cloudflared] auto-restart in 2s (attempt ${this.restartWindow.length})`);
+    this.totalRestarts++;
     setTimeout(() => this._spawn(bin, args), 2000);
   }
 

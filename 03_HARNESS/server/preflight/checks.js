@@ -157,7 +157,7 @@ export async function claude_cli_authenticated({ cfg }) {
       severity: 'critical',
       ok: false,
       hint: 'Claude did not respond within 15 seconds. Network or auth issue.',
-      action: 'Run `claude /login` in your terminal to re-authenticate.'
+      action: 'Run `claude auth login` in your terminal to re-authenticate.'
     };
   }
   if (r.exitCode !== 0) {
@@ -171,7 +171,7 @@ export async function claude_cli_authenticated({ cfg }) {
       hint: looksAuth
         ? 'Claude rejected the request — looks like you are not signed in.'
         : `Claude failed with exit code ${r.exitCode}.`,
-      action: 'Run `claude /login` in your terminal.',
+      action: 'Run `claude auth login` in your terminal.',
       detail: { stderr: r.stderr.slice(0, 300) }
     };
   }
