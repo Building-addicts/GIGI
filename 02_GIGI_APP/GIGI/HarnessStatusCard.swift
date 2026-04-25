@@ -151,7 +151,7 @@ struct HarnessStatusCard: View {
         }
     }
 
-    private static func relativeTime(_ snap: GigiHarnessClient.StatusSnapshot) -> String? {
+    nonisolated private static func relativeTime(_ snap: GigiHarnessClient.StatusSnapshot) -> String? {
         guard let iso = snap.lastRequestAt,
               let date = ISO8601DateFormatter().date(from: iso) else { return nil }
         let secs = Int(Date().timeIntervalSince(date))

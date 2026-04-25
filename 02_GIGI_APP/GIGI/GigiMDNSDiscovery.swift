@@ -52,7 +52,9 @@ final class GigiMDNSDiscovery {
 
         browser.stateUpdateHandler = { state in
             if case .failed(let err) = state {
-                GigiDebugLogger.log("mDNS browse failed: \(err.localizedDescription)")
+                Task { @MainActor in
+                    GigiDebugLogger.log("mDNS browse failed: \(err.localizedDescription)")
+                }
             }
         }
 
