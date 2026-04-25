@@ -1,31 +1,59 @@
-# Setup sviluppatore — GIGI (iOS)
+# Setup sviluppatore — GIGI iOS
 
-**Nota — SPM e prima build:** dopo il clone o l’aggiunta del pacchetto **Porcupine** (`Picovoice/porcupine`), Xcode o `xcodebuild` possono restare a lungo su *Resolve Package Graph* / *Fetching…* senza output apparente: è normale (rete e cache). In **Xcode**: **File → Packages → Resolve Package Versions**, attendi il completamento, poi **Product → Build** (⌘B). Da terminale, `xcodebuild -resolvePackageDependencies` può richiedere diversi minuti al primo giro.
+**Nota SPM e prima build:** dopo il clone, Xcode o `xcodebuild` possono restare a lungo su *Resolve Package Graph* / *Fetching…*. È normale. In Xcode usa **File → Packages → Resolve Package Versions**, poi **Product → Build**.
 
-## Chiave API Gemini (Vision)
+## Config locale
 
-La chiave non è nel repository. Per compilare ed eseguire le funzioni che usano Gemini Vision:
+Le chiavi non devono stare nel repository.
 
 1. Nella cartella `02_GIGI_APP/`, copia il template:
    ```bash
    cp Config.example.xcconfig Config.xcconfig
    ```
-2. Apri `Config.xcconfig` e sostituisci `YOUR_API_KEY_HERE` con la tua chiave API Google AI (Gemini), ottenibile dalla [Google AI Studio](https://aistudio.google.com/apikey).
-3. In Xcode, verifica che il target **GIGI** usi `Config.xcconfig` per le configurazioni **Debug** e **Release** (Project → Info → Configurations).
-4. Esegui **Clean Build Folder** (⇧⌘K) e poi **Build** (⌘B).
+2. Compila solo le chiavi che ti servono:
+   ```xcconfig
+   GROQ_API_KEY = gsk_...
+   GEMINI_API_KEY = AIza...
+   PICOVOICE_ACCESS_KEY = ...
+   GIGI_GATEWAY_ICLOUD_URL = https://www.icloud.com/shortcuts/...
+   ```
+3. `GIGIApp.xcconfig` include automaticamente `Config.xcconfig` se esiste.
+4. Esegui **Clean Build Folder** e poi **Build**.
 
-Se `Config.xcconfig` manca o la chiave è vuota, `GigiConfig.geminiAPIKey` sarà una stringa vuota e le chiamate Vision a Gemini non funzioneranno finché non configuri la chiave.
+## Groq — obbligatoria per il cervello
 
-## Wake word (Porcupine)
+`GROQ_API_KEY` alimenta:
 
-1. Ottieni una **AccessKey** gratuita da [Picovoice Console](https://console.picovoice.ai/).
-2. In `Config.xcconfig`, imposta `PICOVOICE_ACCESS_KEY = <la_tua_chiave>`.
-3. (Opzionale) Scarica il bundle **Hey GIGI** in formato `.ppn` e aggiungi `HeyGIGI.ppn` al target GIGI (Copy Bundle Resources). Senza questo file, l’app usa la keyword integrata **«Jarvis»** come fallback.
-4. In app: **Dashboard → Wake word → Always-on listening** per attivare il monitoraggio.
+- agent brain;
+- tool calling;
+- intent reasoning;
+- web vision;
+- diagnosi brain;
+- fallback cloud principale.
+
+Puoi inserirla anche in app da **Settings → AI Brain (Groq)**. In quel caso viene salvata in Keychain e prevale su `Info.plist`.
+
+## Gemini — opzionale per realtime voice
+
+`GEMINI_API_KEY` è separata da Groq e viene usata solo dai percorsi realtime/native audio che parlano con Gemini.
+
+Non viene più usata come fallback Groq. Se manca, il cervello Groq continua a funzionare; semplicemente le funzioni realtime Gemini non si connettono.
+
+Puoi inserirla anche in app da **Settings → Realtime Voice (Gemini)**.
+
+## Picovoice — opzionale per custom wake word
+
+1. Ottieni una AccessKey da [Picovoice Console](https://console.picovoice.ai/).
+2. Imposta:
+   ```xcconfig
+   PICOVOICE_ACCESS_KEY = ...
+   ```
+3. Per una keyword custom, aggiungi `HeyGIGI.ppn` al target GIGI.
+
+Senza Picovoice/custom model, l’app usa il fallback wake word disponibile nel progetto.
 
 ## File sensibili
 
-- **Non committare** `Config.xcconfig`. È elencato in `.gitignore`.
-- **Committare** `Config.example.xcconfig` come riferimento per il team.
-
-Prima del primo commit in un nuovo clone, verifica con `git status` che `Config.xcconfig` non compaia tra i file tracciati.
+- Non committare `Config.xcconfig`. È in `.gitignore`.
+- `Config.example.xcconfig` deve contenere solo placeholder vuoti.
+- Se una chiave reale finisce in `Config.example.xcconfig`, ruotala subito dal provider.
