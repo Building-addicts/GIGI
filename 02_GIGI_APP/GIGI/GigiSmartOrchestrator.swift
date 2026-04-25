@@ -84,6 +84,22 @@ class GigiSmartOrchestrator: ObservableObject {
             }
         }
 
+        // Tool calls from Gemini Live → execute on device
+        GigiRealtimeEngine.shared.onToolCall = { [weak self] call in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                _ = await self.executeRealtimeToolCall(call)
+            }
+        }
+
+        // Partial transcript from Gemini Live → update status bar in real time
+        GigiRealtimeEngine.shared.onTranscript = { [weak self] text in
+            Task { @MainActor [weak self] in
+                guard let self, !text.isEmpty else { return }
+                self.status = "GIGI: \(text)"
+            }
+        }
+
         // Wire interim events from agent loop → status bar + sound/haptics
         agentEngine.onInterimEvent = { [weak self] event in
             guard let self else { return }
@@ -314,6 +330,9 @@ class GigiSmartOrchestrator: ObservableObject {
             let wasSuccess = true
             isQuickTalkSession = false
             onQuickTalkFinished?(wasSuccess)
+        } else if speech.isSpeaking {
+            // GigiAudioManager resumes wake word from the TTS delegate after playback ends.
+            return
         } else if isPresenceActive {
             // Presence: resume wake word immediately (shorter delay handled by GigiAudioManager)
             GigiAudioManager.shared.startWakeWordListening()

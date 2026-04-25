@@ -144,8 +144,11 @@ class GigiVADEngine {
 
     private func handleSTTResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result {
-            latestTranscription = result.bestTranscription.formattedString
-            print("GIGI STT partial: '\(latestTranscription)'")
+            let candidate = result.bestTranscription.formattedString
+            if !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                latestTranscription = candidate
+            }
+            print("GIGI STT partial: '\(candidate)'")
             updateSilenceThreshold(for: latestTranscription)
 
             if result.isFinal {
@@ -155,6 +158,8 @@ class GigiVADEngine {
                 cleanupSTT()
                 if !text.isEmpty {
                     onTranscription?(text)
+                } else {
+                    onListeningFailed?()
                 }
             }
         } else if let error {
@@ -237,15 +242,16 @@ class GigiVADEngine {
             guard let self, self.isCapturing else { return }
 
             if db < self.silenceThreshold {
-                // Loud audio ended — only reset silence timer once speech has been
-                // confirmed for at least noiseSpikeGate (100 ms). Short spikes are ignored.
+                // Silence only counts after speech has been confirmed for at least
+                // noiseSpikeGate. This avoids ending on pre-speech room noise.
+                if self.consecutiveSpeechDuration >= self.noiseSpikeGate {
+                    self.silenceDuration += frameDuration
+                }
+            } else {
+                self.consecutiveSpeechDuration += frameDuration
                 if self.consecutiveSpeechDuration >= self.noiseSpikeGate {
                     self.silenceDuration = 0
                 }
-                self.consecutiveSpeechDuration = 0
-            } else {
-                self.consecutiveSpeechDuration += frameDuration
-                self.silenceDuration           += frameDuration
             }
 
             if self.silenceDuration >= self.requiredSilence {
@@ -255,13 +261,17 @@ class GigiVADEngine {
                 self.onSilenceDetected?()
 
                 // Fallback: if STT doesn't respond within 3s, use current transcript
-                let snapshot = self.latestTranscription
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                     guard let self, self.isWaitingForFinal else { return }
+                    let snapshot = self.latestTranscription
                     print("GIGI VAD: STT timeout — using snapshot: '\(snapshot)'")
                     self.isWaitingForFinal = false
                     self.cleanupSTT()
-                    if !snapshot.isEmpty { self.onTranscription?(snapshot) }
+                    if !snapshot.isEmpty {
+                        self.onTranscription?(snapshot)
+                    } else {
+                        self.onListeningFailed?()
+                    }
                 }
             }
         }

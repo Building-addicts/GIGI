@@ -331,7 +331,9 @@ class GigiActionBridge {
         await MainActor.run {
             GigiSmartOrchestrator.shared.stopMicCapture()
             GigiSmartOrchestrator.shared.showBanner("📞 Calling \(contact)...")
+            GigiSpeechService.shared.speak("Calling \(contact).")
         }
+        try? await Task.sleep(nanoseconds: 650_000_000)
 
         // Direct tel:// — no Shortcuts indirection needed for calls
         guard let telURL = URL(string: "tel://\(digits)") else { return "Invalid phone number." }

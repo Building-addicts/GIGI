@@ -152,7 +152,10 @@ final class GigiAudioManager {
         // No additional wiring needed here — see GigiSmartOrchestrator.startListening().
 
         GigiVADEngine.shared.onTranscription = { [weak self] text in
-            guard let self, self.state == .recording else { return }
+            guard let self else { return }
+            if self.state != .recording {
+                print("GIGI AudioManager: transcription arrived in state=\(self.state), forwarding anyway")
+            }
             self.transition(to: .idle)
             self.onTranscription?(text)
         }
