@@ -5,7 +5,7 @@ import SwiftUI
 // All configuration in one place: API keys, wake word, privacy, debug.
 
 enum SettingsField: Hashable {
-    case geminiKey, harnessURL, harnessSecret
+    case groqKey, geminiKey, harnessURL, harnessSecret
 }
 
 private enum SettingsSheet: String, Identifiable {
@@ -19,6 +19,7 @@ private enum SettingsSheet: String, Identifiable {
 
 struct SettingsView: View {
     @State private var groqKey = ""
+    @State private var geminiKey = ""
     @State private var showQRScanner = false
     @State private var picoKey = ""
     @State private var showKey = false
@@ -71,8 +72,6 @@ struct SettingsView: View {
                 }
             }
             .task { await loadState() }
-            .sheet(isPresented: $showWhatsApp) { WhatsAppLinkSheet() }
-            .sheet(isPresented: $showProfile) { ProfileEditSheet() }
             .sheet(item: $activeSheet) { sheet in
                 settingsSheet(sheet)
             }
