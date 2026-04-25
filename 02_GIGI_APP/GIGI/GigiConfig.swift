@@ -6,22 +6,26 @@ enum GigiConfig {
 
     static var groqAPIKey: String {
         if let k = GigiKeychain.load(forKey: GigiKeychain.Key.groqAPIKey), !k.isEmpty { return k }
-        // Fallback: migrate existing Gemini key slot if present (one-time migration)
-        if let k = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !k.isEmpty { return k }
         let raw = Bundle.main.object(forInfoDictionaryKey: "GROQ_API_KEY") as? String ?? ""
-        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return key == "$(GROQ_API_KEY)" ? "" : key
     }
 
     static func setGroqAPIKey(_ key: String) {
         GigiKeychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.groqAPIKey)
     }
 
-    // MARK: - Gemini key alias (kept for GigiRealtimeEngine compile compat — returns empty)
+    // MARK: - Gemini API key (optional realtime/native audio)
 
-    static var geminiAPIKey: String { "" }
+    static var geminiAPIKey: String {
+        if let k = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !k.isEmpty { return k }
+        let raw = Bundle.main.object(forInfoDictionaryKey: "GEMINI_API_KEY") as? String ?? ""
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return key == "$(GEMINI_API_KEY)" ? "" : key
+    }
+
     static func setGeminiAPIKey(_ key: String) {
-        // Redirect old callers to Groq slot
-        setGroqAPIKey(key)
+        GigiKeychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.geminiAPIKey)
     }
 
     // MARK: - Picovoice

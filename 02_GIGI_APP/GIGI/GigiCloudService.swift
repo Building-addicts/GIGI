@@ -106,6 +106,8 @@ struct GigiLLMResponse {
     let text: String?
     let functionCalls: [FunctionCallBlock]
     let finishReason: String
+    let inputTokens: Int
+    let outputTokens: Int
 
     var hasFunctionCalls: Bool { !functionCalls.isEmpty }
     var hasText: Bool          { !(text ?? "").isEmpty }
@@ -163,7 +165,13 @@ final class GigiCloudService {
                     let body = String(data: data, encoding: .utf8) ?? ""
                     throw GigiCloudError.httpError(http.statusCode, body)
                 }
-                return try self.parseGroqResponse(from: data)
+                let parsed = try self.parseGroqResponse(from: data)
+                GigiAPIKeyUsageStore.record(
+                    provider: "groq",
+                    inputTokens: parsed.inputTokens,
+                    outputTokens: parsed.outputTokens
+                )
+                return parsed
             }
             group.addTask {
                 try await Task.sleep(nanoseconds: 13_000_000_000)
@@ -335,6 +343,12 @@ final class GigiCloudService {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw GigiCloudError.httpError(http.statusCode, body)
         }
+        let usage = parseGroqUsage(from: data)
+        GigiAPIKeyUsageStore.record(
+            provider: "groq",
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens
+        )
         return try extractGroqText(from: data)
     }
 
@@ -433,6 +447,7 @@ final class GigiCloudService {
 
         let finishReason = first["finish_reason"] as? String ?? "stop"
         let text         = message["content"] as? String
+        let usage        = parseGroqUsage(from: data)
 
         var functionCalls: [FunctionCallBlock] = []
         if let toolCalls = message["tool_calls"] as? [[String: Any]] {
@@ -460,8 +475,24 @@ final class GigiCloudService {
         return GigiLLMResponse(
             text:          (text?.isEmpty ?? true) ? nil : text,
             functionCalls: functionCalls,
-            finishReason:  finishReason
+            finishReason:  finishReason,
+            inputTokens:   usage.inputTokens,
+            outputTokens:  usage.outputTokens
         )
+    }
+
+    private nonisolated func parseGroqUsage(from data: Data) -> (inputTokens: Int, outputTokens: Int) {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let usage = json["usage"] as? [String: Any] else {
+            return (0, 0)
+        }
+        let input = (usage["prompt_tokens"] as? Int)
+            ?? (usage["input_tokens"] as? Int)
+            ?? 0
+        let output = (usage["completion_tokens"] as? Int)
+            ?? (usage["output_tokens"] as? Int)
+            ?? 0
+        return (input, output)
     }
 
     private func extractGroqText(from data: Data) throws -> String {

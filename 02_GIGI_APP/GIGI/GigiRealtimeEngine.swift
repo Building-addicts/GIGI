@@ -256,6 +256,7 @@ final class GigiRealtimeEngine: @unchecked Sendable {
 
         isConnectedFlag = true
         reconnectAttemptCount = 0
+        GigiAPIKeyUsageStore.record(provider: "gemini")
         print("GIGI Realtime: connected")
     }
 
