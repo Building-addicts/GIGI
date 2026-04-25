@@ -120,14 +120,17 @@ extension GigiActionDispatcher {
             let task = "Order \(itemLabel) \(source). Complete the checkout flow only up to the final payment/order confirmation step, then stop and ask Leonardo for confirmation before placing or paying for the order."
             switch await GigiHarnessClient.shared.agentRun(text: task, domain: "browser") {
             case .success(let r): return .success(r.result, tokenEstimate: 60)
-            case .failure: break  // fall through to on-device
+            case .failure(let error):
+                GigiDebugLogger.log("web_order_food harness failed: \(error)")
+                break  // fall through to on-device
             }
         }
 
         // On-device fallback via WKWebView vision agent
         var searchURL: URL? {
             var c = CharacterSet.urlQueryAllowed; c.remove(charactersIn: "&+?=#")
-            let q = restaurant.addingPercentEncoding(withAllowedCharacters: c) ?? restaurant
+            let query = restaurant.isEmpty ? items : restaurant
+            let q = query.addingPercentEncoding(withAllowedCharacters: c) ?? query
             switch platform.lowercased() {
             case "justeat":   return URL(string: "https://www.just-eat.it/cerca#q=\(q)")
             case "deliveroo": return URL(string: "https://deliveroo.it/it/search?query=\(q)")
@@ -138,8 +141,12 @@ extension GigiActionDispatcher {
             }
         }
 
-        let task = "Find '\(restaurant)' in the search results, open it, add '\(items)' to cart, proceed to checkout, fill in the delivery address and payment, and place the order."
+        let target = restaurant.isEmpty ? "a suitable restaurant that sells \(items)" : restaurant
+        let task = "On \(platform), find \(target), add '\(items)' to the cart, proceed only up to the final order/payment confirmation screen, then stop and return CONFIRM_REQUIRED with the restaurant, items, total if visible, and delivery address. Do not place or pay for the order."
         let result = await GigiWebAgent.shared.executeWithVision(url: searchURL, task: task, maxSteps: 12)
+        if result.lowercased().contains("rate limit") || result.lowercased().contains("http 429") {
+            return .failure("Delivery web automation hit a temporary AI rate limit. Try again in a few seconds.")
+        }
         return .success(result, tokenEstimate: 60)
     }
 

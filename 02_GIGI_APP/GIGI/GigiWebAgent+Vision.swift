@@ -40,6 +40,8 @@ extension GigiWebAgent {
         }
 
         let profileCtx = await GigiUserProfile.shared.formContext()
+        var lastActionSignature = ""
+        var repeatedActionCount = 0
 
         for step in 1...maxSteps {
             // Screenshot
@@ -67,6 +69,21 @@ extension GigiWebAgent {
 
             print("GIGI Vision step \(step)/\(maxSteps): \(action.action) — \(action.reason ?? action.message ?? "")")
 
+            let signature = actionSignature(action)
+            repeatedActionCount = signature == lastActionSignature ? repeatedActionCount + 1 : 0
+            lastActionSignature = signature
+
+            if repeatedActionCount >= 2 {
+                print("GIGI Vision: repeated action loop detected — trying recovery")
+                if action.action == "type", let selector = action.selector {
+                    try? await pressEnter(in: selector)
+                } else {
+                    _ = try? await js("window.scrollBy(0, 450)")
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                continue
+            }
+
             switch action.action {
 
             case "done":
@@ -82,6 +99,10 @@ extension GigiWebAgent {
             case "type":
                 guard let sel = action.selector, let text = action.text else { continue }
                 try? await type(text, into: sel)
+                if shouldSubmitTypedSearch(action: action, task: task) {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    try? await pressEnter(in: sel)
+                }
 
             case "scroll":
                 let delta = action.direction == "up" ? -500 : 500
@@ -104,6 +125,31 @@ extension GigiWebAgent {
         }
 
         return "Reached step limit (\(maxSteps)) without completing: \(task)"
+    }
+
+    private func actionSignature(_ action: VisionAction) -> String {
+        [
+            action.action,
+            action.selector ?? "",
+            action.text ?? "",
+            action.url ?? "",
+            action.direction ?? ""
+        ].joined(separator: "|").lowercased()
+    }
+
+    private func shouldSubmitTypedSearch(action: VisionAction, task: String) -> Bool {
+        let haystack = [
+            action.reason ?? "",
+            action.selector ?? "",
+            action.text ?? "",
+            task
+        ].joined(separator: " ").lowercased()
+
+        return haystack.contains("search")
+            || haystack.contains("cerca")
+            || haystack.contains("pizza")
+            || haystack.contains("restaurant")
+            || haystack.contains("ristorante")
     }
 
     // MARK: - Screenshot
@@ -173,7 +219,7 @@ extension GigiWebAgent {
             'a[href],button,input,select,textarea,[role="button"],[data-testid],[data-id]'
           ).forEach(function(el){
             const text=(el.textContent||el.value||el.placeholder||'').trim()
-              .replace(/\\s+/g,' ').slice(0,50);
+              .replace(/\\s+/g,' ').slice(0,40);
             const testid=el.getAttribute('data-testid')||'';
             const id=el.id?'#'+el.id:'';
             const tag=el.tagName.toLowerCase();
@@ -183,7 +229,7 @@ extension GigiWebAgent {
             if(text||id||testid)
               els.push({tag,text,id,testid,type,name,href});
           });
-          return JSON.stringify(els.slice(0,60));
+          return JSON.stringify(els.slice(0,35));
         })()
         """
     }
@@ -197,7 +243,8 @@ extension GigiWebAgent {
         domJSON: String,
         profileContext: String
     ) async throws -> VisionAction {
-        guard let jpeg = screenshot.jpegData(compressionQuality: 0.45) else {
+        let compactScreenshot = screenshot.resizedForVision(maxSide: 720)
+        guard let jpeg = compactScreenshot.jpegData(compressionQuality: 0.28) else {
             throw GigiWebAgentError.jsError("JPEG encoding failed")
         }
         let apiKey = GigiConfig.groqAPIKey
@@ -219,7 +266,7 @@ extension GigiWebAgent {
         let body: [String: Any] = [
             "model":       "meta-llama/llama-4-scout-17b-16e-instruct",
             "messages":    messages,
-            "max_tokens":  300,
+            "max_tokens":  180,
             "temperature": 0.05
         ]
 
@@ -230,13 +277,52 @@ extension GigiWebAgent {
         req.timeoutInterval = 25
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            let raw = String(data: data, encoding: .utf8) ?? ""
-            throw GigiWebAgentError.jsError("HTTP \(http.statusCode): \(raw.prefix(300))")
+        var lastRateLimitBody = ""
+        for attempt in 0..<3 {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                let raw = String(data: data, encoding: .utf8) ?? ""
+                if http.statusCode == 429, attempt < 2 {
+                    lastRateLimitBody = raw
+                    let waitSeconds = retryDelaySeconds(from: raw)
+                    print("GIGI Vision: Groq 429 — retrying in \(String(format: "%.1f", waitSeconds))s")
+                    try? await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+                    continue
+                }
+                throw GigiWebAgentError.jsError("HTTP \(http.statusCode): \(raw.prefix(300))")
+            }
+            recordGroqVisionUsage(from: data)
+            return try parseVisionResponse(data: data)
         }
 
-        return try parseVisionResponse(data: data)
+        throw GigiWebAgentError.jsError("HTTP 429: \(lastRateLimitBody.prefix(300))")
+    }
+
+    private func retryDelaySeconds(from raw: String) -> Double {
+        let pattern = #"try again in ([0-9]+(?:\.[0-9]+)?)s"#
+        if let range = raw.range(of: pattern, options: .regularExpression) {
+            let match = String(raw[range])
+            if let valueRange = match.range(of: #"[0-9]+(?:\.[0-9]+)?"#, options: .regularExpression),
+               let seconds = Double(match[valueRange]) {
+                return min(max(seconds + 0.75, 1.5), 8.0)
+            }
+        }
+        return 4.0
+    }
+
+    private func recordGroqVisionUsage(from data: Data) {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let usage = json["usage"] as? [String: Any] else {
+            GigiAPIKeyUsageStore.record(provider: "groq")
+            return
+        }
+        let input = (usage["prompt_tokens"] as? Int)
+            ?? (usage["input_tokens"] as? Int)
+            ?? 0
+        let output = (usage["completion_tokens"] as? Int)
+            ?? (usage["output_tokens"] as? Int)
+            ?? 0
+        GigiAPIKeyUsageStore.record(provider: "groq", inputTokens: input, outputTokens: output)
     }
 
     private func buildVisionSystemPrompt(domJSON: String, profileContext: String) -> String {
@@ -255,7 +341,11 @@ extension GigiWebAgent {
         {"action":"error","message":"why the task cannot be completed"}
 
         Use exact CSS selectors from the DOM list below when possible.
-        DOM elements (up to 60): \(domJSON)
+        Do not repeat the same type action if text is already present. If a search field has
+        been filled, click the matching result/button or continue with the next step.
+        For checkout/order/payment tasks, stop before final payment or final order submission
+        and return {"action":"done","message":"CONFIRM_REQUIRED: ..."} with a concise summary.
+        DOM elements (up to 35): \(domJSON)
         """
         if !profileContext.isEmpty {
             prompt += "\n\n\(profileContext)"
@@ -293,5 +383,20 @@ extension GigiWebAgent {
         }
 
         return action
+    }
+}
+
+private extension UIImage {
+    func resizedForVision(maxSide: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxSide, longest > 0 else { return self }
+
+        let scale = maxSide / longest
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: newSize, format: format).image { _ in
+            draw(in: CGRect(origin: .zero, size: newSize))
+        }
     }
 }
