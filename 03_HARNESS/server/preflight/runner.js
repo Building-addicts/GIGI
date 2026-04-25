@@ -15,6 +15,7 @@
 // re-sorting. Each check is wrapped with a per-check timeout fallback so
 // one broken probe never breaks the whole report.
 import * as checks from './checks.js';
+import { AUTO_FIXABLE_IDS } from './auto_fixers.js';
 
 const REGISTRY = [
   checks.claude_cli_installed,
@@ -74,7 +75,14 @@ export async function runDiagnostics(ctx) {
     new Promise(resolve => setTimeout(() => resolve(null), GLOBAL_BUDGET_MS))
   ]);
 
-  const results = settled || REGISTRY.map(fn => timeoutResult(fn));
+  const rawResults = settled || REGISTRY.map(fn => timeoutResult(fn));
+
+  // Annotate every result with `autoFixable` so the iOS UI can populate
+  // its "Fix all automatically" banner without a second round-trip.
+  const results = rawResults.map(r => ({
+    ...r,
+    autoFixable: AUTO_FIXABLE_IDS.has(r.id)
+  }));
 
   // Counts per severity
   const counts = {
