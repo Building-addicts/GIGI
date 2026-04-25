@@ -46,6 +46,7 @@ class GigiSmartOrchestrator: ObservableObject {
     var isPresenceActive = false
 
     private init() {
+        GigiDebugLogger.log("GigiSmartOrchestrator init START")
         GigiAudioManager.shared.onTranscription = { [weak self] text in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -103,6 +104,7 @@ class GigiSmartOrchestrator: ObservableObject {
                 self.showBanner("⚠️ \(req.summary)", autoHideAfter: 5)
             }
         }
+        GigiDebugLogger.log("GigiSmartOrchestrator init END")
     }
 
     // MARK: - Gateway helpers

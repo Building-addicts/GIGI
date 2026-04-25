@@ -38,6 +38,7 @@ final class QuickTalkController: ObservableObject {
     private var startedAt: Date?
 
     private init() {
+        GigiDebugLogger.log("QuickTalkController init START")
         // Observe orchestrator state to drive our phase
         GigiSmartOrchestrator.shared.onQuickTalkStateChange = { [weak self] newPhase in
             Task { @MainActor [weak self] in
@@ -67,6 +68,7 @@ final class QuickTalkController: ObservableObject {
                 self.phase = .idle
             }
         }
+        GigiDebugLogger.log("QuickTalkController init END")
     }
 
     func start() {

@@ -47,8 +47,11 @@ final class PresenceSessionController: ObservableObject {
     private var durationTask: Task<Void, Never>?
 
     private init() {
+        GigiDebugLogger.log("PresenceSessionController init START")
         observeOrchestrator()
+        GigiDebugLogger.log("PresenceSessionController observeOrchestrator OK")
         observeDynamicIslandCommands()
+        GigiDebugLogger.log("PresenceSessionController init END")
     }
 
     // MARK: - Session lifecycle

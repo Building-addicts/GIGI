@@ -37,6 +37,7 @@ import { handleAutofix } from './api/autofix.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
 import * as channelRouter from './api/channel-router.js';
 import { handlePanelRequest } from './api/panel-connections.js';
+import { handleDebugIngest } from './api/debug-ingest.js';
 
 // ─────────────────────────────────────────────────────────────
 // Lock file: evita istanze duplicate
@@ -181,6 +182,7 @@ async function main() {
       // /api/pair is loopback-only (enforced inside handlePair) and MUST
       // run before the iOS router, because it intentionally skips the
       // Bearer check (the QR itself hands out the Bearer).
+      if (await handleDebugIngest(req, res, { cfg })) return;
       if (await handlePair(req, res, { cfg })) return;
       // /api/setup/diagnostics — Bearer-authed (same secret as iOS API).
       // MUST run before handleSetup, since handleSetup also matches
