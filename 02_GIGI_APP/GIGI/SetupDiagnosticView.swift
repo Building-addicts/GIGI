@@ -36,6 +36,9 @@ struct SetupDiagnosticView: View {
     @State private var expandedCheckId: String?
     @State private var copiedToast: String?
     @State private var isFinalizing = false
+    @State private var isManualRefreshing = false
+    @State private var nextRefreshIn: Int = 5
+    @State private var manuallyCollapsedIds: Set<String> = []   // user-tapped to close
 
     /// Called when the user taps "Finalize pair". The hosting sheet
     /// (GigiPairingSheet) listens for this to flip its own state.
@@ -140,10 +143,39 @@ struct SetupDiagnosticView: View {
                 badge(label: "warning",  ok: s.counts.warning.ok,  total: s.counts.warning.total,  color: .yellow)
                 badge(label: "info",     ok: s.counts.info.ok,     total: s.counts.info.total,     color: .blue)
             }
-            Text("Polling every 5 seconds. Fix issues on your PC and they'll turn green here automatically.")
-                .font(.caption)
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await manualRefresh() }
+                } label: {
+                    HStack(spacing: 6) {
+                        if isManualRefreshing {
+                            ProgressView().scaleEffect(0.7).tint(.purple)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.caption.weight(.semibold))
+                        }
+                        Text(isManualRefreshing ? "Checking…" : "Recheck now")
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundColor(.purple)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Capsule().stroke(Color.purple.opacity(0.5), lineWidth: 1))
+                }
+                .disabled(isManualRefreshing)
+
+                Spacer()
+
+                Text("Next auto-refresh in \(nextRefreshIn)s")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.white.opacity(0.45))
+            }
+            .padding(.top, 4)
+
+            Text("Tap any red row for the fix, or fix on the PC and it'll turn green here automatically.")
+                .font(.caption2)
                 .foregroundColor(.white.opacity(0.55))
-                .padding(.top, 4)
+                .padding(.top, 2)
         }
         .padding(16)
         .background(Color.white.opacity(0.04))
@@ -180,14 +212,29 @@ struct SetupDiagnosticView: View {
     private func checkRow(_ check: GigiHarnessClient.DiagnosticsCheck) -> some View {
         let icon = check.ok ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
         let iconColor = check.ok ? Color.green : severityColor(check.severity)
-        let isExpanded = expandedCheckId == check.id
         let canExpand = !check.ok && (check.hint != nil || check.action != nil)
+        // Failing rows are expanded by default so the user sees the action
+        // immediately. Tapping collapses it (we remember that explicit choice
+        // in `manuallyCollapsedIds`). Tapping a never-expanded row that
+        // becomes failing later won't be in the manuallyCollapsed set, so it
+        // also auto-expands.
+        let isExpanded: Bool = {
+            if !canExpand { return false }
+            if expandedCheckId == check.id { return true }
+            if manuallyCollapsedIds.contains(check.id) { return false }
+            return !check.ok
+        }()
 
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                if canExpand {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        expandedCheckId = isExpanded ? nil : check.id
+                guard canExpand else { return }
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    if isExpanded {
+                        manuallyCollapsedIds.insert(check.id)
+                        if expandedCheckId == check.id { expandedCheckId = nil }
+                    } else {
+                        manuallyCollapsedIds.remove(check.id)
+                        expandedCheckId = check.id
                     }
                 }
             } label: {
@@ -319,13 +366,32 @@ struct SetupDiagnosticView: View {
         stopPolling()
         pollTask = Task {
             // Initial fetch fast (no delay)
+            await MainActor.run { nextRefreshIn = 5 }
             await fetchOnce(force: false)
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                // 5-second countdown, ticking every second so the user sees
+                // a real timer instead of an opaque "wait" state.
+                for tick in stride(from: 5, through: 1, by: -1) {
+                    if Task.isCancelled { return }
+                    await MainActor.run { nextRefreshIn = tick }
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
                 if Task.isCancelled { break }
                 await fetchOnce(force: false)
             }
         }
+    }
+
+    /// Manual refresh — bypasses the cache + restarts the countdown so
+    /// the next auto-refresh comes 5s after this one (not stacked on top
+    /// of the previous one).
+    private func manualRefresh() async {
+        guard !isManualRefreshing else { return }
+        await MainActor.run { isManualRefreshing = true }
+        await fetchOnce(force: true)
+        await MainActor.run { isManualRefreshing = false }
+        // Restart the polling so the countdown resets cleanly.
+        startPolling()
     }
 
     private func stopPolling() {
