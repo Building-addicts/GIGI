@@ -44,16 +44,6 @@ final class GigiClaudeBridge {
     /// exponential backoff on disconnect.
     private var stream: GigiHarnessStream?
 
-    /// Reference to the conversation memory so the bridge can append
-    /// `.thinking` / `.toolEvent` bubbles as stream events arrive.
-    /// Set by `GigiAgentEngine` on first invocation (Phase 1.6).
-    weak var memory: GigiConversationMemory?
-
-    /// Maps Claude CLI `tool_use.id` → `GigiMessage.id` of the running tool-event
-    /// bubble, so we can transition it from "running" → "done" when the
-    /// matching `tool_result` event arrives.
-    private var toolBubbleIdByToolUseId: [String: UUID] = [:]
-
     // MARK: - Public entry
 
     /// Entry point called from `AskClaudeTool.execute(...)` (Phase 1.5) and
@@ -98,93 +88,11 @@ final class GigiClaudeBridge {
     private func ensureStreamConnected() {
         if stream != nil { return }
         let s = GigiHarnessStream()
-        toolBubbleIdByToolUseId.removeAll(keepingCapacity: true)
-        s.connect { [weak self] event in
-            Task { @MainActor [weak self] in
-                self?.handleStreamEvent(event)
-            }
+        s.connect { event in
+            guard let type = event["type"] as? String else { return }
+            GigiDebugLogger.log("GigiClaudeBridge stream: \(type)")
         }
         stream = s
-    }
-
-    private func handleStreamEvent(_ event: [String: Any]) {
-        guard let envelopeType = event["type"] as? String else { return }
-        switch envelopeType {
-        case "claude_event":
-            if let inner = event["event"] as? [String: Any] {
-                translateClaudeEvent(inner)
-            }
-        case "done":
-            // Flush any orphan running tool bubbles so they don't stay stuck
-            // at "running" forever (happens rarely, e.g. if the tool_result
-            // event is merged with the final result output).
-            for id in toolBubbleIdByToolUseId.values {
-                memory?.updateToolEvent(id: id, status: "done")
-            }
-            toolBubbleIdByToolUseId.removeAll(keepingCapacity: true)
-        case "cancelled":
-            for id in toolBubbleIdByToolUseId.values {
-                memory?.updateToolEvent(id: id, status: "cancelled")
-            }
-            toolBubbleIdByToolUseId.removeAll(keepingCapacity: true)
-            memory?.addThought("task cancelled")
-        default:
-            break
-        }
-    }
-
-    private func translateClaudeEvent(_ ev: [String: Any]) {
-        guard let type = ev["type"] as? String else { return }
-        switch type {
-        case "system":
-            // init event — skip, we don't narrate session boot to the user
-            break
-
-        case "assistant":
-            guard let message = ev["message"] as? [String: Any],
-                  let content = message["content"] as? [[String: Any]] else { return }
-            for item in content {
-                guard let itemType = item["type"] as? String else { continue }
-                switch itemType {
-                case "text":
-                    if let text = item["text"] as? String {
-                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { continue }
-                        memory?.addThought(trimmed)
-                    }
-                case "tool_use":
-                    guard let name = item["name"] as? String,
-                          let toolUseId = item["id"] as? String else { continue }
-                    if let bubble = memory?.addToolEvent(name: name, status: "running") {
-                        toolBubbleIdByToolUseId[toolUseId] = bubble
-                    }
-                default:
-                    break
-                }
-            }
-
-        case "user":
-            // Contains tool_result blocks. Claude CLI emits them even without
-            // actually executing tools (e.g. its own Bash runs).
-            guard let message = ev["message"] as? [String: Any],
-                  let content = message["content"] as? [[String: Any]] else { return }
-            for item in content {
-                guard let itemType = item["type"] as? String, itemType == "tool_result",
-                      let toolUseId = item["tool_use_id"] as? String else { continue }
-                if let bubble = toolBubbleIdByToolUseId[toolUseId] {
-                    memory?.updateToolEvent(id: bubble, status: "done")
-                    toolBubbleIdByToolUseId.removeValue(forKey: toolUseId)
-                }
-            }
-
-        case "result":
-            // Final result also arrives via HTTP response — nothing to surface
-            // in the UI from here (the caller's await will unblock).
-            break
-
-        default:
-            break
-        }
     }
 
     // MARK: - Error translation (AC-5)
