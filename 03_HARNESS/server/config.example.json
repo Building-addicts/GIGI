@@ -34,6 +34,23 @@
     "backend": "json",
     "upgrade_target": "lancedb"
   },
+  "tunnel": {
+    "mode": "manual",
+    "named": {
+      "tunnel_uuid": null,
+      "tunnel_name": null,
+      "hostname":    null,
+      "cert_path":   "~/.gigi/cloudflare-cert.json",
+      "config_path": "~/.gigi/cloudflared-config.yml"
+    },
+    "quick": {
+      "last_url":     null,
+      "last_started": null
+    },
+    "lan": {
+      "service_name": null
+    }
+  },
   "browser": {
     "enabled": true,
     "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",

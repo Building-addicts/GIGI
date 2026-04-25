@@ -6,6 +6,7 @@ import * as computerUse from './ios-computer-use.js';
 import * as memory from './ios-memory.js';
 import * as push from './ios-push-register.js';
 import { handlePushTest } from './ios-push-test.js';
+import { handleStatus, recordRequest } from './ios-status.js';
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -32,6 +33,8 @@ export async function handleIosRequest(req, res, ctx) {
   if (m === 'OPTIONS') { res.writeHead(204); res.end(); return true; }
 
   if (!p.startsWith('/api/ios/')) return false;
+
+  recordRequest();
 
   const auth = checkBearer(ctx.cfg, req);
   if (!auth.ok) { json(res, auth.code, { ok: false, error: { code: 'UNAUTHORIZED', message: auth.error } }); return true; }
@@ -63,7 +66,8 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/push/unregister' && m === 'POST') { await push.handleUnregister(req, res, deps); return true; }
   if (p === '/api/ios/push/test' && m === 'POST')       { await handlePushTest(req, res, deps); return true; }
 
-  // health
+  // status + health
+  if (p === '/api/ios/status' && m === 'GET') { await handleStatus(req, res, deps); return true; }
   if (p === '/api/ios/health' && m === 'GET') { json(res, 200, { ok: true, data: { pid: process.pid, uptime_s: Math.floor(process.uptime()) } }); return true; }
 
   json(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: `${m} ${p} non esiste` } });

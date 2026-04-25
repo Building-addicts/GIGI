@@ -30,6 +30,11 @@ import * as transcriptMirror from './transcript-mirror.js';
 import * as watchers from './watchers.js';
 import { startRpc } from './bridge-rpc.js';
 import { handleIosRequest } from './api/ios-router.js';
+import { handlePair } from './api/pair.js';
+import { handleSetup } from './api/setup.js';
+import { handleDiagnostics } from './api/diagnostics.js';
+import { handleAutofix } from './api/autofix.js';
+import { handlePanelRequest } from './api/panel-connections.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
 import * as channelRouter from './api/channel-router.js';
 
@@ -173,6 +178,16 @@ async function main() {
   const iosHost = cfg.server?.host || '127.0.0.1';
   const iosServer = http.createServer(async (req, res) => {
     try {
+      // /api/pair — loopback-only QR pairing (no Bearer; QR hands it out)
+      if (await handlePair(req, res, { cfg })) return;
+      // /api/setup/diagnostics — Bearer-authed, iPhone-accessible (must precede handleSetup)
+      if (await handleDiagnostics(req, res, { cfg, gigiServer })) return;
+      // /api/setup/autofix — Bearer-authed batch fixer (must precede handleSetup)
+      if (await handleAutofix(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
+      // /api/panel/* — connections tab, inspects in-memory state (loopback-only)
+      if (await handlePanelRequest(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
+      // /api/setup/* — wizard endpoints (loopback-only, bearer-free)
+      if (await handleSetup(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
       const handled = await handleIosRequest(req, res, { cfg, gigiServer })
         || await channelRouter.handle(req, res, { cfg, gigiServer, log });
       if (!handled) {
