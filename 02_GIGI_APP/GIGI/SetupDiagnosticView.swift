@@ -40,6 +40,26 @@ struct SetupDiagnosticView: View {
     @State private var nextRefreshIn: Int = 5
     @State private var manuallyCollapsedIds: Set<String> = []   // user-tapped to close
 
+    // Autofix state (P6.11.2)
+    @State private var isAutofixing = false
+    @State private var autofixProgress: [AutofixStep] = []      // per-step UI rows
+    @State private var showSecretRotateConfirm = false
+    @State private var pendingAutofixIds: [String] = []
+    @State private var needsRepairAfterAutofix = false
+
+    /// Per-step row shown during the .fixing animation.
+    struct AutofixStep: Identifiable, Equatable {
+        let id: String
+        let label: String
+        var status: Status
+        var detail: String?
+        enum Status: Equatable { case pending, running, fixed, needsUser, errored }
+    }
+
+    /// Notifies the parent (e.g. SettingsView) that the autofix rotated
+    /// the harness secret and the user needs to re-pair.
+    var onNeedsRepair: (() -> Void)? = nil
+
     /// Called when the user taps "Finalize pair". The hosting sheet
     /// (GigiPairingSheet) listens for this to flip its own state.
     let onFinalize: () -> Void
@@ -92,11 +112,23 @@ struct SetupDiagnosticView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     summaryHeader(report: report)
+                    autofixBanner(report: report)
+                    if isAutofixing { autofixProgressCard }
                     checkList(report: report)
                     finalizeButton(report: report)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 40)
+            }
+            .alert("Rotate secret?", isPresented: $showSecretRotateConfirm) {
+                Button("Cancel", role: .cancel) {
+                    pendingAutofixIds = []
+                }
+                Button("Rotate & re-pair", role: .destructive) {
+                    Task { await runAutofix(pendingAutofixIds) }
+                }
+            } message: {
+                Text("This will generate a new harness secret and disconnect this iPhone. You'll need to scan a fresh QR right after to re-pair.")
             }
         case .error(let msg):
             VStack(spacing: 18) {
@@ -196,6 +228,184 @@ struct SetupDiagnosticView: View {
         .padding(.vertical, 8)
         .background(color.opacity(0.12))
         .cornerRadius(8)
+    }
+
+    // MARK: - Autofix banner
+
+    @ViewBuilder
+    private func autofixBanner(report: GigiHarnessClient.DiagnosticsReport) -> some View {
+        // Filter checks that are currently failing AND auto-fixable.
+        let fixable = report.checks.filter { !$0.ok && ($0.autoFixable ?? false) }
+        let manual  = report.checks.filter { !$0.ok && !($0.autoFixable ?? false) }
+        if fixable.isEmpty || isAutofixing { return AnyView(EmptyView()) as Any as! AnyView }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 18))
+                        .foregroundColor(.purple)
+                    Text("\(fixable.count) issue\(fixable.count == 1 ? "" : "s") can be fixed automatically")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.white)
+                }
+                if !manual.isEmpty {
+                    Text("After auto-fix, \(manual.count) issue\(manual.count == 1 ? "" : "s") will still need you.")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.55))
+                }
+                Button {
+                    pendingAutofixIds = fixable.map(\.id)
+                    if pendingAutofixIds.contains("config_secret_strength") {
+                        showSecretRotateConfirm = true
+                    } else {
+                        Task { await runAutofix(pendingAutofixIds) }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.footnote.weight(.semibold))
+                        Text("Fix all automatically")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(LinearGradient(colors: [.purple, Color.purple.opacity(0.78)],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .cornerRadius(11)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(14)
+            .background(Color.purple.opacity(0.1))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.purple.opacity(0.4), lineWidth: 1)
+            )
+        )
+    }
+
+    private var autofixProgressCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                ProgressView().scaleEffect(0.7).tint(.purple)
+                Text("Fixing…")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.white)
+            }
+            ForEach(autofixProgress) { step in
+                HStack(spacing: 8) {
+                    Group {
+                        switch step.status {
+                        case .pending:
+                            Image(systemName: "clock").foregroundColor(.white.opacity(0.4))
+                        case .running:
+                            ProgressView().scaleEffect(0.55).tint(.purple)
+                        case .fixed:
+                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                        case .needsUser:
+                            Image(systemName: "person.fill.questionmark").foregroundColor(.yellow)
+                        case .errored:
+                            Image(systemName: "xmark.octagon.fill").foregroundColor(.pink)
+                        }
+                    }
+                    .font(.caption)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(step.label)
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.85))
+                        if let d = step.detail {
+                            Text(d)
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.5))
+                                .lineLimit(2)
+                        }
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(10)
+    }
+
+    // MARK: - Autofix execution
+
+    private func runAutofix(_ ids: [String]) async {
+        guard !ids.isEmpty else { return }
+        // Build the per-step rows from the current report (to preserve labels)
+        let labelMap: [String: String] = {
+            if case .running(let report) = phase {
+                return Dictionary(uniqueKeysWithValues: report.checks.map { ($0.id, $0.label) })
+            }
+            return [:]
+        }()
+        await MainActor.run {
+            autofixProgress = ids.map {
+                AutofixStep(id: $0, label: labelMap[$0] ?? $0, status: .pending, detail: nil)
+            }
+            isAutofixing = true
+        }
+
+        // Optimistically flip the first item to running so the UI shows
+        // motion immediately even before the backend's batched response.
+        if !ids.isEmpty {
+            await MainActor.run {
+                if !autofixProgress.isEmpty { autofixProgress[0].status = .running }
+            }
+        }
+
+        let result = await GigiHarnessClient.shared.autofix(checkIds: ids)
+
+        await MainActor.run {
+            switch result {
+            case .success(let report):
+                for r in report.results {
+                    if let idx = autofixProgress.firstIndex(where: { $0.id == r.id }) {
+                        if r.fixed {
+                            autofixProgress[idx].status = .fixed
+                            autofixProgress[idx].detail = r.detail
+                        } else if r.needsUser != nil {
+                            autofixProgress[idx].status = .needsUser
+                            autofixProgress[idx].detail = r.needsUser
+                        } else {
+                            autofixProgress[idx].status = .errored
+                            autofixProgress[idx].detail = r.error ?? "unknown error"
+                        }
+                    }
+                }
+                if report.results.contains(where: { $0.needsRepair == true }) {
+                    needsRepairAfterAutofix = true
+                }
+            case .failure(let err):
+                for i in autofixProgress.indices {
+                    if autofixProgress[i].status == .pending || autofixProgress[i].status == .running {
+                        autofixProgress[i].status = .errored
+                        autofixProgress[i].detail = String(describing: err).prefix(120).description
+                    }
+                }
+            }
+        }
+
+        // After 2s, refresh diagnostics and clear the progress card.
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        await MainActor.run {
+            isAutofixing = false
+            autofixProgress = []
+            pendingAutofixIds = []
+        }
+        if needsRepairAfterAutofix {
+            await MainActor.run {
+                GigiHarnessClient.shared.clearPair()
+                onNeedsRepair?()
+                dismiss()
+            }
+            return
+        }
+        await fetchOnce(force: true)
     }
 
     // MARK: - Check rows

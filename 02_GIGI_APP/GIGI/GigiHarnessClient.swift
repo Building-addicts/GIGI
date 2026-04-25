@@ -259,6 +259,55 @@ final class GigiHarnessClient {
         let ok: Bool
         let hint: String?
         let action: String?
+        // Whether the harness has a registered auto-fixer for this id.
+        // Defaults to false on older harness builds via Decodable.
+        let autoFixable: Bool?
+    }
+
+    // MARK: - Autofix (P6.10/6.11)
+
+    struct AutofixOneResult: Decodable, Equatable {
+        let id: String
+        let fixed: Bool
+        let detail: String?
+        let needsUser: String?
+        let needsRepair: Bool?
+        let error: String?
+    }
+
+    struct AutofixSummary: Decodable, Equatable {
+        let fixedCount: Int
+        let needsUserCount: Int
+        let errorCount: Int
+        let total: Int
+        let elapsed_ms: Int
+    }
+
+    struct AutofixReport: Decodable, Equatable {
+        let results: [AutofixOneResult]
+        let summary: AutofixSummary
+    }
+
+    /// POST /api/setup/autofix with the given checkIds. Use `["all"]` to
+    /// run every registered fixer.
+    func autofix(checkIds: [String]) async -> Result<AutofixReport, Error> {
+        guard let c = cfg else { return .failure(.notConfigured) }
+        return await postJSON(
+            path: "/api/setup/autofix",
+            body: ["checkIds": checkIds],
+            as: AutofixReport.self,
+            cfg: c
+        )
+    }
+
+    /// Clears the pair fully — used after a secret rotation autofix that
+    /// returned needsRepair:true. The iOS app then prompts the user to
+    /// scan a fresh QR.
+    func clearPair() {
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessSecret)
+        lastDiagnostics = nil
+        lastDiagnosticsAt = nil
     }
 
     struct DiagnosticsCounts: Decodable, Equatable {
