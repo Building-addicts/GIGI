@@ -31,11 +31,15 @@ final class GigiMemory {
 
     private init() {
         GigiDebugLogger.log("GigiMemory init started")
-        if !Self.cloudContainerID.isEmpty {
-            container = CKContainer(identifier: Self.cloudContainerID)
-        } else {
-            container = nil
-        }
+        // CKContainer(identifier:) raises an uncatchable Objective-C exception
+        // ("You must call …with a container identifier registered in your
+        // application's entitlements") when the iCloud entitlement is missing
+        // — which happens on the Simulator without an iCloud account, or
+        // when Sideloadly with a free Apple ID strips the iCloud capability.
+        // Defer container creation to bootstrap() and guard it with
+        // FileManager.ubiquityIdentityToken (non-crashing API that returns
+        // nil exactly when CKContainer would crash).
+        container = nil
         Task { await bootstrap() }
         GigiDebugLogger.log("GigiMemory init finished")
     }
@@ -54,10 +58,23 @@ final class GigiMemory {
     // MARK: - Bootstrap
 
     private func bootstrap() async {
-        guard let container = container else {
-            print("GIGI Memory: CloudKit disabled (no container ID)")
+        // 1. We need a non-empty container identifier (always true unless bundle ID missing).
+        guard !Self.cloudContainerID.isEmpty else {
+            print("GIGI Memory: no bundle ID — local-only mode")
             return
         }
+        // 2. ubiquityIdentityToken is the safe gate: returns non-nil only when
+        // iCloud is available AND the app has the iCloud entitlement.
+        // Returns nil (without raising) on Simulator with no iCloud account
+        // and on Sideloaded builds without iCloud capability — exactly the
+        // cases where CKContainer(identifier:) would have crashed.
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            print("GIGI Memory: iCloud unavailable (no ubiquity token) — local-only mode")
+            return
+        }
+        // 3. Now safe to construct the container.
+        let container = CKContainer(identifier: Self.cloudContainerID)
+        self.container = container
         do {
             let status = try await container.accountStatus()
             iCloudAvailable = (status == .available)
