@@ -45,7 +45,8 @@ class GigiDebugLogger {
     }
 
     private static func sendRemote(message: String, location: String, recovery: Bool) {
-        guard let urlStr = remoteIngestURL, let url = URL(string: urlStr) else { return }
+        let urlStr = remoteIngestURL
+        guard !urlStr.isEmpty, let url = URL(string: urlStr) else { return }
         // Bearer comes from the harness Keychain entry written during pairing.
         // For pre-pair crash logs we send anyway with a placeholder bearer;
         // server can be configured to accept best-effort logs without strict
