@@ -29,6 +29,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>GROQ_API_KEY</key>
+	<string>$(GROQ_API_KEY)</string>
 	<key>GEMINI_API_KEY</key>
 	<string>$(GEMINI_API_KEY)</string>
 	<key>GIGI_GATEWAY_ICLOUD_URL</key>
@@ -97,6 +99,10 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_gigi._tcp</string>
+    </array>
     <key>NSLocalNetworkUsageDescription</key>
     <string>We need to connect to the local debug server.</string>
     <key>NSMicrophoneUsageDescription</key>

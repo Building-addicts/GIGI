@@ -22,6 +22,7 @@ struct OnboardingView: View {
     @State private var showKey = false
     @State private var showGemini = false
     @State private var micGranted = false
+    @State private var speechGranted = false
     @State private var contactsGranted = false
     @State private var calendarGranted = false
     @State private var notifGranted = false
@@ -152,6 +153,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 12) {
                 permissionRow("Microphone", icon: "mic.fill", granted: micGranted)
+                permissionRow("Speech Recognition", icon: "waveform", granted: speechGranted)
                 permissionRow("Contacts", icon: "person.fill", granted: contactsGranted)
                 permissionRow("Calendar", icon: "calendar", granted: calendarGranted)
                 permissionRow("Notifications", icon: "bell.fill", granted: notifGranted)
@@ -465,7 +467,7 @@ struct OnboardingView: View {
             if !g.isEmpty { GigiConfig.setGroqAPIKey(g) }
             let gem = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if !gem.isEmpty {
-                GigiKeychain.save(gem, forKey: GigiKeychain.Key.geminiAPIKey)
+                GigiConfig.setGeminiAPIKey(gem)
             }
         }
         // Save profile when leaving step 4
@@ -530,11 +532,12 @@ struct OnboardingView: View {
         isRequestingPermissions = true
         // Microphone
         if await AVCaptureDevice.requestAccess(for: .audio) { micGranted = true }
-        // Speech
+        // Speech Recognition
         await withCheckedContinuation { cont in
             SFSpeechRecognizer.requestAuthorization { _ in cont.resume() }
         }
         micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        speechGranted = SFSpeechRecognizer.authorizationStatus() == .authorized
         // Contacts
         let cn = CNContactStore()
         if (try? await cn.requestAccess(for: .contacts)) == true { contactsGranted = true }
