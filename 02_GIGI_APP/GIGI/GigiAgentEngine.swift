@@ -50,7 +50,13 @@ final class GigiAgentEngine {
 
     var onInterimEvent: ((InterimEvent) -> Void)?
 
-    private init() {}
+    private init() {
+        // Wire GigiClaudeBridge to conversation memory so stream events
+        // can append `.thinking` / `.toolEvent` bubbles while Claude runs.
+        // Both objects are singletons (@MainActor) so this reference is
+        // stable for the process lifetime.
+        GigiClaudeBridge.shared.memory = GigiConversationMemory.shared
+    }
 
     // MARK: - Public API
 
@@ -58,6 +64,53 @@ final class GigiAgentEngine {
     func process(text: String) async -> AgentResult {
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
+
+        // === Gate 1: Force Claude (Phase 2 — D4.a = YES, takes precedence over planner) ===
+        // When Brain Mode → Force Claude is on, route the entire request to Claude
+        // via the harness streaming bridge. The harness streams Claude's thoughts
+        // as `.thinking`/`.toolEvent` bubbles directly into conversation memory.
+        // If autoFallback is ON and Force Claude fails, fall through to Gate 2 (planner).
+        if GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude) {
+            let autoFallback = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
+            if GigiHarnessClient.shared.isConfigured {
+                let result = await GigiClaudeBridge.shared.run(task: text, context: nil)
+                if let err = result.error {
+                    if !autoFallback {
+                        return AgentResult(
+                            speech: err,
+                            executedTools: [],
+                            isFollowUp: false,
+                            costEstimate: 0,
+                            requiresConfirm: nil,
+                            isError: true
+                        )
+                    }
+                    // else: silent fallback to Gate 2 (planner) below
+                } else {
+                    return AgentResult(
+                        speech: result.value,
+                        executedTools: ["ask_claude"],
+                        isFollowUp: false,
+                        costEstimate: Double(result.tokenEstimate) * costPerToken,
+                        requiresConfirm: nil,
+                        isError: false
+                    )
+                }
+            } else if !autoFallback {
+                return AgentResult(
+                    speech: "Force Claude is on but harness is not paired. Pair it from Settings or enable Auto Fallback.",
+                    executedTools: [],
+                    isFollowUp: false,
+                    costEstimate: 0,
+                    requiresConfirm: nil,
+                    isError: true
+                )
+            }
+            // else: fall through to Gate 2 (planner) — D4.b = A
+        }
+
+        // === Gate 2: Multi-agent planner (Leo lane, identical to harness-pre-armando-integration) ===
+        // Build initial contents from pruned history (user turn already appended above)
         let history = mem.contents(pruningIfNeeded: true)
         let memoryBlock = await buildMemoryBlock(for: text)
         var systemInstruction = GigiFoundationAgent.agentToolPrompt

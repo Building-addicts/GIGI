@@ -5,7 +5,7 @@
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<true/>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -90,7 +90,6 @@
 		<string>audio</string>
 		<string>fetch</string>
 		<string>remote-notification</string>
-		<string>voip</string>
 	</array>
     <key>NSAppTransportSecurity</key>
     <dict>
@@ -122,6 +121,10 @@
     <key>NSAppleMusicUsageDescription</key>
     <string>GIGI ha bisogno di accedere ad Apple Music per riprodurre la musica richiesta.</string>
     <key>NSCameraUsageDescription</key>
-    <string>GIGI usa la fotocamera per scansionare il QR code di pairing con il Mac harness.</string>
+    <string>GIGI usa la fotocamera per leggere il QR code del tuo Harness backend (pairing una-tantum).</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_gigi._tcp</string>
+    </array>
 </dict>
 </plist>

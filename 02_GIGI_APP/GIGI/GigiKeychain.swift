@@ -30,6 +30,8 @@ enum GigiKeychain {
             query[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlock
             SecItemAdd(query as CFDictionary, nil)
         }
+
+        notifyHarnessPairingChangedIfNeeded(forKey: key)
     }
 
     // MARK: - Read
@@ -60,6 +62,14 @@ enum GigiKeychain {
             kSecAttrAccount:  key,
         ]
         SecItemDelete(query as CFDictionary)
+        notifyHarnessPairingChangedIfNeeded(forKey: key)
+    }
+
+    private static func notifyHarnessPairingChangedIfNeeded(forKey key: String) {
+        guard key == Key.harnessBaseURL || key == Key.harnessSecret else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .gigiHarnessPairingDidChange, object: nil)
+        }
     }
 
     // MARK: - Key constants
@@ -71,5 +81,21 @@ enum GigiKeychain {
         static let harnessBaseURL    = "harness_base_url"   // e.g. http://10.0.0.5:7779
         static let harnessSecret     = "harness_shared_secret"
         static let harnessDeviceID   = "harness_device_id"  // UUID persistente per device
+        static let harnessApnsToken    = "harness_apns_token"    // ultimo device token ricevuto da Apple
+        static let harnessApnsSyncedTo = "harness_apns_synced_to" // SHA256(baseURL|secret) cui il token è stato inviato con successo
+
+        // Brain Mode (Phase 2 — Force Claude toggle)
+        static let forceClaude         = "brain_force_claude"     // "1" = bypass Groq, route every turn through Claude
+        static let autoFallback        = "brain_auto_fallback"    // "1" = if Force Claude on but harness unreachable, fall back to Groq silently
+    }
+
+    // MARK: - Bool helpers
+
+    static func loadBool(forKey key: String) -> Bool {
+        return load(forKey: key) == "1"
+    }
+
+    static func saveBool(_ value: Bool, forKey key: String) {
+        save(value ? "1" : "0", forKey: key)
     }
 }

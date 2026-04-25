@@ -46,10 +46,16 @@ final class GigiAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         GigiDebugLogger.log("APNS token ricevuto: \(token.prefix(16))…")
-        Task { @MainActor in
-            GigiAPNSSync.shared.setToken(token)
-            await GigiAPNSSync.shared.sync(reason: "token-received")
-        }
+        // Persist token always (even if Harness not yet configured) and delegate
+        // sync to GigiApnsSync, which handles retry + config change.
+        Task { @MainActor in GigiApnsSync.onTokenReceived(token) }
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        // Opportunistic retry: if a previous sync failed (network down, server
+        // unreachable, missing config), the token gets re-sent here.
+        // No-op if the fingerprint (URL + secret) matches the last OK sync.
+        Task { @MainActor in GigiApnsSync.onAppDidBecomeActive() }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Swift.Error) {

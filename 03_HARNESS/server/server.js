@@ -30,8 +30,13 @@ import * as transcriptMirror from './transcript-mirror.js';
 import * as watchers from './watchers.js';
 import { startRpc } from './bridge-rpc.js';
 import { handleIosRequest } from './api/ios-router.js';
+import { handlePair } from './api/pair.js';
+import { handleSetup } from './api/setup.js';
+import { handleDiagnostics } from './api/diagnostics.js';
+import { handleAutofix } from './api/autofix.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
 import * as channelRouter from './api/channel-router.js';
+import { handlePanelRequest } from './api/panel-connections.js';
 
 // ─────────────────────────────────────────────────────────────
 // Lock file: evita istanze duplicate
@@ -173,6 +178,25 @@ async function main() {
   const iosHost = cfg.server?.host || '127.0.0.1';
   const iosServer = http.createServer(async (req, res) => {
     try {
+      // /api/pair is loopback-only (enforced inside handlePair) and MUST
+      // run before the iOS router, because it intentionally skips the
+      // Bearer check (the QR itself hands out the Bearer).
+      if (await handlePair(req, res, { cfg })) return;
+      // /api/setup/diagnostics — Bearer-authed (same secret as iOS API).
+      // MUST run before handleSetup, since handleSetup also matches
+      // /api/setup/* but enforces loopback-only — the iPhone is NOT
+      // on loopback when calling diagnostics.
+      if (await handleDiagnostics(req, res, { cfg, gigiServer })) return;
+      // /api/setup/autofix — Bearer-authed batch fixer. Same reasoning
+      // as diagnostics: matches /api/setup/* but bypasses loopback gate.
+      if (await handleAutofix(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
+      // /api/panel/* — Connections tab (loopback-only). Lives in the bridge
+      // process because it inspects in-memory state (cloudflared, WS rooms,
+      // request log) that the panel process can't reach directly.
+      if (await handlePanelRequest(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
+      // /api/setup/* — wizard endpoints, also loopback-only + bearer-free.
+      if (await handleSetup(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
+      // iOS router (Bearer-authed) → fallback to channel router (Telegram/WhatsApp/etc.)
       const handled = await handleIosRequest(req, res, { cfg, gigiServer })
         || await channelRouter.handle(req, res, { cfg, gigiServer, log });
       if (!handled) {

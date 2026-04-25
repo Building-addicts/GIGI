@@ -4,6 +4,19 @@ import SwiftUI
 //
 // All configuration in one place: API keys, wake word, privacy, debug.
 
+enum SettingsField: Hashable {
+    case geminiKey, harnessURL, harnessSecret
+}
+
+private enum SettingsSheet: String, Identifiable {
+    case whatsApp
+    case profile
+    case pairing
+    case diagnostics
+
+    var id: String { rawValue }
+}
+
 struct SettingsView: View {
     @State private var groqKey = ""
     @State private var showQRScanner = false
@@ -17,17 +30,22 @@ struct SettingsView: View {
     @State private var showClearMemoryAlert = false
     @State private var showResetOnboarding = false
     @State private var accessoryList: [String] = []
-    @State private var showWhatsApp = false
-    @State private var showProfile = false
+    @State private var activeSheet: SettingsSheet? = nil
     @State private var harnessURL = ""
     @State private var harnessSecret = ""
     @State private var harnessStatus = "—"
     @State private var isTestingHarness = false
+    @State private var manualConfigExpanded = false
+    @State private var pairedDeviceName: String? = nil
+    @State private var forceClaude: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
+    @State private var autoFallback: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
+    @FocusState var focusedField: SettingsField?
 
     var body: some View {
         NavigationStack {
             List {
                 brainSection
+                brainModeSection
                 harnessSection
                 whatsAppSection
                 profileSection
@@ -39,22 +57,24 @@ struct SettingsView: View {
                 aboutSection
             }
             .listStyle(.insetGrouped)
+            .scrollIndicators(.hidden)
             .preferredColorScheme(.dark)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.purple)
+                }
+            }
             .task { await loadState() }
             .sheet(isPresented: $showWhatsApp) { WhatsAppLinkSheet() }
             .sheet(isPresented: $showProfile) { ProfileEditSheet() }
-            .fullScreenCover(isPresented: $showQRScanner) {
-                HarnessQRScannerView(
-                    onScanned: { payload in
-                        harnessURL = payload.url
-                        harnessSecret = payload.secret
-                        showQRScanner = false
-                        Task { await saveAndTestHarness() }
-                    },
-                    onCancel: { showQRScanner = false }
-                )
+            .sheet(item: $activeSheet) { sheet in
+                settingsSheet(sheet)
             }
         }
     }
@@ -70,11 +90,13 @@ struct SettingsView: View {
                         .font(.system(.body, design: .monospaced))
                         .autocorrectionDisabled()
                         .submitLabel(.done)
+                        .focused($focusedField, equals: .groqKey)
                         .onSubmit { saveGroqKey() }
                 } else {
                     SecureField("Groq API Key", text: $groqKey)
                         .font(.system(.body, design: .monospaced))
                         .submitLabel(.done)
+                        .focused($focusedField, equals: .groqKey)
                         .onSubmit { saveGroqKey() }
                 }
                 Button(action: { showKey.toggle() }) {
@@ -114,36 +136,104 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Brain Mode section (Phase 2 — Force Claude toggle)
+
+    private var brainModeSection: some View {
+        Section {
+            Toggle(isOn: $forceClaude) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Force Claude")
+                        .font(.body.weight(.medium))
+                    Text("Route every turn through Claude on your PC, bypassing Groq.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .tint(.purple)
+            .onChange(of: forceClaude) { _, new in
+                GigiKeychain.saveBool(new, forKey: GigiKeychain.Key.forceClaude)
+            }
+
+            Toggle(isOn: $autoFallback) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auto Fallback to Groq")
+                        .font(.body.weight(.medium))
+                    Text("If the harness is unreachable, silently use Groq instead of failing.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .tint(.purple)
+            .disabled(!forceClaude)
+            .onChange(of: autoFallback) { _, new in
+                GigiKeychain.saveBool(new, forKey: GigiKeychain.Key.autoFallback)
+            }
+        } header: {
+            Text("🧠 Brain Mode")
+        } footer: {
+            Text("Force Claude is slower but smarter — Claude has web search, computer-use, and full reasoning. Default off uses Groq for fast turns and escalates to Claude only when needed.")
+                .font(.caption)
+        }
+    }
+
     // MARK: - Harness section (backend GIGI)
+
+    // Phase 5.11 — migration banner: shown when the paired URL is a
+    // Tailscale 100.* address, suggesting the user upgrade to Cloudflare
+    // Tunnel for a smoother cross-network experience.
+    @ViewBuilder
+    private var migrationBannerIfNeeded: some View {
+        if shouldShowMigrationBanner {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "cloud.bolt")
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Tip: switch to Cloudflare Tunnel")
+                        .font(.subheadline.weight(.semibold))
+                    Text("You're paired via a Tailscale 100.* address. Cloudflare Tunnel works without Tailscale and reconnects faster across networks. Open localhost:7777/setup on your PC.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Button("Don't show again") {
+                        UserDefaults.standard.set(true, forKey: "gigi.migration.cf.dismissed")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.purple)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .background(Color.purple.opacity(0.1))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.3), lineWidth: 1))
+            .cornerRadius(10)
+        }
+    }
+
+    private var shouldShowMigrationBanner: Bool {
+        if UserDefaults.standard.bool(forKey: "gigi.migration.cf.dismissed") { return false }
+        guard let host = GigiHarnessClient.shared.pairedBaseURL?.host else { return false }
+        return host.hasPrefix("100.") // Tailscale CGNAT range
+    }
 
     private var harnessSection: some View {
         Section {
+            migrationBannerIfNeeded
+
+            // Primary action: pair via QR
             Button {
-                showQRScanner = true
+                activeSheet = .pairing
             } label: {
-                Label("Scan QR from Mac terminal", systemImage: "qrcode.viewfinder")
-                    .foregroundColor(.purple)
+                HStack(spacing: 10) {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 18))
+                    Text(harnessIsPaired ? "Re-pair with Harness" : "Pair with Harness")
+                        .font(.body.weight(.medium))
+                    Spacer()
+                }
+                .foregroundColor(.purple)
+                .padding(.vertical, 4)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Base URL").font(.caption).foregroundColor(.secondary)
-                TextField("http://10.0.0.5:7779", text: $harnessURL)
-                    .keyboardType(.URL)
-                    .autocapitalization(.none)
-                    .autocorrectionDisabled()
-                    .font(.system(.body, design: .monospaced))
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Bearer secret").font(.caption).foregroundColor(.secondary)
-                SecureField("shared secret 32 char", text: $harnessSecret)
-                    .font(.system(.body, design: .monospaced))
-            }
-            Button("Save & test") {
-                Task { await saveAndTestHarness() }
-            }
-            .foregroundColor(.purple)
-            .disabled(harnessURL.isEmpty || harnessSecret.isEmpty || isTestingHarness)
-
+            // Status line
             HStack {
                 Text("Status")
                 Spacer()
@@ -155,12 +245,112 @@ struct SettingsView: View {
                         .font(.subheadline)
                 }
             }
+
+            // Phase 6C — rich runtime status card (only when paired).
+            if harnessIsPaired {
+                HarnessStatusCard(deviceName: pairedDeviceName)
+            }
+
+            // Re-test + diagnostics + unpair
+            if harnessIsPaired {
+                Button("Test connection") {
+                    Task { await testHarnessHealthOnly() }
+                }
+                .foregroundColor(.purple)
+                .disabled(isTestingHarness)
+
+                Button("Run diagnostics") {
+                    activeSheet = .diagnostics
+                }
+                .foregroundColor(.purple)
+
+                Button(role: .destructive) {
+                    removePairing()
+                } label: {
+                    Text("Remove pairing")
+                }
+            }
+
+            // Advanced: manual config still available for power users / debug.
+            DisclosureGroup("Manual configuration (advanced)", isExpanded: $manualConfigExpanded) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Base URL").font(.caption).foregroundColor(.secondary)
+                    TextField("http://10.0.0.5:7779", text: $harnessURL)
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                        .focused($focusedField, equals: .harnessURL)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Bearer secret").font(.caption).foregroundColor(.secondary)
+                    SecureField("32+ char shared secret", text: $harnessSecret)
+                        .font(.system(.body, design: .monospaced))
+                        .focused($focusedField, equals: .harnessSecret)
+                }
+                Button("Save and test") {
+                    Task { await saveAndTestHarness() }
+                }
+                .foregroundColor(.purple)
+                .disabled(harnessURL.isEmpty || harnessSecret.isEmpty || isTestingHarness)
+            }
+            .font(.caption)
+            .tint(.secondary)
         } header: {
             Text("🖥 Harness Backend")
         } footer: {
-            Text("Backend Node (computer-use, memoria, watcher proattivi). Genera il secret con `openssl rand -hex 16`. Senza configurazione, GIGI funziona solo local.")
+            Text("Open localhost:7777/setup in your PC browser to choose the tunnel mode, then localhost:7777/pair for the QR. One-time setup, then works from any network.")
                 .font(.caption)
         }
+    }
+
+
+    @ViewBuilder
+    private func settingsSheet(_ sheet: SettingsSheet) -> some View {
+        switch sheet {
+        case .whatsApp:
+            WhatsAppLinkSheet()
+        case .profile:
+            ProfileEditSheet()
+        case .pairing:
+            GigiPairingSheet { deviceName in
+                pairedDeviceName = deviceName
+                harnessStatus = "\u{2713} Connected to \(deviceName)"
+            }
+        case .diagnostics:
+            // Re-running diagnostics from Settings: when the user taps
+            // Finalize we just close the sheet (no pair side-effect).
+            SetupDiagnosticView(
+                onNeedsRepair: {
+                    harnessStatus = "Not configured - scan a fresh QR"
+                    pairedDeviceName = nil
+                    harnessURL = ""
+                    harnessSecret = ""
+                    activeSheet = nil
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        activeSheet = .pairing
+                    }
+                },
+                onFinalize: {
+                    harnessStatus = "\u{2713} Harness ready"
+                    activeSheet = nil
+                }
+            )
+        }
+    }
+
+    private var harnessIsPaired: Bool {
+        GigiHarnessClient.shared.pairingState.isConfigured
+    }
+
+    private func removePairing() {
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessSecret)
+        harnessURL = ""
+        harnessSecret = ""
+        harnessStatus = "Not configured"
+        pairedDeviceName = nil
     }
 
     // MARK: - WhatsApp section
@@ -178,7 +368,7 @@ struct SettingsView: View {
                     .font(.subheadline)
             }
             Button(linked ? "Re-link WhatsApp Web" : "Link WhatsApp Web") {
-                showWhatsApp = true
+                activeSheet = .whatsApp
             }
             .foregroundColor(.purple)
         } header: {
@@ -193,7 +383,7 @@ struct SettingsView: View {
 
     private var profileSection: some View {
         Section {
-            Button("Edit Profile") { showProfile = true }
+            Button("Edit Profile") { activeSheet = .profile }
                 .foregroundColor(.purple)
         } header: {
             Text("👤 Your Profile")
@@ -347,6 +537,15 @@ struct SettingsView: View {
             }
             .foregroundColor(.purple)
 
+            HStack(alignment: .top) {
+                Text("Harness pairing")
+                Spacer()
+                Text(GigiHarnessClient.shared.pairingState.debugLabel)
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+                    .multilineTextAlignment(.trailing)
+            }
+
             Button("Reset Onboarding") {
                 UserDefaults.standard.removeObject(forKey: "gigi.onboarding.complete")
                 showResetOnboarding = true
@@ -401,20 +600,54 @@ struct SettingsView: View {
         if !existing.isEmpty { groqKey = existing }
         harnessURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) ?? ""
         harnessSecret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? ""
-        harnessStatus = GigiHarnessClient.shared.isConfigured ? "configurato (non testato)" : "non configurato"
+        let pairingState = GigiHarnessClient.shared.pairingState
+        harnessStatus = pairingState.isConfigured ? "Configured (not tested)" : "Not configured - \(pairingState.debugLabel)"
     }
 
+    /// Used only by the "Salva e testa" button inside the manual/advanced
+    /// DisclosureGroup. Reads the TextField @State bindings and writes them
+    /// to the Keychain. Safe only when the user has just typed URL+secret
+    /// manually. DO NOT call from the primary "Verifica connessione" button
+    /// post-QR-pair — that would wipe the Keychain because the @State
+    /// bindings are empty (the pair sheet writes directly to Keychain,
+    /// not to our @State).
     private func saveAndTestHarness() async {
         isTestingHarness = true
-        GigiKeychain.save(harnessURL.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessBaseURL)
-        GigiKeychain.save(harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.harnessSecret)
+        let url    = harnessURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secret = harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty, !secret.isEmpty else {
+            harnessStatus = "URL and secret cannot be empty"
+            isTestingHarness = false
+            return
+        }
+        GigiKeychain.save(url,    forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.save(secret, forKey: GigiKeychain.Key.harnessSecret)
         _ = GigiHarnessClient.ensureDeviceId()
+        GigiApnsSync.onConfigChanged()
         switch await GigiHarnessClient.shared.health() {
         case .success(let h): harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
         case .failure(let e): harnessStatus = "✗ \(e)"
         }
-        await GigiAPNSSync.shared.sync(reason: "config-changed")
+        // GigiApnsSync.onConfigChanged() already called above; no per-call sync API exists.
         isTestingHarness = false
+    }
+
+    /// Idempotent health-only check. Reads the Keychain (authoritative
+    /// source, populated by the pair sheet) and pings `/api/ios/health`.
+    /// Never writes. This is the only action safe to expose post-pair.
+    private func testHarnessHealthOnly() async {
+        isTestingHarness = true
+        defer { isTestingHarness = false }
+        guard GigiHarnessClient.shared.isConfigured else {
+            harnessStatus = "✗ Harness not configured (URL/secret missing)"
+            return
+        }
+        switch await GigiHarnessClient.shared.health() {
+        case .success(let h):
+            harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
+        case .failure(let e):
+            harnessStatus = "✗ \(e)"
+        }
     }
 
     private func saveGroqKey() {
@@ -422,6 +655,13 @@ struct SettingsView: View {
         guard !trimmed.isEmpty else { return }
         GigiConfig.setGroqAPIKey(trimmed)
         connectionStatus = "Key saved"
+    }
+
+    private func saveGeminiKey() {
+        let trimmed = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        GigiConfig.setGeminiAPIKey(trimmed)
+        connectionStatus = "Gemini key saved"
     }
 
     private func testConnection() async {

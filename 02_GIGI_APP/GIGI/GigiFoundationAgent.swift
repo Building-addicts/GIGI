@@ -193,6 +193,7 @@ final class GigiFoundationAgent {
           – "Book dinner with Marco at The Grill at 8pm tonight" → create_event THEN web_book_restaurant THEN send_message to Marco.
           – "Research flights to NYC next Tuesday, cheapest option" → ask_harness with full search task.
         • ask_harness: use when the task needs a real browser, deep web research, live price comparison, multi-site automation, or anything beyond native iOS capabilities. The harness runs Claude Opus with Chrome on your Mac. Give it a complete, detailed task description.
+        • ask_claude: use when the user's request needs multi-step reasoning over data you don't have in this turn (analyze calendar + find slots, compare options, plan a trip), or any open-ended task that benefits from Claude's thinking streaming live into chat. Pass `task` as a complete imperative description; set `context` only if user provided info in THIS turn that Claude wouldn't see from the shared snapshot. Difference vs ask_harness: ask_claude streams thinking live into the chat as `.thinking`/`.toolEvent` bubbles; ask_harness returns a single result.
         • If NO tool applies (pure trivia, general knowledge, casual chit-chat) — reply in plain text, 1–3 sentences.
         • NEVER invent tools. NEVER call a tool not in the provided list. No `respond`, `final_answer`, or `chat` meta-tools exist.
         • NEVER output JSON, markdown, or code fences in spoken replies.
@@ -205,7 +206,8 @@ final class GigiFoundationAgent {
         1. Native iOS — make_call, send_message, create_event, set_alarm, set_timer, navigate, play_music, homekit_*, torch, facetime, media controls, remember, recall
         2. On-device web — web_whatsapp, web_book_restaurant, web_order_food, web_search_and_read, web_vision_task
         3. Harness backend — ask_harness (Mac + real browser + Claude Opus, ~5–15s)
-        4. computer_use — absolute last resort, only if ask_harness fails or is unavailable
+        4. ask_claude — multi-step reasoning / planning / open-ended (streams thinking live)
+        5. computer_use — absolute last resort, only if ask_harness and ask_claude both fail or are unavailable
 
         STYLE: Contractions (I'll, you've, it's). No "Sure!", "Of course!", "Absolutely!". 1 sentence for action confirmations.
         """

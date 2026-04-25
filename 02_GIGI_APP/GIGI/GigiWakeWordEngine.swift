@@ -15,12 +15,14 @@ import UIKit
 //   • contextualStrings biases the decoder toward our keywords → faster + more accurate
 //   • addsPunctuation = false → skips the punctuation model entirely
 //   • bufferSize 512 → halved from 1024, sufficient for keyword detection
-//   • restart interval: 50s screen-on, 58s screen-off (Apple task limit is ~60s)
-//   • Screen dark > 2 min → full stop; resumes when screen lights up
+//   • restart interval: 50s (Apple task limit is ~60s)
+//   • App inactive > 2 min → full stop; resumes when app becomes active again
+//     (UIScreen.main.brightness is unreliable — it keeps the user's set value
+//      even after auto-lock, so brightness-based detection never fires)
 //   • Low Power Mode → full stop; resumes when LPM deactivates
 //   • Pauses automatically during calls (CallKit) and while GIGI is processing.
-//   • NO requiresOnDeviceRecognition: Apple routes to server when available (lighter on device)
-//     and falls back to on-device automatically when offline.
+//   • requiresOnDeviceRecognition = true → avoids pinning the cellular/Wi-Fi radio
+//     in high-power state 24/7 from continuous audio streaming to Apple servers.
 
 @MainActor
 final class GigiWakeWordEngine {
@@ -56,13 +58,22 @@ final class GigiWakeWordEngine {
         callObserver         = obs
         callObserverDelegate = del
 
-        // Screen brightness → dark: start 2-min timer to cut wake word
-        // Screen brightness → on: cancel timer, restart wake word
+        // App lifecycle: stop wake word ~2min after the app becomes inactive
+        // (screen lock, app switched away). This is the ONLY reliable signal —
+        // UIScreen.main.brightness keeps the user's set value even when locked,
+        // so brightness-based detection never fires on auto-lock → wake word
+        // would run 24/7 in the background, burning battery.
         NotificationCenter.default.addObserver(
-            forName: UIScreen.brightnessDidChangeNotification,
+            forName: UIApplication.willResignActiveNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.handleBrightnessChange() }
+            Task { @MainActor [weak self] in self?.handleAppInactive() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.handleAppActive() }
         }
 
         // Low Power Mode: stop immediately when enabled, resume when disabled
@@ -74,29 +85,28 @@ final class GigiWakeWordEngine {
         }
     }
 
-    // MARK: - Screen dark timer
+    // MARK: - App lifecycle dark timer
 
-    private func handleBrightnessChange() {
-        let screenIsOn = currentScreenBrightness > 0
-        if screenIsOn {
-            // Screen lit up — cancel dark timer and restart if enabled
-            screenDarkTimer?.cancel()
-            screenDarkTimer = nil
-            applyPreferredState()
-        } else {
-            // Screen went dark — wait 2 minutes before cutting wake word to handle
-            // brief screen-off moments (pocket, quick glance away)
-            guard screenDarkTimer == nil else { return }
-            screenDarkTimer = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 120_000_000_000)  // 2 minutes
-                guard !Task.isCancelled else { return }
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.screenDarkTimer = nil
-                    if self.isMonitoring {
-                        print("GIGI WakeWord: screen dark 2 min — pausing to save battery")
-                        self.stopMonitoringHard()
-                    }
+    private func handleAppActive() {
+        // App foregrounded — cancel pending dark-timer and resume wake word
+        screenDarkTimer?.cancel()
+        screenDarkTimer = nil
+        applyPreferredState()
+    }
+
+    private func handleAppInactive() {
+        // App left foreground (locked, switched away) — wait 2 minutes before
+        // cutting wake word to handle quick glances / app switches.
+        guard screenDarkTimer == nil else { return }
+        screenDarkTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 120_000_000_000)  // 2 minutes
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.screenDarkTimer = nil
+                if self.isMonitoring {
+                    print("GIGI WakeWord: app inactive 2 min — pausing to save battery")
+                    self.stopMonitoringHard()
                 }
             }
         }
@@ -175,8 +185,11 @@ final class GigiWakeWordEngine {
         do {
             try AVAudioSession.sharedInstance().setCategory(
                 .playAndRecord,
-                mode: .measurement,
-                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP]
+                // .voiceChat: matches GigiAudioSequestrator → no hardware renegotiation
+                // on wake → VAD handoff. .measurement disables echo cancellation / AGC /
+                // speech DSP and keeps the ADC in high-fidelity mode — more power draw.
+                mode: .voiceChat,
+                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
             )
             try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
             return true
@@ -220,8 +233,13 @@ final class GigiWakeWordEngine {
         req.shouldReportPartialResults = true
         req.addsPunctuation = false     // skip punctuation model — not needed for keywords
         req.contextualStrings = keywords  // bias decoder toward our phrases → faster + more accurate
-        // Do NOT set requiresOnDeviceRecognition: Apple routes to server when available,
-        // which is lighter on device CPU. Falls back to on-device automatically offline.
+        // Force on-device: server-based recognition streams audio to Apple continuously,
+        // pinning the cellular/Wi-Fi radio in high-power state 24/7 (~1.5W). On-device
+        // costs slightly more CPU (~0.3W) but lets the radio sleep. Huge net win for
+        // always-on keyword spotting. Falls back to no-op if device can't run it.
+        if recognizer.supportsOnDeviceRecognition {
+            req.requiresOnDeviceRecognition = true
+        }
         recognitionReq = req
 
         recognitionTask = recognizer.recognitionTask(with: req) { [weak self] result, error in
@@ -269,13 +287,13 @@ final class GigiWakeWordEngine {
         deactivateWakeSession()
     }
 
-    // Restart before the ~60s Apple task limit.
-    // Screen off → 58s (longer interval saves battery — user unlikely to speak).
-    // Screen on  → 50s (shorter → lower risk of missing a keyword at the boundary).
+    // Restart before the ~60s Apple task limit. Fixed 50s — we no longer gate on
+    // UIScreen.main.brightness (unreliable: keeps the user's set value even when
+    // locked). App inactivity already halts wake word via handleAppInactive, so
+    // this interval only applies while the app is active.
     private func scheduleRestart() {
         restartTimer?.cancel()
-        let screenIsOn = currentScreenBrightness > 0
-        let interval: UInt64 = screenIsOn ? 50_000_000_000 : 58_000_000_000
+        let interval: UInt64 = 50_000_000_000
         restartTimer = Task { [weak self] in
             try? await Task.sleep(nanoseconds: interval)
             guard let self, !Task.isCancelled, self.isMonitoring else { return }

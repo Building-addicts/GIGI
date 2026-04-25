@@ -502,7 +502,7 @@ struct OnboardingView: View {
         case .success(let h): harnessStatus = "ok:\(h.pid)"
         case .failure(let e): harnessStatus = "fail: \(e)"
         }
-        await GigiAPNSSync.shared.sync(reason: "config-changed")
+        await MainActor.run { GigiApnsSync.onConfigChanged() }
         isTestingHarness = false
     }
 

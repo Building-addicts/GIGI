@@ -96,8 +96,214 @@ $$('.tab').forEach(b => {
     $$('.panel').forEach(p => p.classList.remove('active'));
     $(`#tab-${b.dataset.tab}`).classList.add('active');
     if (b.dataset.tab === 'logs') refreshLogs();
+    if (b.dataset.tab === 'connections') startConnectionsPolling();
+    else stopConnectionsPolling();
   };
 });
+
+// MARK: - Connections tab (Phase 6B)
+// The bridge process owns the in-memory state (cloudflared, WS rooms,
+// request log). Panel HTTP runs on :7777, bridge on :7779 — same loopback,
+// different port. We fetch directly with explicit port.
+const BRIDGE_BASE = `http://${location.hostname}:7779`;
+let connectionsTimer = null;
+
+async function bridgeFetch(path, init) {
+  const r = await fetch(`${BRIDGE_BASE}${path}`, init);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function fmtTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toTimeString().slice(0, 8);
+}
+
+function fmtAgo(tsMs) {
+  if (!tsMs) return '—';
+  const s = Math.floor((Date.now() - tsMs) / 1000);
+  if (s < 60) return `${s}s fa`;
+  if (s < 3600) return `${Math.floor(s / 60)}m fa`;
+  return `${Math.floor(s / 3600)}h fa`;
+}
+
+function tunnelLabel(mode) {
+  switch (mode) {
+    case 'quick':  return 'Cloudflare Quick Tunnel';
+    case 'named':  return 'Cloudflare Named Tunnel';
+    case 'lan':    return 'LAN (mDNS)';
+    case 'manual': return 'Manuale (Tailscale o relay custom)';
+    default:       return mode || '—';
+  }
+}
+
+function showToast(msg, kind = 'ok') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${kind}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.classList.add('fade'); }, 1500);
+  setTimeout(() => { el.remove(); }, 1900);
+}
+
+async function loadConnections() {
+  let data;
+  try {
+    data = (await bridgeFetch('/api/panel/connections')).data;
+  } catch (e) {
+    $('#conn-tunnel-mode').textContent = 'Bridge non raggiungibile';
+    $('#conn-tunnel-url').textContent = '';
+    $('#conn-tunnel-meta').textContent = e.message;
+    return;
+  }
+  renderTunnel(data.tunnel);
+  renderWs(data.ws || []);
+  renderDevices(data.devices || []);
+  renderRequests(data.requests || []);
+}
+
+function renderTunnel(t) {
+  if (!t) return;
+  const dot = t.running ? '🟢' : '⚪';
+  $('#conn-tunnel-mode').textContent = `${dot} ${tunnelLabel(t.mode)}`;
+  $('#conn-tunnel-url').textContent = t.publicUrl || '(nessun URL pubblico)';
+  const parts = [];
+  if (t.running) parts.push(`uptime ${t.uptime_s}s`);
+  if (t.restartCount) parts.push(`restart ×${t.restartCount}`);
+  if (t.pid) parts.push(`pid ${t.pid}`);
+  if (t.lastError) parts.push(`error: ${t.lastError}`);
+  $('#conn-tunnel-meta').textContent = parts.join(' · ') || '—';
+}
+
+function renderWs(list) {
+  const box = $('#conn-ws-list');
+  if (!list.length) {
+    box.innerHTML = `<div class="sub">Nessun client WS connesso</div>`;
+    return;
+  }
+  box.innerHTML = list.map(c => `
+    <div class="conn-row">
+      <div class="conn-row-main">
+        <div class="conn-row-title">${escapeHtml(c.deviceId)}</div>
+        <div class="sub">connesso ${fmtAgo(c.connected_since)} · ${escapeHtml(c.remote_address || '—')}</div>
+      </div>
+      <button class="btn" data-ws-close="${escapeAttr(c.deviceId)}">Disconnect</button>
+    </div>
+  `).join('');
+  box.querySelectorAll('[data-ws-close]').forEach(b => {
+    b.onclick = async () => {
+      const id = b.getAttribute('data-ws-close');
+      if (!confirm(`Disconnect WS for ${id}?`)) return;
+      try {
+        await bridgeFetch(`/api/panel/ws/${encodeURIComponent(id)}/close`, { method: 'POST' });
+        showToast('WS disconnected');
+        loadConnections();
+      } catch (e) { showToast(`Failed: ${e.message}`, 'err'); }
+    };
+  });
+}
+
+function renderDevices(list) {
+  const box = $('#conn-devices-list');
+  if (!list.length) {
+    box.innerHTML = `<div class="sub">Nessun device noto</div>`;
+    return;
+  }
+  box.innerHTML = list.map(d => {
+    const pills = [];
+    if (d.wsConnected) pills.push('<span class="pill green">WS</span>');
+    if (d.hasSession)  pills.push('<span class="pill">session</span>');
+    if (d.apnsRegistered) pills.push('<span class="pill">APNS</span>');
+    if (d.blocked)     pills.push('<span class="pill red">BLOCKED</span>');
+    return `
+    <div class="conn-row">
+      <div class="conn-row-main">
+        <div class="conn-row-title">${escapeHtml(d.deviceId)}</div>
+        <div class="sub">${pills.join(' ')} · last seen ${fmtAgo(d.lastActiveAt)}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" data-dev-reset="${escapeAttr(d.deviceId)}">Reset session</button>
+        <button class="btn danger" data-dev-revoke="${escapeAttr(d.deviceId)}">Revoke</button>
+      </div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-dev-reset]').forEach(b => {
+    b.onclick = async () => {
+      const id = b.getAttribute('data-dev-reset');
+      if (!confirm(`Reset Claude session for ${id}? Next request starts from scratch.`)) return;
+      try {
+        await bridgeFetch(`/api/panel/device/${encodeURIComponent(id)}/reset-session`, { method: 'POST' });
+        showToast('Session reset');
+        loadConnections();
+      } catch (e) { showToast(`Failed: ${e.message}`, 'err'); }
+    };
+  });
+  box.querySelectorAll('[data-dev-revoke]').forEach(b => {
+    b.onclick = async () => {
+      const id = b.getAttribute('data-dev-revoke');
+      if (!confirm(`Revoke device ${id}? This blocks all future requests until you remove it from blocked_device_ids.`)) return;
+      try {
+        await bridgeFetch(`/api/panel/device/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
+        showToast('Device revoked');
+        loadConnections();
+      } catch (e) { showToast(`Failed: ${e.message}`, 'err'); }
+    };
+  });
+}
+
+function renderRequests(list) {
+  const tb = $('#conn-requests-body');
+  if (!list.length) {
+    tb.innerHTML = `<tr><td colspan="6" class="sub" style="text-align:center;padding:14px">Nessuna richiesta recente</td></tr>`;
+    return;
+  }
+  tb.innerHTML = list.map(r => {
+    const errCls = r.status >= 400 || !r.status ? 'req-err' : '';
+    const dev = r.deviceId ? r.deviceId.slice(0, 8) : '—';
+    return `<tr class="${errCls}">
+      <td>${fmtTime(r.ts)}</td>
+      <td>${escapeHtml(dev)}</td>
+      <td>${escapeHtml(r.method)}</td>
+      <td>${escapeHtml(r.path)}</td>
+      <td>${r.status || '—'}</td>
+      <td>${r.latencyMs}ms</td>
+    </tr>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function startConnectionsPolling() {
+  loadConnections();
+  stopConnectionsPolling();
+  connectionsTimer = setInterval(loadConnections, 3000);
+}
+function stopConnectionsPolling() {
+  if (connectionsTimer) { clearInterval(connectionsTimer); connectionsTimer = null; }
+}
+
+// Tunnel action buttons (always wired; only effective when tab visible)
+const btnTunnelStop = $('#btn-tunnel-stop');
+if (btnTunnelStop) btnTunnelStop.onclick = async () => {
+  if (!confirm('Stop the tunnel? iPhone will lose connection until you restart it from /setup.')) return;
+  try {
+    await bridgeFetch('/api/panel/tunnel/stop', { method: 'POST' });
+    showToast('Tunnel stopped');
+    loadConnections();
+  } catch (e) { showToast(`Failed: ${e.message}`, 'err'); }
+};
+const btnTunnelRestart = $('#btn-tunnel-restart');
+if (btnTunnelRestart) btnTunnelRestart.onclick = async () => {
+  try {
+    await bridgeFetch('/api/panel/tunnel/restart', { method: 'POST' });
+    showToast('Tunnel restarted');
+    loadConnections();
+  } catch (e) { showToast(`Failed: ${e.message}`, 'err'); }
+};
 
 $('#btn-start').onclick = async () => { await api('/api/bridge/start', { method:'POST' }); refreshStatus(); };
 $('#btn-stop').onclick = async () => { await api('/api/bridge/stop', { method:'POST' }); refreshStatus(); };

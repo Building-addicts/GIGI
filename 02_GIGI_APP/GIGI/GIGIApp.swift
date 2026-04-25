@@ -20,7 +20,7 @@ struct GIGIApp: App {
             MainTabView()
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
-                        Task { await GigiAPNSSync.shared.sync(reason: "did-become-active") }
+                        Task { @MainActor in GigiApnsSync.onAppDidBecomeActive() }
                         // Silently re-verify WhatsApp session after app resumes from background
                         Task {
                             guard UserDefaults.standard.bool(forKey: "gigi.whatsapp.linked"),

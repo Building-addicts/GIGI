@@ -59,13 +59,75 @@ export function attachWebSocketServer(httpServer, cfg) {
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.deviceId = deviceId;
+      ws.isAlive = true;
+      ws._connectedAt = Date.now();
+      ws._remoteAddress = (req.socket && req.socket.remoteAddress) || null;
       joinRoom(deviceId, ws);
       ws.on('close', () => leaveRoom(deviceId, ws));
       ws.on('error', () => leaveRoom(deviceId, ws));
+      // Heartbeat: iOS client (GigiHarnessStream) sends a WebSocket ping
+      // every ~60s to keep the tunnel alive through Cloudflare's 100s idle
+      // timeout. `ws` auto-replies with a pong; we flip isAlive back on
+      // every pong so the sweep below can detect dead sockets.
+      ws.on('pong', () => { ws.isAlive = true; });
       try { ws.send(JSON.stringify({ type: 'connected', deviceId, ts: Date.now() })); } catch {}
     });
   });
 
-  log('ws: iOS stream pronto su /ws/ios/stream');
+  // Every 30s, ping every socket. If a socket hasn't replied to the previous
+  // ping (isAlive still false from last sweep), consider it dead and drop it.
+  const sweep = setInterval(() => {
+    for (const [deviceId, set] of rooms) {
+      for (const ws of set) {
+        if (ws.readyState !== ws.OPEN) continue;
+        if (ws.isAlive === false) {
+          try { ws.terminate(); } catch {}
+          continue;
+        }
+        ws.isAlive = false;
+        try { ws.ping(); } catch {}
+      }
+    }
+  }, 30_000);
+  sweep.unref?.();
+
+  log('ws: iOS stream pronto su /ws/ios/stream (heartbeat 30s)');
   return wss;
+}
+
+// MARK: - Phase 6B introspection helpers
+
+/**
+ * Snapshot of the active WebSocket clients (newest first per device).
+ * Returns `[{ deviceId, connected_since, remote_address }]`.
+ */
+export function activeClients() {
+  const out = [];
+  for (const [deviceId, set] of rooms) {
+    for (const ws of set) {
+      if (ws.readyState !== ws.OPEN) continue;
+      out.push({
+        deviceId,
+        connected_since: ws._connectedAt || null,
+        remote_address: ws._remoteAddress || null,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Force-close every WS connection for a given deviceId.
+ * Returns the count of sockets terminated.
+ */
+export function closeForDevice(deviceId) {
+  const set = rooms.get(deviceId);
+  if (!set) return 0;
+  let count = 0;
+  for (const ws of [...set]) {
+    try { ws.close(1008, 'revoked'); count++; } catch {}
+    try { ws.terminate(); } catch {}
+  }
+  rooms.delete(deviceId);
+  return count;
 }

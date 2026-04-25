@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pair GIGI iPhone</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      background: #0e0e12; color: #e6e6ec;
+      font: 15px/1.5 -apple-system, 'SF Pro Text', system-ui, sans-serif;
+    }
+    main {
+      max-width: 520px; margin: 48px auto; padding: 0 24px;
+    }
+    h1 {
+      font-size: 22px; font-weight: 700; margin: 0 0 4px 0;
+      letter-spacing: -0.02em;
+    }
+    .sub { color: #9a9ab0; margin: 0 0 32px 0; font-size: 14px; }
+
+    .card {
+      background: #17171f;
+      border: 1px solid #26263a;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .qr-wrap {
+      background: white;
+      padding: 18px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 320px;
+    }
+    .qr-wrap svg { width: 280px; height: 280px; display: block; }
+    .qr-wrap.loading { color: #777; font-size: 14px; background: #222; }
+
+    .kv { display: flex; align-items: center; margin-top: 14px; gap: 10px; }
+    .kv label { color: #8888a0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; flex: 0 0 80px; }
+    .kv code {
+      flex: 1; font: 13px/1.3 'SF Mono', Consolas, monospace;
+      color: #d2d2de; background: #0c0c12; padding: 8px 10px; border-radius: 6px;
+      word-break: break-all;
+    }
+    .kv button {
+      font: 12px/1 -apple-system, sans-serif; color: #cabfff;
+      background: transparent; border: 1px solid #3a2f60;
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+    }
+    .kv button:hover { background: #241a42; }
+
+    ol { padding-left: 18px; color: #b8b8cc; }
+    ol li { margin: 8px 0; }
+    ol li strong { color: #e6e6ec; }
+
+    .footer { font-size: 12px; color: #67677d; margin-top: 24px; text-align: center; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      background: #1e1a3a; color: #b9a8ff; font-size: 11px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Pair GIGI iPhone <span class="badge">one-time</span></h1>
+  <p class="sub">Scan this QR from the GIGI app → Settings → Pair with Harness.</p>
+
+  <div class="card">
+    <div id="qr" class="qr-wrap loading">Loading QR…</div>
+    <div class="kv">
+      <label>URL</label>
+      <code id="url">—</code>
+      <button id="copyUrl">Copy</button>
+    </div>
+    <div class="kv">
+      <label>Device</label>
+      <code id="device">—</code>
+    </div>
+    <div class="kv">
+      <label>Secret</label>
+      <code id="secretMasked">—</code>
+    </div>
+  </div>
+
+  <div class="card">
+    <strong>How to connect:</strong>
+    <ol>
+      <li>Make sure a tunnel mode is active on <a href="/setup" style="color:#b9a8ff">/setup</a> (Quick, LAN or Cloudflare Named).</li>
+      <li>Open the <strong>GIGI</strong> app on your iPhone.</li>
+      <li>Go to <strong>Settings → Pair with Harness</strong> and tap the scan button.</li>
+      <li>Point your camera at this QR. The configuration is automatic.</li>
+    </ol>
+  </div>
+
+  <p class="footer">The <code>/api/pair</code> endpoint is reachable only from localhost to protect the secret.</p>
+</main>
+<script>
+  // The panel runs on :7777 but the pair endpoint lives on the iOS HTTP
+  // server :7779. Both are local — the fetch is same-host, the endpoint
+  // serves CORS headers that allow localhost:7777 specifically.
+  const API_BASE = 'http://' + location.hostname + ':7779';
+
+  async function loadPair() {
+    try {
+      const r = await fetch(API_BASE + '/api/pair', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const { data } = await r.json();
+      document.getElementById('url').textContent = data.url;
+      document.getElementById('device').textContent = data.deviceName;
+      document.getElementById('secretMasked').textContent =
+        data.secret.slice(0, 4) + '…' + data.secret.slice(-4) +
+        ' (' + data.secret.length + ' char)';
+
+      const svgRes = await fetch(API_BASE + '/api/pair?format=svg', { cache: 'no-store' });
+      const svgText = await svgRes.text();
+      const qrBox = document.getElementById('qr');
+      qrBox.classList.remove('loading');
+      qrBox.innerHTML = svgText;
+    } catch (e) {
+      const qrBox = document.getElementById('qr');
+      qrBox.classList.remove('loading');
+      qrBox.textContent = 'Error: ' + e.message;
+      qrBox.style.color = '#ff6b6b';
+    }
+  }
+
+  document.getElementById('copyUrl').addEventListener('click', async () => {
+    const u = document.getElementById('url').textContent;
+    try { await navigator.clipboard.writeText(u); } catch { /* ignore */ }
+    const btn = document.getElementById('copyUrl');
+    const prev = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = prev; }, 1200);
+  });
+
+  window.addEventListener('focus', loadPair);
+  loadPair();
+</script>
+</body>
+</html>

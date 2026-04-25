@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    static let gigiHarnessPairingDidChange = Notification.Name("gigiHarnessPairingDidChange")
+}
+
 // MARK: - GigiHarnessClient
 //
 // HTTP+WS client verso il backend 03_HARNESS (Node). Legge configurazione
@@ -41,12 +45,43 @@ final class GigiHarnessClient {
 
         var description: String {
             switch self {
-            case .notConfigured: return "Harness non configurato (URL/secret mancanti)"
-            case .badResponse(let s, let b): return "HTTP \(s): \(b.prefix(200))"
+            case .notConfigured: return "Harness not configured (URL/secret missing)"
+            case .badResponse(let s, let b): return "HTTP \(s): \(Self.summarize(body: b, status: s))"
             case .decodeFailed(let e): return "decode: \(e.localizedDescription)"
             case .transport(let e):    return "network: \(e.localizedDescription)"
             case .apiError(let c, let m): return "\(c): \(m)"
             }
+        }
+
+        /// Strips HTML tags from a Cloudflare error page so we don't dump
+        /// `<!DOCTYPE html><!--[if lt IE 7]>…` in the user UI. Keeps the
+        /// short error text (e.g. "Origin DNS error", "Tunnel error") and
+        /// adds a hint when the status hints at a stale tunnel URL.
+        private static func summarize(body: String, status: Int) -> String {
+            let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            // If response wasn't HTML, return the first 200 chars verbatim
+            guard trimmed.lowercased().contains("<html") || trimmed.lowercased().hasPrefix("<!doctype") else {
+                return String(trimmed.prefix(200))
+            }
+            // Cloudflare 5xx error pages have <title>...</title> with a clear summary
+            if let titleRange = trimmed.range(of: "<title>", options: .caseInsensitive),
+               let endRange = trimmed.range(of: "</title>", options: .caseInsensitive),
+               titleRange.upperBound < endRange.lowerBound {
+                let title = String(trimmed[titleRange.upperBound..<endRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if status == 530 || status == 502 || status == 521 || status == 522 {
+                    return "\(title) — tunnel not responding, regenerate the QR from localhost:7777/setup"
+                }
+                return title
+            }
+            // Fallback: strip tags blindly
+            let plain = trimmed.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            if status == 530 {
+                return "tunnel unreachable (530) — regenerate the QR"
+            }
+            return String(plain.prefix(160))
         }
     }
 
@@ -58,16 +93,75 @@ final class GigiHarnessClient {
         let deviceId: String
     }
 
+    enum HarnessPairingState: Equatable {
+        case missingBaseURL
+        case invalidBaseURL(String)
+        case missingSecret
+        case configured(baseURL: URL)
+
+        var isConfigured: Bool {
+            if case .configured = self { return true }
+            return false
+        }
+
+        var debugLabel: String {
+            switch self {
+            case .missingBaseURL:
+                return "missing base URL"
+            case .invalidBaseURL(let raw):
+                return "invalid base URL: \(raw)"
+            case .missingSecret:
+                return "missing secret"
+            case .configured(let baseURL):
+                return "configured: \(baseURL.absoluteString)"
+            }
+        }
+    }
+
+    private struct PairingSnapshot {
+        let state: HarnessPairingState
+        let baseURL: URL?
+        let secret: String?
+    }
+
+    private static func pairingSnapshot() -> PairingSnapshot {
+        guard let rawURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawURL.isEmpty else {
+            return PairingSnapshot(state: .missingBaseURL, baseURL: nil, secret: nil)
+        }
+
+        guard let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host?.isEmpty == false else {
+            return PairingSnapshot(state: .invalidBaseURL(rawURL), baseURL: nil, secret: nil)
+        }
+
+        guard let secret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !secret.isEmpty else {
+            return PairingSnapshot(state: .missingSecret, baseURL: url, secret: nil)
+        }
+
+        return PairingSnapshot(state: .configured(baseURL: url), baseURL: url, secret: secret)
+    }
+
+    var pairingState: HarnessPairingState { Self.pairingSnapshot().state }
+
+    /// Full base URL of the paired harness, or nil if not configured.
+    /// Used by `HarnessStatusCard` to expose "Copy full URL" without
+    /// stretching access to the secret.
+    var pairedBaseURL: URL? { Self.pairingSnapshot().baseURL }
+
     private var cfg: Config? {
-        guard let raw = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL),
-              let url = URL(string: raw),
-              let secret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret),
-              !secret.isEmpty else { return nil }
+        let snapshot = Self.pairingSnapshot()
+        guard snapshot.state.isConfigured,
+              let url = snapshot.baseURL,
+              let secret = snapshot.secret else { return nil }
         let deviceId = GigiKeychain.load(forKey: GigiKeychain.Key.harnessDeviceID) ?? Self.ensureDeviceId()
         return Config(baseURL: url, secret: secret, deviceId: deviceId)
     }
 
-    var isConfigured: Bool { cfg != nil }
+    var isConfigured: Bool { pairingState.isConfigured }
 
     static func ensureDeviceId() -> String {
         if let existing = GigiKeychain.load(forKey: GigiKeychain.Key.harnessDeviceID), !existing.isEmpty {
@@ -225,9 +319,140 @@ final class GigiHarnessClient {
 
     struct HealthInfo: Decodable { let pid: Int; let uptime_s: Int }
 
+    // MARK: - Diagnostics (Phase 6 — diagnostic-driven pair flow)
+
+    /// One row of the diagnostics report. Mirrors checks.js CheckResult.
+    struct DiagnosticsCheck: Decodable, Identifiable, Equatable {
+        let id: String
+        let label: String
+        let severity: String      // "critical" | "warning" | "info"
+        let ok: Bool
+        let hint: String?
+        let action: String?
+        // Whether the harness has a registered auto-fixer for this id.
+        // Defaults to false on older harness builds via Decodable.
+        let autoFixable: Bool?
+    }
+
+    // MARK: - Autofix (P6.10/6.11)
+
+    struct AutofixOneResult: Decodable, Equatable {
+        let id: String
+        let fixed: Bool
+        let detail: String?
+        let needsUser: String?
+        let needsRepair: Bool?
+        let error: String?
+    }
+
+    struct AutofixSummary: Decodable, Equatable {
+        let fixedCount: Int
+        let needsUserCount: Int
+        let errorCount: Int
+        let total: Int
+        let elapsed_ms: Int
+    }
+
+    struct AutofixReport: Decodable, Equatable {
+        let results: [AutofixOneResult]
+        let summary: AutofixSummary
+    }
+
+    /// POST /api/setup/autofix with the given checkIds. Use `["all"]` to
+    /// run every registered fixer.
+    func autofix(checkIds: [String]) async -> Result<AutofixReport, Error> {
+        guard let c = cfg else { return .failure(.notConfigured) }
+        return await postJSON(
+            path: "/api/setup/autofix",
+            body: ["checkIds": checkIds],
+            as: AutofixReport.self,
+            cfg: c
+        )
+    }
+
+    /// Clears the pair fully — used after a secret rotation autofix that
+    /// returned needsRepair:true. The iOS app then prompts the user to
+    /// scan a fresh QR.
+    func clearPair() {
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.delete(forKey: GigiKeychain.Key.harnessSecret)
+        lastDiagnostics = nil
+        lastDiagnosticsAt = nil
+    }
+
+    struct DiagnosticsCounts: Decodable, Equatable {
+        struct Pair: Decodable, Equatable { let ok: Int; let total: Int }
+        let critical: Pair
+        let warning: Pair
+        let info: Pair
+    }
+
+    struct DiagnosticsSummary: Decodable, Equatable {
+        let allCriticalOk: Bool
+        let counts: DiagnosticsCounts
+    }
+
+    struct DiagnosticsReport: Decodable, Equatable {
+        let generatedAt: String
+        let elapsedMs: Int
+        let summary: DiagnosticsSummary
+        let checks: [DiagnosticsCheck]
+    }
+
+    /// Calls `GET /api/setup/diagnostics`. The harness caches its own
+    /// response for 5s — pass `forceRefresh: true` to bypass.
+    func diagnostics(forceRefresh: Bool = false) async -> Result<DiagnosticsReport, Error> {
+        guard let c = cfg else { return .failure(.notConfigured) }
+        let path = forceRefresh ? "/api/setup/diagnostics?refresh=1" : "/api/setup/diagnostics"
+        return await getJSON(path: path, as: DiagnosticsReport.self, cfg: c)
+    }
+
+    /// Snapshot of the most recent diagnostics report. Set by the
+    /// SetupDiagnosticView poll loop; consumed by `isReady`. Stays nil
+    /// until the first successful diagnostic call after pair.
+    private(set) var lastDiagnostics: DiagnosticsReport?
+    private var lastDiagnosticsAt: Date?
+
+    /// Updates the in-memory snapshot. Called by the diagnostic view on
+    /// each successful poll. The TTL pattern (5min) is enforced by the
+    /// `isReady` reader rather than by us discarding old reports.
+    func cacheDiagnostics(_ report: DiagnosticsReport) {
+        lastDiagnostics = report
+        lastDiagnosticsAt = Date()
+    }
+
+    /// True iff the harness is paired AND the last diagnostics snapshot
+    /// (taken within the last 5 minutes) reports allCriticalOk == true.
+    /// Used by MainTabView to hide the "Connect to your harness" banner
+    /// and by the chat input gate.
+    var isReady: Bool {
+        guard isConfigured,
+              let snap = lastDiagnostics,
+              let at = lastDiagnosticsAt,
+              Date().timeIntervalSince(at) < 5 * 60
+        else { return false }
+        return snap.summary.allCriticalOk
+    }
+
     func health() async -> Result<HealthInfo, Error> {
         guard let c = cfg else { return .failure(.notConfigured) }
         return await getJSON(path: "/api/ios/health", as: HealthInfo.self, cfg: c)
+    }
+
+    // MARK: - Status snapshot (Phase 6C — rich Settings card)
+
+    struct StatusSnapshot: Decodable, Equatable {
+        let tunnelMode: String
+        let publicUrlRedacted: String?
+        let lastRequestAt: String?
+        let requestsLastHour: Int
+        let uptimeSeconds: Int
+    }
+
+    /// GET /api/ios/status — used by `HarnessStatusCard` in Settings.
+    func statusSnapshot() async -> Result<StatusSnapshot, Error> {
+        guard let c = cfg else { return .failure(.notConfigured) }
+        return await getJSON(path: "/api/ios/status", as: StatusSnapshot.self, cfg: c)
     }
 
     // MARK: - Transport
@@ -275,8 +500,6 @@ final class GigiHarnessClient {
         return .failure(lastError)
     }
 
-    /// Risposta JSON comune dal server (`{ ok, data?, error? }`). Non può stare dentro
-    /// `decodeEnvelope` perché Swift vieta tipi generici annidati in funzioni generiche.
     private struct Envelope<D: Decodable>: Decodable {
         let ok: Bool
         let data: D?
@@ -307,6 +530,13 @@ final class GigiHarnessStream: NSObject {
     private var keepOpen = false
     private var reconnectMs: UInt64 = 500
 
+    /// Heartbeat period. Cloudflare Tunnel free tier closes idle WebSockets
+    /// after 100s; 60s leaves a comfortable margin. Tailscale and LAN don't
+    /// enforce idle limits but the extra ping is cheap and harmless.
+    private let pingIntervalSec: UInt64 = 60
+    private var pingTask: Task<Void, Never>?
+    private var missedPongs = 0
+
     func connect(onEvent: @escaping EventHandler) {
         guard let wsURL = Self.makeWebSocketURL() else {
             GigiDebugLogger.log("GigiHarnessStream: URL WebSocket non disponibile")
@@ -322,13 +552,57 @@ final class GigiHarnessStream: NSObject {
         task = session.webSocketTask(with: req)
         task?.resume()
         Task { await readLoop() }
+        startHeartbeat()
         reconnectMs = 500
     }
 
     func disconnect() {
         keepOpen = false
+        stopHeartbeat()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
+    }
+
+    // MARK: - Heartbeat (Cloudflare-friendly keepalive)
+
+    private func startHeartbeat() {
+        stopHeartbeat()
+        missedPongs = 0
+        pingTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled, self.keepOpen, self.task != nil {
+                try? await Task.sleep(nanoseconds: self.pingIntervalSec * 1_000_000_000)
+                guard !Task.isCancelled, self.keepOpen, let t = self.task else { return }
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    t.sendPing { [weak self] error in
+                        guard let self else { cont.resume(); return }
+                        if error != nil {
+                            self.missedPongs += 1
+                            GigiDebugLogger.log("GigiHarnessStream ping failed · miss=\(self.missedPongs)")
+                            if self.missedPongs >= 2 {
+                                self.reconnect()
+                            }
+                        } else {
+                            self.missedPongs = 0
+                        }
+                        cont.resume()
+                    }
+                }
+            }
+        }
+    }
+
+    private func stopHeartbeat() {
+        pingTask?.cancel()
+        pingTask = nil
+    }
+
+    private func reconnect() {
+        guard keepOpen else { return }
+        let handler = onEvent
+        disconnect()
+        keepOpen = true
+        if let h = handler { connect(onEvent: h) }
     }
 
     private func readLoop() async {

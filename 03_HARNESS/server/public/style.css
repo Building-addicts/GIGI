@@ -76,3 +76,46 @@ pre#log-box{background:#050810;border:1px solid var(--border);border-radius:8px;
 .switch input:disabled + .slider{opacity:.5;cursor:not-allowed}
 
 @media(max-width:720px){.grid{grid-template-columns:1fr}}
+
+/* MARK: - Connections tab (Phase 6B) */
+.conn-list { display: flex; flex-direction: column; gap: 6px; }
+.conn-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 10px; background: rgba(255,255,255,0.02);
+  flex-wrap: wrap; gap: 10px;
+}
+.conn-row-main { flex: 1; min-width: 200px; }
+.conn-row-title { font: 13px/1.3 ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; }
+
+.pill {
+  display: inline-block; padding: 1px 7px; font-size: 11px;
+  border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--fg);
+  margin-right: 4px; vertical-align: middle;
+}
+.pill.green { background: rgba(40,200,90,0.18); color: #6ce39c; }
+.pill.red   { background: rgba(220,60,60,0.22); color: #ff7d7d; }
+
+.btn.danger { background: rgba(220,60,60,0.15); color: #ff7d7d; border-color: rgba(220,60,60,0.4); }
+.btn.danger:hover { background: rgba(220,60,60,0.25); }
+
+table.conn-requests {
+  width: 100%; border-collapse: collapse; font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+}
+table.conn-requests th, table.conn-requests td {
+  text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border);
+}
+table.conn-requests th { font-weight: 600; opacity: 0.7; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+table.conn-requests tr.req-err td { color: #ff7d7d; }
+table.conn-requests tr:hover td { background: rgba(255,255,255,0.03); }
+
+.toast {
+  position: fixed; right: 20px; top: 20px; z-index: 9999;
+  padding: 10px 14px; border-radius: 10px;
+  background: rgba(40,200,90,0.18); color: #6ce39c;
+  border: 1px solid rgba(40,200,90,0.4);
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.toast.toast-err { background: rgba(220,60,60,0.18); color: #ff7d7d; border-color: rgba(220,60,60,0.4); }
+.toast.fade { opacity: 0; transform: translateX(20px); }

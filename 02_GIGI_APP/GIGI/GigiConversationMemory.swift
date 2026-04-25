@@ -4,11 +4,11 @@ import Combine
 // MARK: - Message (UI layer — unchanged)
 
 struct GigiMessage: Identifiable, Equatable {
-    enum Role { case user, gigi }
+    enum Role { case user, gigi, thinking, toolEvent }
 
     let id:        UUID
     let role:      Role
-    let text:      String
+    var text:      String
     let timestamp: Date
     var isThinking: Bool
 
@@ -76,6 +76,39 @@ final class GigiConversationMemory: ObservableObject {
         }
     }
 
+    // MARK: - Claude bridge stream (Phase 1)
+
+    /// Append a streaming Claude thought as a separate `.thinking` bubble.
+    /// Different from `addThinking()` — that one is a placeholder on a .gigi message.
+    @discardableResult
+    func addThought(_ text: String) -> UUID {
+        let msg = GigiMessage(role: .thinking, text: text)
+        messages.append(msg)
+        trimIfNeeded()
+        return msg.id
+    }
+
+    /// Append a tool-event bubble (e.g. `browser_navigate: running`). Returns id so
+    /// the caller can later transition the status from running → done via `updateToolEvent`.
+    @discardableResult
+    func addToolEvent(name: String, status: String) -> UUID {
+        let msg = GigiMessage(role: .toolEvent, text: "\(name): \(status)")
+        messages.append(msg)
+        trimIfNeeded()
+        return msg.id
+    }
+
+    /// Mutate an existing tool-event bubble (e.g. from "running" to "done" or to a
+    /// short result summary). Safe no-op if the id is no longer in the list.
+    func updateToolEvent(id: UUID, status: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == id && $0.role == .toolEvent }) else { return }
+        let current = messages[idx].text
+        let name = current.split(separator: ":", maxSplits: 1).first.map(String.init) ?? current
+        var updated = messages[idx]
+        updated.text = "\(name): \(status)"
+        messages[idx] = updated
+    }
+
     func clear() {
         messages.removeAll()
         contentsArray.removeAll()
@@ -86,7 +119,7 @@ final class GigiConversationMemory: ObservableObject {
     // Legacy string context (used by v2 path — keep until Phase 1.8 removes it)
     func contextString(maxTurns: Int = 10) -> String {
         let recent = messages
-            .filter { !$0.isThinking && !$0.text.isEmpty }
+            .filter { !$0.isThinking && !$0.text.isEmpty && $0.role != .thinking && $0.role != .toolEvent }
             .suffix(maxTurns * 2)
         return recent.map { ($0.role == .user ? "[User]" : "[GIGI]") + " " + $0.text }
                      .joined(separator: "\n")
@@ -198,7 +231,7 @@ final class GigiConversationMemory: ObservableObject {
     // MARK: - Private UI trim
 
     private func trimIfNeeded() {
-        let turns = messages.filter { !$0.isThinking }
+        let turns = messages.filter { !$0.isThinking && $0.role != .thinking && $0.role != .toolEvent }
         if turns.count > maxTurns * 2 {
             messages.removeFirst(turns.count - maxTurns * 2)
         }
