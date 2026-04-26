@@ -12,3 +12,20 @@
 /CLAUDE.md
 bug/
 *.gigi-secret.txt
+.omx/
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**
+
+# Xcode build artifacts
+02_GIGI_APP/build/
+02_GIGI_APP/buildServer.json
+
+# Scratch / debug local notes
+debug console xcode.md
+voice.md
