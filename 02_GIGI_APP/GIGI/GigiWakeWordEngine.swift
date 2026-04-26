@@ -409,6 +409,9 @@ final class GigiWakeWordEngine {
         stopMonitoringHard()
         GigiAudioSequestrator.shared.prewarmBluetooth()
         SoundEngine.play(.wakeWord)
+        // Dynamic Island expands at wake detection moment — visual syncs with earcon.
+        // beginListening() is idempotent; startListening() below calls it again as no-op.
+        Task { await GigiLiveActivityController.shared.beginListening() }
         // Delay VAD start by 200ms so the earcon (120ms audio + 50ms scheduling) finishes
         // before SoundEngine.didFinishPlaying() calls setActive(false) on the shared session.
         // Without this delay, didFinishPlaying() deactivates the session mid-VAD setup.

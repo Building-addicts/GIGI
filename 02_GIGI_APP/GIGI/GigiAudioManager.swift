@@ -39,10 +39,9 @@ final class GigiAudioManager {
     var presenceMode: Bool = false
 
     // Forwarded from the underlying engines
-    var onWakeWordDetected: (() -> Void)?
-    var onTranscription:    ((String) -> Void)?
-    var onSilenceDetected:  (() -> Void)?
-    var onListeningFailed:  (() -> Void)?
+    var onTranscription:   ((String) -> Void)?
+    var onSilenceDetected: (() -> Void)?
+    var onListeningFailed: (() -> Void)?
 
     private init() {
         wireEngines()
@@ -139,7 +138,8 @@ final class GigiAudioManager {
     private func resumeWakeWordIfEnabled() {
         let isEnabled = UserDefaults.standard.object(
             forKey: GigiWakeWordEngine.userDefaultsEnabledKey
-        ) as? Bool ?? true
+        ) as? Bool ?? false  // match WakeWordEngine default — off until user opts in
+        print("GigiAudioManager: resumeWakeWordIfEnabled — isEnabled=\(isEnabled)")
         if isEnabled { startWakeWordListening() }
     }
 
