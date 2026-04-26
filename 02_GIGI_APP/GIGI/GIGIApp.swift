@@ -25,6 +25,13 @@ struct GIGIApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
                         Task { @MainActor in GigiApnsSync.onAppDidBecomeActive() }
+                        // Presence Mode is the canonical always-available path.
+                        // On every foreground transition, sync the user's preference:
+                        // enabled → Presence owns Dynamic Island + wake word; disabled → no wake engine.
+                        Task { @MainActor in
+                            GigiDebugLogger.log("scenePhase=.active → sync always-available Presence")
+                            PresenceSessionController.shared.syncAlwaysAvailablePreference()
+                        }
                         // Silently re-verify WhatsApp session after app resumes from background
                         Task {
                             guard UserDefaults.standard.bool(forKey: "gigi.whatsapp.linked"),
@@ -46,9 +53,12 @@ struct GIGIApp: App {
                     GigiDebugLogger.log("flushCrashLogs done")
                     GigiBrainDiagnostics.log()
                     GigiDebugLogger.log("GigiBrainDiagnostics done")
+                    // Presence Mode is now the single always-available mode. This starts
+                    // Presence only when the user enabled it; otherwise it guarantees the
+                    // wake-word engine is off so there is no second parallel logic.
+                    PresenceSessionController.shared.syncAlwaysAvailablePreference()
+                    GigiDebugLogger.log("Presence always-available sync done")
                     // Realtime engine connects lazily on first use to save battery at startup
-                    GigiAudioManager.shared.startWakeWordListening()
-                    GigiDebugLogger.log("GigiAudioManager startWakeWordListening done")
                     // Pre-load semantic memory for top-priority namespaces (non-blocking)
                     await GigiVectorStore.shared.preload(namespaces: [.contacts, .preferences, .places])
                     GigiDebugLogger.log("MainTabView .task finished")
@@ -65,6 +75,9 @@ struct GIGIApp: App {
                 .onOpenURL { url in
                     if url.scheme?.lowercased() == "gigi" {
                         if url.host == "listen" {
+                            if !PresenceSessionController.shared.isActive {
+                                PresenceSessionController.shared.startSession()
+                            }
                             GigiSmartOrchestrator.shared.startListening()
                             return
                         }

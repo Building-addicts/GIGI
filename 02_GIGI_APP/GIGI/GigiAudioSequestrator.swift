@@ -76,9 +76,10 @@ final class GigiAudioSequestrator: NSObject {
                 Task { @MainActor in
                     // Wait 1.5s for hardware to fully settle (e.g. after phone call ends).
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    // Route through AudioManager so the state machine stays in sync (idle→wakeWordListening).
-                    // Calling WakeWordEngine directly left AudioManager.state stuck at .idle.
-                    GigiAudioManager.shared.startWakeWordListening()
+                    // Wake word is now only valid inside Presence Mode.
+                    if GigiAudioManager.shared.presenceMode {
+                        GigiAudioManager.shared.startWakeWordListening()
+                    }
                 }
             }
         @unknown default:

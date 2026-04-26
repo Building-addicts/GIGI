@@ -216,6 +216,9 @@ class GigiNLUEngine {
             if let appName = extractAfter(trigger, from: text), !appName.isEmpty {
                 let app = appName.components(separatedBy: " ").first ?? appName
                 if app.lowercased() == "spotify" && hasMusicAction { break }
+                // Articles as first token mean the real intent is elsewhere ("start a timer", "open the mail").
+                // Bail so the timer/alarm/etc. rules below get a chance to match.
+                if ["a", "an", "the"].contains(app.lowercased()) { break }
                 return GigiIntent(label: "open_app", confidence: 0.90,
                                   params: ["app": app.capitalized, "raw": original])
             }
@@ -427,7 +430,7 @@ class GigiNLUEngine {
         for trigger in ["remember that ", "note that ", "keep in mind that ", "save that "] {
             if let body = extractAfter(trigger, from: text), !body.isEmpty {
                 return GigiIntent(label: "remember", confidence: 0.97,
-                                  params: ["body": body, "raw": original])
+                                  params: ["text": body, "raw": original])  // "text" matches pipeline taskText
             }
         }
         for trigger in ["tell me about ", "what do you know about ", "who is ", "recall "] {

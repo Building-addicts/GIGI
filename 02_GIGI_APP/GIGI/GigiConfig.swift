@@ -16,27 +16,17 @@ enum GigiConfig {
         GigiKeychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.groqAPIKey)
     }
 
-    // MARK: - Gemini key alias (kept for GigiRealtimeEngine compile compat — returns empty)
+    // MARK: - Gemini API key (Realtime WebSocket engine — stored in Keychain only)
 
-    static var geminiAPIKey: String { "" }
+    static var geminiAPIKey: String {
+        if let k = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !k.isEmpty { return k }
+        return ""
+    }
+
     static func setGeminiAPIKey(_ key: String) {
-        // Redirect old callers to Groq slot
-        setGroqAPIKey(key)
+        GigiKeychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.geminiAPIKey)
     }
 
-    // MARK: - Picovoice
-
-    static var picovoiceAccessKey: String {
-        if let k = GigiKeychain.load(forKey: GigiKeychain.Key.picovoiceAccessKey), !k.isEmpty { return k }
-        let raw = Bundle.main.object(forInfoDictionaryKey: "PICOVOICE_ACCESS_KEY") as? String ?? ""
-        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.isEmpty || t == "$(PICOVOICE_ACCESS_KEY)" { return "" }
-        return t
-    }
-
-    static func setPicovoiceAccessKey(_ key: String) {
-        GigiKeychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.picovoiceAccessKey)
-    }
 }
 
 // MARK: - Master Shortcut (Shortcuts app)

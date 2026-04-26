@@ -345,8 +345,10 @@ final class GigiAgentEngine {
                 }
 
                 // Check for required confirmation (payment / destructive)
-                if let confirmNeeded = results.first(where: { $0.requiresConfirm != nil })?.requiresConfirm,
-                   let toolName = response.functionCalls.first(where: { _ in true })?.name,
+                if let confirmIndex = results.firstIndex(where: { $0.requiresConfirm != nil }),
+                   let confirmNeeded = results[confirmIndex].requiresConfirm,
+                   response.functionCalls.indices.contains(confirmIndex),
+                   let toolName = Optional(response.functionCalls[confirmIndex].name),
                    let tool = GigiToolRegistry.shared.tool(named: toolName) {
 
                     pendingConfirmRequest = confirmNeeded
@@ -472,6 +474,9 @@ final class GigiAgentEngine {
 
     /// Called when user says "No / Annulla" to a pending confirmation.
     func cancelConfirmation() {
+        if let jobId = pendingConfirmArgs["computerUseJobId"] as? String, !jobId.isEmpty {
+            Task { await GigiComputerUse.shared.reject(jobId: jobId) }
+        }
         pendingConfirmRequest = nil
         pendingConfirmTool    = nil
         pendingConfirmArgs    = [:]

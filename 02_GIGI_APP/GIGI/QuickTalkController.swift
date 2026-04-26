@@ -22,6 +22,16 @@ final class QuickTalkController: ObservableObject {
         case error(String)
 
         var isActive: Bool { self != .idle }
+
+        var displayName: String {
+            switch self {
+            case .idle: return "Ready"
+            case .listening: return "Listening"
+            case .thinking: return "Thinking"
+            case .speaking: return "Speaking"
+            case .error: return "Needs Attention"
+            }
+        }
     }
 
     enum QuickTalkError: Error {

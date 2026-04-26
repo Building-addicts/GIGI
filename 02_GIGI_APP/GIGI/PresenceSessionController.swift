@@ -13,6 +13,11 @@ import SwiftUI
 @MainActor
 final class PresenceSessionController: ObservableObject {
     static let shared = PresenceSessionController()
+    static let alwaysAvailableKey = GigiWakeWordEngine.userDefaultsEnabledKey
+
+    static var isAlwaysAvailableEnabled: Bool {
+        UserDefaults.standard.bool(forKey: alwaysAvailableKey)
+    }
 
     enum PresenceState: Equatable {
         case inactive
@@ -39,12 +44,14 @@ final class PresenceSessionController: ObservableObject {
     @Published var sessionDuration: TimeInterval = 0
 
     var isActive: Bool { state != .inactive }
-    var inactivityTimeout: TimeInterval = 300   // 5 min default
+    var isAlwaysAvailableEnabled: Bool { Self.isAlwaysAvailableEnabled }
+    var inactivityTimeout: TimeInterval = 300   // legacy non-always-available sessions only
 
     private var sessionId: String = ""
     private var sessionStartedAt: Date?
     private var inactivityTask: Task<Void, Never>?
     private var durationTask: Task<Void, Never>?
+    private var standaloneMuted = false
 
     private init() {
         GigiDebugLogger.log("PresenceSessionController init START")
@@ -56,12 +63,50 @@ final class PresenceSessionController: ObservableObject {
 
     // MARK: - Session lifecycle
 
-    func startSession() {
-        guard state == .inactive else { return }
+    func setAlwaysAvailable(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.alwaysAvailableKey)
+        if enabled {
+            startSession(persistPreference: false)
+        } else {
+            stopSession(disablePreference: false)
+        }
+    }
+
+    func syncAlwaysAvailablePreference() {
+        if Self.isAlwaysAvailableEnabled {
+            startSession(persistPreference: false)
+        } else if isActive {
+            stopSession(disablePreference: false)
+        } else {
+            GigiAudioManager.shared.stopAll()
+            Task { await GigiLiveActivityController.shared.startPersistentPill() }
+        }
+    }
+
+    func startSession(persistPreference: Bool = true) {
+        if persistPreference {
+            UserDefaults.standard.set(true, forKey: Self.alwaysAvailableKey)
+        }
+        if state != .inactive {
+            GigiSmartOrchestrator.shared.isPresenceActive = true
+            GigiAudioManager.shared.presenceMode = true
+            if state != .muted {
+                GigiAudioManager.shared.startWakeWordListening()
+                Task {
+                    await GigiLiveActivityController.shared.updatePresence(
+                        state: .sleeping,
+                        message: "Ready — say Hey GIGI"
+                    )
+                }
+            }
+            return
+        }
+
         sessionId = UUID().uuidString
         sessionStartedAt = Date()
         state = .sleeping
         sessionDuration = 0
+        standaloneMuted = false
 
         GigiSmartOrchestrator.shared.isPresenceActive = true
         GigiAudioManager.shared.presenceMode = true
@@ -69,16 +114,33 @@ final class PresenceSessionController: ObservableObject {
         startDurationTimer()
         resetInactivityTimer()
 
-        Task { await GigiLiveActivityController.shared.startPresenceActivity(sessionId: sessionId) }
-        GigiAudioManager.shared.startWakeWordListening()
+        Task {
+            // Presence Mode is now the single owner of the Dynamic Island when
+            // "GIGI always available" is on. The old monitoring pill is stopped
+            // first so there are never two activities fighting for the island.
+            await GigiLiveActivityController.shared.stopPersistentPill()
+            await GigiLiveActivityController.shared.startPresenceActivity(sessionId: sessionId)
+            await MainActor.run {
+                GigiAudioManager.shared.startWakeWordListening()
+            }
+        }
 
-        GigiDebugLogger.log("PresenceSessionController: session started \(sessionId)")
+        GigiDebugLogger.log("PresenceSessionController: always-available session started \(sessionId)")
     }
 
-    func stopSession() {
-        guard state != .inactive else { return }
+    func stopSession(disablePreference: Bool = true) {
+        if disablePreference {
+            UserDefaults.standard.set(false, forKey: Self.alwaysAvailableKey)
+        }
+        guard state != .inactive else {
+            GigiSmartOrchestrator.shared.isPresenceActive = false
+            GigiAudioManager.shared.presenceMode = false
+            GigiAudioManager.shared.stopAll()
+            return
+        }
         state = .inactive
         sessionStartedAt = nil
+        standaloneMuted = false
 
         GigiSmartOrchestrator.shared.isPresenceActive = false
         GigiAudioManager.shared.presenceMode = false
@@ -87,8 +149,12 @@ final class PresenceSessionController: ObservableObject {
         durationTask?.cancel()
         GigiAudioManager.shared.stopAll()
 
-        Task { await GigiLiveActivityController.shared.endPresenceActivity() }
-        GigiDebugLogger.log("PresenceSessionController: session stopped")
+        Task {
+            await GigiLiveActivityController.shared.endPresenceActivity()
+            // Keep a passive island entry point, but no wake-word engine runs outside Presence.
+            await GigiLiveActivityController.shared.startPersistentPill()
+        }
+        GigiDebugLogger.log("PresenceSessionController: always-available session stopped")
     }
 
     func mute() {
@@ -96,7 +162,7 @@ final class PresenceSessionController: ObservableObject {
         GigiAudioManager.shared.stopAll()
         state = .muted
         inactivityTask?.cancel()
-        Task { await GigiLiveActivityController.shared.updatePresence(state: .thinking, message: "Muted") }
+        Task { await GigiLiveActivityController.shared.updatePresence(state: .muted, message: "Muted — tap Mute to resume") }
     }
 
     func unmute() {
@@ -104,7 +170,7 @@ final class PresenceSessionController: ObservableObject {
         state = .sleeping
         resetInactivityTimer()
         GigiAudioManager.shared.startWakeWordListening()
-        Task { await GigiLiveActivityController.shared.updatePresence(state: .listening, message: "Listening…") }
+        Task { await GigiLiveActivityController.shared.updatePresence(state: .sleeping, message: "Ready — say Hey GIGI") }
     }
 
     func handleBargeIn() {
@@ -124,10 +190,66 @@ final class PresenceSessionController: ObservableObject {
         GigiPresenceAppGroup.observeCommands { [weak self] cmd in
             guard let self else { return }
             switch cmd {
-            case .mute:   self.mute()
-            case .unmute: self.unmute()
-            case .stop:   self.stopSession()
+            case .start:
+                self.startSession()
+            case .mute:
+                self.toggleMuteFromIsland()
+            case .unmute:
+                self.unmuteFromIsland()
+            case .stop:
+                self.stopFromIsland()
             }
+        }
+    }
+
+    private func toggleMuteFromIsland() {
+        if isActive {
+            state == .muted ? unmute() : mute()
+            return
+        }
+
+        if standaloneMuted {
+            unmuteFromIsland()
+        } else {
+            standaloneMuted = true
+            GigiAudioManager.shared.stopAll()
+            Task {
+                await GigiLiveActivityController.shared.updateMonitoringPill(
+                    state: .muted,
+                    message: "Muted — tap Mute to resume"
+                )
+            }
+        }
+    }
+
+    private func unmuteFromIsland() {
+        if isActive {
+            unmute()
+            return
+        }
+        standaloneMuted = false
+        GigiAudioManager.shared.startWakeWordListening()
+        Task {
+            await GigiLiveActivityController.shared.updateMonitoringPill(
+                state: .sleeping,
+                message: "Ready — say Hey GIGI"
+            )
+        }
+    }
+
+    private func stopFromIsland() {
+        standaloneMuted = false
+        if isActive {
+            stopSession()
+            return
+        }
+        GigiSpeechService.shared.stopSpeaking()
+        GigiAudioManager.shared.stopAll()
+        Task {
+            await GigiLiveActivityController.shared.updateMonitoringPill(
+                state: .sleeping,
+                message: "Stopped — tap GIGI to restart"
+            )
         }
     }
 
@@ -139,14 +261,16 @@ final class PresenceSessionController: ObservableObject {
                 case .recording:
                     self.state = .listening
                     self.resetInactivityTimer()
-                    await GigiLiveActivityController.shared.updatePresence(state: .listening, message: "Listening…")
+                    await GigiLiveActivityController.shared.updatePresence(
+                        state: .listening,
+                        message: "I heard you"
+                    )
                 case .speaking:
                     self.state = .speaking
-                    await GigiLiveActivityController.shared.updatePresence(state: .speaking, message: "Speaking…")
                 case .wakeWordListening:
                     if self.state != .muted {
                         self.state = .sleeping
-                        await GigiLiveActivityController.shared.updatePresence(state: .sleeping, message: "Ready")
+                        await GigiLiveActivityController.shared.updatePresence(state: .sleeping, message: "Ready — say Hey GIGI")
                     }
                 case .idle:
                     break
@@ -162,7 +286,7 @@ final class PresenceSessionController: ObservableObject {
                 guard let self, self.isActive else { return }
                 self.lastTranscript = text
                 self.state = .thinking
-                await GigiLiveActivityController.shared.updatePresence(state: .thinking, message: "Thinking…", transcript: text)
+                await GigiLiveActivityController.shared.updatePresence(state: .thinking, message: "Thinking about it", transcript: text)
             }
         }
     }
@@ -171,6 +295,9 @@ final class PresenceSessionController: ObservableObject {
 
     private func resetInactivityTimer() {
         inactivityTask?.cancel()
+        // In always-available mode GIGI must stay Ready all day. Silence only returns
+        // the audio state to wake-word standby; it must not end the Presence session.
+        guard !Self.isAlwaysAvailableEnabled else { return }
         inactivityTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(nanoseconds: UInt64(inactivityTimeout * 1_000_000_000))

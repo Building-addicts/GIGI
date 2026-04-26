@@ -16,7 +16,6 @@ final class GigiSpeechService: NSObject {
     static let shared = GigiSpeechService()
 
     private let synthesizer = AVSpeechSynthesizer()
-    private var _isSpeaking = false
 
     private override init() {
         super.init()
@@ -52,16 +51,21 @@ final class GigiSpeechService: NSObject {
     // MARK: - Voice selection (prefer enhanced/premium en-US)
 
     private func preferredVoice() -> AVSpeechSynthesisVoice? {
-        // Priority: Siri neural > enhanced > default
-        let candidates = [
-            "com.apple.ttsbundle.siri_female_en-US_compact",
-            "com.apple.ttsbundle.Samantha-premium",
-            "com.apple.ttsbundle.Samantha-compact",
-        ]
-        for id in candidates {
-            if let v = AVSpeechSynthesisVoice(identifier: id) { return v }
+        // Query installed en-US voices at runtime; prefer premium > default > compact.
+        // Avoids hardcoded bundle IDs (unreliable on iOS 16+) while keeping Siri neural
+        // when available (quality == .premium on supported devices).
+        let enUS = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == "en-US" }
+        let ordered = enUS.sorted { lhs, rhs in
+            func rank(_ v: AVSpeechSynthesisVoice) -> Int {
+                switch v.quality {
+                case .premium: return 0
+                case .enhanced: return 1
+                default: return 2
+                }
+            }
+            return rank(lhs) < rank(rhs)
         }
-        return AVSpeechSynthesisVoice(language: "en-US")
+        return ordered.first ?? AVSpeechSynthesisVoice(language: "en-US")
     }
 }
 
@@ -72,6 +76,11 @@ extension GigiSpeechService: AVSpeechSynthesizerDelegate {
         Task { @MainActor in GigiAudioManager.shared.notifySpeakingStarted() }
     }
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in GigiAudioManager.shared.notifySpeakingFinished() }
+    }
+    // didCancel fires when stopSpeaking(at:) is called (barge-in, interruption, etc.).
+    // Without this, state stays stuck at .speaking and wake word never resumes.
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         Task { @MainActor in GigiAudioManager.shared.notifySpeakingFinished() }
     }
 }

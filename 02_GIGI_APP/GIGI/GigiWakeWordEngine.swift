@@ -3,6 +3,7 @@ import CallKit
 import Foundation
 import Speech
 import UIKit
+import UserNotifications
 
 // MARK: - GigiWakeWordEngine
 //
@@ -34,6 +35,10 @@ final class GigiWakeWordEngine {
 
     private(set) var isMonitoring = false
 
+    var onMonitoringStarted: (() -> Void)?
+    var onMonitoringStopped: ((String?) -> Void)?
+    var onMonitoringFailed: ((String) -> Void)?
+
     private let audioEngine       = AVAudioEngine()
     private var recognizer:       SFSpeechRecognizer?
     private var recognitionReq:   SFSpeechAudioBufferRecognitionRequest?
@@ -43,6 +48,8 @@ final class GigiWakeWordEngine {
 
     // Exponential backoff for rapid-failure restart loops
     private var consecutiveFailures = 0
+    private let maxConsecutiveFailuresBeforeStop = 5
+    private var useOnDeviceRecognition = true
 
     private var callObserver:         CXCallObserver?
     private var callObserverDelegate: WakeWordCallObserverDelegate?
@@ -121,14 +128,9 @@ final class GigiWakeWordEngine {
     // MARK: - Public API
 
     func setUserEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: Self.userDefaultsEnabledKey)
-        if enabled {
-            applyPreferredState()
-        } else {
-            stopMonitoringHard()
-            // User explicitly disabled wake word — end the persistent Dynamic Island pill.
-            Task { await GigiLiveActivityController.shared.stopWakeWordMonitoring() }
-        }
+        // Backward-compatible API: this toggle now means "GIGI always available".
+        // Wake word is not a standalone mode anymore; it only runs inside Presence Mode.
+        PresenceSessionController.shared.setAlwaysAvailable(enabled)
     }
 
     func applyPreferredState() {
@@ -138,10 +140,12 @@ final class GigiWakeWordEngine {
     // MARK: - Internal state management
 
     private func applyPreferredStateAsync() async {
-        // Default to disabled on fresh install — user opts in via onboarding or Settings
-        let isEnabled = UserDefaults.standard.object(forKey: Self.userDefaultsEnabledKey) as? Bool ?? false
-        guard isEnabled else {
-            stopMonitoringHard(); return
+        // Wake word is only valid inside Presence Mode. This prevents the old
+        // standalone wake-word path from racing the Presence/Live Activity pipeline.
+        let presenceActive = GigiSmartOrchestrator.shared.isPresenceActive
+        guard presenceActive else {
+            stopMonitoringHard(reason: "presence inactive")
+            return
         }
         guard !shouldSuppressWake() else {
             stopMonitoringHard(); return
@@ -168,23 +172,58 @@ final class GigiWakeWordEngine {
     private func startMonitoringIfNeeded() {
         guard !isMonitoring else { return }
 
-        SFSpeechRecognizer.requestAuthorization { [weak self] status in
-            DispatchQueue.main.async {
-                guard status == .authorized else {
-                    print("GIGI WakeWord: speech recognition not authorized")
-                    return
-                }
-                self?.beginListeningCycle()
-            }
+        logDiagnostics(prefix: "startMonitoring")
+
+        let micPermission = currentMicPermission()
+        if micPermission == .denied {
+            failBeforeMonitoring("Microphone permission denied — enable it in Settings → GIGI → Microphone.")
+            return
         }
+        if micPermission == .undetermined {
+            requestMicPermission { [weak self] granted in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if granted {
+                        self.startMonitoringIfNeeded()
+                    } else {
+                        self.failBeforeMonitoring("Microphone permission denied — enable it in Settings → GIGI → Microphone.")
+                    }
+                }
+            }
+            return
+        }
+
+        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+        if speechStatus == .notDetermined {
+            SFSpeechRecognizer.requestAuthorization { [weak self] status in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if status == .authorized {
+                        self.beginListeningCycle()
+                    } else {
+                        self.failBeforeMonitoring("Speech recognition permission denied — enable it in Settings → GIGI → Speech Recognition.")
+                    }
+                }
+            }
+            return
+        }
+
+        guard speechStatus == .authorized else {
+            failBeforeMonitoring("Speech recognition unavailable: authorization=\(speechStatus.rawValue).")
+            return
+        }
+
+        beginListeningCycle()
     }
 
     private func beginListeningCycle() {
         guard !isMonitoring else { return }
         isMonitoring = true
         consecutiveFailures = 0
-        startRecognitionTask()
+        useOnDeviceRecognition = true
+        guard startRecognitionTask() else { return }
         scheduleRestart()
+        onMonitoringStarted?()
         print("GIGI WakeWord: listening for 'Hey GIGI' ✓")
         // Start persistent Dynamic Island pill. Idempotent — no-op if already showing.
         Task { await GigiLiveActivityController.shared.startWakeWordMonitoring() }
@@ -221,39 +260,30 @@ final class GigiWakeWordEngine {
         }
     }
 
-    private func startRecognitionTask() {
-        guard let recognizer, recognizer.isAvailable else { return }
+    @discardableResult
+    private func startRecognitionTask() -> Bool {
+        guard let recognizer else {
+            failMonitoring("Speech recognizer could not be created for en-US.")
+            return false
+        }
+        guard recognizer.isAvailable else {
+            retryRecognition(reason: "Speech recognizer temporarily unavailable")
+            return false
+        }
 
         // Bail if session activation fails (e.g. non-interruptible call in progress).
         // Proceeding after a failed setActive() leaves the engine in a state where
         // inputNode.outputFormat returns a stale format → installTap NSException crash.
         guard activateWakeSession() else {
-            print("GIGI WakeWord: session not available — skipping tap install")
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                await MainActor.run { [weak self] in
-                    guard let self, self.isMonitoring, !self.shouldSuppressWake() else { return }
-                    self.startRecognitionTask()
-                }
-            }
-            return
+            retryRecognition(reason: "Audio session activation failed")
+            return false
         }
 
         // Reset stale hardware format — same fix as GigiVADEngine.
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.reset()
 
-        let req = SFSpeechAudioBufferRecognitionRequest()
-        req.shouldReportPartialResults = true
-        req.addsPunctuation = false     // skip punctuation model — not needed for keywords
-        req.contextualStrings = keywords  // bias decoder toward our phrases → faster + more accurate
-        // Force on-device: server-based recognition streams audio to Apple continuously,
-        // pinning the cellular/Wi-Fi radio in high-power state 24/7 (~1.5W). On-device
-        // costs slightly more CPU (~0.3W) but lets the radio sleep. Huge net win for
-        // always-on keyword spotting. Falls back to no-op if device can't run it.
-        if recognizer.supportsOnDeviceRecognition {
-            req.requiresOnDeviceRecognition = true
-        }
+        let req = makeRecognitionRequest(for: recognizer)
         recognitionReq = req
 
         recognitionTask = recognizer.recognitionTask(with: req) { [weak self] result, error in
@@ -280,14 +310,142 @@ final class GigiWakeWordEngine {
             recognitionTask?.cancel()
             recognitionTask = nil
             deactivateWakeSession()
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                await MainActor.run { [weak self] in
-                    guard let self, self.isMonitoring, !self.shouldSuppressWake() else { return }
-                    self.startRecognitionTask()
-                }
+            retryRecognition(
+                reason: "Audio engine start failed: \(error.localizedDescription)",
+                countsTowardFailure: !isTransientAudioEngineStartError(error)
+            )
+            return false
+        }
+        logDiagnostics(prefix: "recognitionTaskStarted")
+        return true
+    }
+
+    private func makeRecognitionRequest(for recognizer: SFSpeechRecognizer) -> SFSpeechAudioBufferRecognitionRequest {
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        req.addsPunctuation = false     // skip punctuation model — not needed for keywords
+        req.contextualStrings = keywords  // bias decoder toward our phrases → faster + more accurate
+        if useOnDeviceRecognition, recognizer.supportsOnDeviceRecognition {
+            req.requiresOnDeviceRecognition = true
+        }
+        return req
+    }
+
+    private func retryRecognition(reason: String, countsTowardFailure: Bool = true) {
+        if countsTowardFailure {
+            consecutiveFailures += 1
+            if consecutiveFailures >= maxConsecutiveFailuresBeforeStop {
+                failMonitoring("Wake word unavailable after \(consecutiveFailures) retries. Last error: \(reason)")
+                return
+            }
+        } else {
+            consecutiveFailures = 0
+        }
+        let retryIndex = countsTowardFailure ? consecutiveFailures : 1
+        let cooldownNs = cooldown(for: retryIndex)
+        let suffix = countsTowardFailure ? "failure #\(consecutiveFailures)" : "routine restart"
+        print("GIGI WakeWord: \(reason) — restart in \(cooldownNs/1_000_000_000)s (\(suffix))")
+        stopRecognitionTask()
+        scheduleRecognitionRetry(after: cooldownNs)
+    }
+
+    private func scheduleRecognitionRetry(after cooldownNs: UInt64) {
+        guard isMonitoring else { return }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: cooldownNs)
+            await MainActor.run { [weak self] in
+                guard let self, self.isMonitoring, !self.shouldSuppressWake() else { return }
+                _ = self.startRecognitionTask()
             }
         }
+    }
+
+    private enum MicPermissionState: String {
+        case undetermined
+        case denied
+        case granted
+        case unknown
+    }
+
+    private func currentMicPermission() -> MicPermissionState {
+        if #available(iOS 17.0, *) {
+            switch AVAudioApplication.shared.recordPermission {
+            case .undetermined: return .undetermined
+            case .denied: return .denied
+            case .granted: return .granted
+            @unknown default: return .unknown
+            }
+        } else {
+            switch AVAudioSession.sharedInstance().recordPermission {
+            case .undetermined: return .undetermined
+            case .denied: return .denied
+            case .granted: return .granted
+            @unknown default: return .unknown
+            }
+        }
+    }
+
+    private func requestMicPermission(_ completion: @escaping @Sendable (Bool) -> Void) {
+        if #available(iOS 17.0, *) {
+            AVAudioApplication.requestRecordPermission(completionHandler: completion)
+        } else {
+            AVAudioSession.sharedInstance().requestRecordPermission(completion)
+        }
+    }
+
+    private func cooldown(for failureCount: Int) -> UInt64 {
+        switch failureCount {
+        case 1:     return 1_500_000_000
+        case 2:     return 3_000_000_000
+        case 3:     return 6_000_000_000
+        case 4:     return 15_000_000_000
+        default:    return 30_000_000_000
+        }
+    }
+
+    private func failBeforeMonitoring(_ message: String) {
+        print("GIGI WakeWord: failed before monitoring — \(message)")
+        onMonitoringFailed?(message)
+    }
+
+    private func failMonitoring(_ message: String) {
+        print("GIGI WakeWord: failed — \(message)")
+        isMonitoring = false
+        restartTimer?.cancel()
+        restartTimer = nil
+        screenDarkTimer?.cancel()
+        screenDarkTimer = nil
+        stopRecognitionTask()
+        onMonitoringFailed?(message)
+    }
+
+    private func shouldFallbackFromOnDevice(_ error: Error) -> Bool {
+        guard useOnDeviceRecognition else { return false }
+        let ns = error as NSError
+        return ns.domain == "kAFAssistantErrorDomain" && ns.code == 1107
+    }
+
+    private func isNoSpeechDetected(_ error: Error) -> Bool {
+        let ns = error as NSError
+        return ns.domain == "kAFAssistantErrorDomain" && ns.code == 1110
+    }
+
+    private func isTransientAudioEngineStartError(_ error: Error) -> Bool {
+        let ns = error as NSError
+        return ns.domain == "com.apple.coreaudio.avfaudio" && ns.code == 2003329396
+    }
+
+    private func describeRecognitionError(_ error: Error) -> String {
+        let ns = error as NSError
+        return "domain=\(ns.domain) code=\(ns.code) description=\(error.localizedDescription)"
+    }
+
+    private func logDiagnostics(prefix: String) {
+        let speechStatus = SFSpeechRecognizer.authorizationStatus().rawValue
+        let mic = currentMicPermission().rawValue
+        let available = recognizer?.isAvailable == true
+        let supportsOnDevice = recognizer?.supportsOnDeviceRecognition == true
+        print("GIGI WakeWord diagnostics [\(prefix)]: speechAuth=\(speechStatus) micPermission=\(mic) recognizerAvailable=\(available) supportsOnDevice=\(supportsOnDevice) useOnDevice=\(useOnDeviceRecognition)")
     }
 
     private func stopRecognitionTask() {
@@ -328,13 +486,7 @@ final class GigiWakeWordEngine {
         recognitionTask = nil
         recognitionReq?.endAudio()
 
-        let req = SFSpeechAudioBufferRecognitionRequest()
-        req.shouldReportPartialResults = true
-        req.addsPunctuation = false
-        req.contextualStrings = keywords
-        if recognizer.supportsOnDeviceRecognition {
-            req.requiresOnDeviceRecognition = true
-        }
+        let req = makeRecognitionRequest(for: recognizer)
         recognitionReq = req
         recognitionTask = recognizer.recognitionTask(with: req) { [weak self] result, error in
             DispatchQueue.main.async { self?.handleResult(result, error: error) }
@@ -350,7 +502,7 @@ final class GigiWakeWordEngine {
         return 1
     }
 
-    func stopMonitoringHard() {
+    func stopMonitoringHard(reason: String? = nil) {
         guard isMonitoring else { return }
         isMonitoring = false  // set before cancel to block spurious restart callbacks
         restartTimer?.cancel()
@@ -359,6 +511,7 @@ final class GigiWakeWordEngine {
         screenDarkTimer = nil
         stopRecognitionTask()
         print("GIGI WakeWord: stopped")
+        onMonitoringStopped?(reason)
     }
 
     // MARK: - Keyword detection
@@ -367,27 +520,20 @@ final class GigiWakeWordEngine {
         guard isMonitoring else { return }
 
         if let error {
-            consecutiveFailures += 1
-            // Exponential backoff: 1.5s → 3s → 6s → 15s → 30s cap.
-            // Prevents the "No speech detected" tight loop that burns CPU/battery.
-            let cooldownNs: UInt64
-            switch consecutiveFailures {
-            case 1:     cooldownNs = 1_500_000_000   // 1.5s
-            case 2:     cooldownNs = 3_000_000_000   // 3s
-            case 3:     cooldownNs = 6_000_000_000   // 6s
-            case 4:     cooldownNs = 15_000_000_000  // 15s
-            default:    cooldownNs = 30_000_000_000  // 30s — something is wrong, back off hard
+            let detail = describeRecognitionError(error)
+            if isNoSpeechDetected(error) {
+                retryRecognition(reason: "No speech detected", countsTowardFailure: false)
+                return
             }
-            print("GIGI WakeWord: task ended (\(error.localizedDescription)) — restart in \(cooldownNs/1_000_000_000)s (failure #\(consecutiveFailures))")
-            stopRecognitionTask()
-            guard isMonitoring else { return }
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: cooldownNs)
-                await MainActor.run { [weak self] in
-                    guard let self, self.isMonitoring, !self.shouldSuppressWake() else { return }
-                    self.startRecognitionTask()
-                }
+            if shouldFallbackFromOnDevice(error) {
+                useOnDeviceRecognition = false
+                consecutiveFailures = 0
+                print("GIGI WakeWord: on-device recognizer failed (\(detail)) — falling back to server recognition for this session")
+                stopRecognitionTask()
+                scheduleRecognitionRetry(after: 1_500_000_000)
+                return
             }
+            retryRecognition(reason: "Speech task ended: \(detail)")
             return
         }
 
@@ -416,17 +562,44 @@ final class GigiWakeWordEngine {
         consecutiveFailures = 0
         stopMonitoringHard()
         GigiAudioSequestrator.shared.prewarmBluetooth()
-        SoundEngine.play(.wakeWord)
-        // Dynamic Island expands at wake detection moment — visual syncs with earcon.
-        // beginListening() is idempotent; startListening() below calls it again as no-op.
-        Task { await GigiLiveActivityController.shared.beginListening() }
-        // Delay VAD start by 200ms so the earcon (120ms audio + 50ms scheduling) finishes
+        let isForeground = UIApplication.shared.applicationState == .active
+        if isForeground {
+            SoundEngine.play(.wakeWord)
+            Task { await GigiLiveActivityController.shared.beginListening() }
+        } else {
+            scheduleWakeNotification()
+            Task { await GigiLiveActivityController.shared.descendForListening() }
+        }
+        // Delay VAD start so the earcon and AVAudioSession route changes settle
         // before SoundEngine.didFinishPlaying() calls setActive(false) on the shared session.
         // Without this delay, didFinishPlaying() deactivates the session mid-VAD setup.
         Task { @MainActor [weak self] in
             guard self != nil else { return }
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(nanoseconds: 600_000_000)
             GigiSmartOrchestrator.shared.startListening()
+        }
+    }
+
+    private func scheduleWakeNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "GIGI"
+        content.body = "I heard you"
+        content.sound = .default
+        content.userInfo = ["type": "gigi-wake", "source": "wake-word"]
+
+        let request = UNNotificationRequest(
+            identifier: "gigi.wake.detected",
+            content: content,
+            trigger: nil
+        )
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [request.identifier])
+        center.add(request) { error in
+            if let error {
+                GigiDebugLogger.log("Wake notification failed: \(error.localizedDescription)")
+            } else {
+                GigiDebugLogger.log("Wake notification scheduled")
+            }
         }
     }
 }

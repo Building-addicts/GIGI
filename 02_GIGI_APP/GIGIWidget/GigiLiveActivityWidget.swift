@@ -1,4 +1,5 @@
 import ActivityKit
+import AppIntents
 import SwiftUI
 import WidgetKit
 
@@ -11,6 +12,7 @@ struct GigiLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: GigiActivityAttributes.self) { context in
             LockScreenBannerView(context: context)
+                .widgetURL(deepLinkURL(for: context.state.phase))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -19,7 +21,8 @@ struct GigiLiveActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.center) {
                     ExpandedCenterView(
                         phase: context.state.phase,
-                        message: displayMessage(state: context.state, isStale: context.isStale)
+                        message: displayMessage(state: context.state, isStale: context.isStale),
+                        transcript: displayTranscript(state: context.state)
                     )
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -39,7 +42,7 @@ struct GigiLiveActivityWidget: Widget {
             } minimal: {
                 MinimalIslandView(phase: context.state.phase)
             }
-            .widgetURL(URL(string: "gigi://listen"))
+            .widgetURL(deepLinkURL(for: context.state.phase))
             .keylineTint(GigiBrand.purple)
         }
     }
@@ -49,13 +52,70 @@ struct GigiLiveActivityWidget: Widget {
 
 private func displayMessage(state: GigiActivityAttributes.ContentState, isStale: Bool) -> String {
     if isStale {
-        return "Waiting for updates…"
+        return staleRecoveryMessage(for: state.phase)
     }
     let trimmed = state.message.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
-        return state.phase.displayName
+        return defaultMessage(for: state.phase)
     }
-    return state.message
+    return trimmed
+}
+
+private func displayTranscript(state: GigiActivityAttributes.ContentState) -> String? {
+    guard let transcript = state.lastTranscript?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !transcript.isEmpty else { return nil }
+    return transcript.count <= 70 ? transcript : String(transcript.prefix(67)) + "…"
+}
+
+private func defaultMessage(for phase: GigiPhase) -> String {
+    switch phase {
+    case .listening:
+        return "Speak now"
+    case .thinking:
+        return "Working on your request"
+    case .executing:
+        return "Running the action"
+    case .done:
+        return "Finished"
+    case .sleeping:
+        return "Ready — say Hey GIGI"
+    case .speaking:
+        return "Say GIGI or tap to interrupt"
+    case .followUp:
+        return "Answer now — no wake word needed"
+    case .muted:
+        return "Muted — tap Unmute to resume"
+    case .error:
+        return "Tap to recover"
+    }
+}
+
+private func staleRecoveryMessage(for phase: GigiPhase) -> String {
+    switch phase {
+    case .muted:
+        return "GIGI is muted. Tap to reopen."
+    case .error:
+        return "GIGI needs attention. Tap to recover."
+    default:
+        return "GIGI was paused. Tap to resume."
+    }
+}
+
+private func deepLinkURL(for phase: GigiPhase) -> URL? {
+    let action: String
+    switch phase {
+    case .sleeping, .listening, .thinking, .executing, .followUp:
+        action = "listen"
+    case .speaking:
+        action = "barge-in"
+    case .muted:
+        action = "recover-muted"
+    case .error:
+        action = "recover"
+    case .done:
+        action = "restart"
+    }
+    return URL(string: "gigi://listen?source=liveActivity&action=\(action)")
 }
 
 // MARK: - Design tokens
@@ -137,7 +197,7 @@ private struct LockScreenPhaseIndicator: View {
                 .symbolEffect(.pulse, options: .repeating.speed(0.55))
         } else {
             switch phase {
-            case .listening, .thinking, .executing:
+            case .listening, .thinking, .executing, .followUp:
                 PhasePillDots(phase: phase)
             case .done:
                 PhaseIconView(phase: .done, size: 20)
@@ -239,6 +299,7 @@ private struct ExpandedLeadingView: View {
 private struct ExpandedCenterView: View {
     let phase: GigiPhase
     let message: String
+    let transcript: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -252,9 +313,18 @@ private struct ExpandedCenterView: View {
             Text(message)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.72))
-                .lineLimit(2)
+                .lineLimit(transcript == nil ? 2 : 1)
                 .minimumScaleFactor(0.85)
                 .contentTransition(.opacity)
+
+            if let transcript {
+                Text("“\(transcript)”")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.52))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .contentTransition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
@@ -282,9 +352,34 @@ private struct ExpandedBottomView: View {
     let phase: GigiPhase
 
     var body: some View {
-        PhaseProgressRibbon(phase: phase)
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
+        VStack(spacing: 9) {
+            PhaseProgressRibbon(phase: phase)
+
+            HStack(spacing: 10) {
+                if phase == .muted {
+                    Button(intent: GigiUnmutePresenceIntent()) {
+                        Label("Unmute", systemImage: "mic.fill")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .labelStyle(.titleAndIcon)
+                    }
+                } else {
+                    Button(intent: GigiMutePresenceIntent()) {
+                        Label("Mute", systemImage: "mic.slash.fill")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+
+                Button(intent: GigiStopPresenceIntent()) {
+                    Label("Stop", systemImage: "stop.fill")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            .foregroundStyle(.white.opacity(0.92))
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
     }
 }
 
@@ -333,6 +428,7 @@ private struct PhaseProgressRibbon: View {
     private func ribbonWidth(total: CGFloat) -> CGFloat {
         switch phase {
         case .listening:  return total * 0.28
+        case .followUp:   return total * 0.34
         case .thinking:   return total * 0.52
         case .executing:  return total * 0.78
         case .done:       return total
@@ -379,6 +475,9 @@ private struct PhaseIconSymbolEffectModifier: ViewModifier {
         case .speaking:
             content
                 .symbolEffect(.pulse, options: .repeating.speed(1.2))
+        case .followUp:
+            content
+                .symbolEffect(.pulse, options: .repeating.speed(0.9))
         case .done, .sleeping, .muted, .error:
             content
         }
@@ -392,6 +491,7 @@ private extension GigiPhase {
     var phaseSystemImage: String {
         switch self {
         case .listening:  return "mic.fill"
+        case .followUp:   return "arrow.turn.down.left.circle.fill"
         case .thinking:   return "brain.head.profile"
         case .executing:  return "gearshape.fill"
         case .done:       return "checkmark.circle.fill"
@@ -406,6 +506,7 @@ private extension GigiPhase {
     var phaseRibbonTint: Color {
         switch self {
         case .listening:  return GigiBrand.purple
+        case .followUp:   return GigiBrand.purple
         case .thinking:   return GigiBrand.purple
         case .executing:  return Color.orange
         case .done:       return GigiBrand.successGreen
@@ -427,7 +528,7 @@ private extension GigiPhase {
     /// Stile icona: viola, gradiente viola/blu in thinking, gradiente arancio/giallo in executing, verde in done.
     var phaseIconForeground: AnyShapeStyle {
         switch self {
-        case .listening:
+        case .listening, .followUp:
             AnyShapeStyle(GigiBrand.purple)
         case .thinking:
             AnyShapeStyle(

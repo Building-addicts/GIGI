@@ -5,10 +5,12 @@ struct ChatView: View {
     @StateObject private var gigi        = GigiSmartOrchestrator.shared
     @StateObject private var memory      = GigiConversationMemory.shared
     @StateObject private var quickTalk   = QuickTalkController.shared
+    @ObservedObject private var presence = PresenceSessionController.shared
     @State private var userInput         = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
     @State private var pulseScale: CGFloat = 1.0
     @State private var showQuickTalk     = false
+    @State private var showPresence      = false
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -74,7 +76,7 @@ struct ChatView: View {
                 Text("GIGI")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-                Text(gigi.status)
+                Text(voiceStateLabel)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.white.opacity(0.35))
             }
@@ -169,7 +171,9 @@ struct ChatView: View {
 
                 // Mic button
                 Button {
-                    if gigi.isListening {
+                    if presence.isActive {
+                        showPresence = true
+                    } else if gigi.isListening {
                         gigi.stopListening()
                     } else {
                         gigi.startListening()
@@ -177,7 +181,7 @@ struct ChatView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(gigi.isListening ? Color.purple : Color.white.opacity(0.1))
+                            .fill(micButtonColor)
                             .frame(width: 46, height: 46)
                             .scaleEffect(gigi.isListening ? pulseScale : 1.0)
                             .animation(
@@ -186,7 +190,7 @@ struct ChatView: View {
                                     : .default,
                                 value: pulseScale
                             )
-                        Image(systemName: gigi.isListening ? "waveform" : "mic.fill")
+                        Image(systemName: micButtonIcon)
                             .font(.system(size: 18, weight: .medium))
                             .foregroundColor(.white)
                     }
@@ -204,7 +208,8 @@ struct ChatView: View {
                         .font(.system(size: 34))
                         .foregroundColor(.purple.opacity(0.7))
                 }
-                .disabled(quickTalk.phase.isActive || gigi.isListening)
+                .disabled(quickTalk.phase.isActive || gigi.isListening || presence.isActive)
+                .opacity(presence.isActive ? 0.35 : 1.0)
             }
             .padding(.horizontal, 16)
             .animation(.easeInOut(duration: 0.15), value: userInput.isEmpty)
@@ -217,6 +222,12 @@ struct ChatView: View {
             .onChange(of: quickTalk.phase) { _, phase in
                 if phase == .idle { showQuickTalk = false }
             }
+            .sheet(isPresented: $showPresence) {
+                PresenceView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(.black)
+            }
 
             // Thinking indicator
             if gigi.isThinking {
@@ -224,7 +235,7 @@ struct ChatView: View {
                     ProgressView()
                         .scaleEffect(0.65)
                         .tint(.purple)
-                    Text("GIGI is thinking...")
+                    Text("Thinking")
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(.purple.opacity(0.7))
                 }
@@ -249,6 +260,40 @@ struct ChatView: View {
             .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
             Spacer()
         }
+    }
+
+    private var voiceStateLabel: String {
+        if presence.isActive {
+            return "Presence: \(presenceStateLabel)"
+        }
+        if quickTalk.phase.isActive {
+            return "QuickTalk: \(quickTalk.phase.displayName)"
+        }
+        if gigi.isListening { return "Listening" }
+        if gigi.isThinking { return "Thinking" }
+        return "Ready"
+    }
+
+    private var presenceStateLabel: String {
+        switch presence.state {
+        case .inactive: return "Ready"
+        case .sleeping: return "Ready"
+        case .listening: return "Listening"
+        case .thinking: return "Thinking"
+        case .speaking: return "Speaking"
+        case .muted: return "Muted"
+        case .error: return "Needs Attention"
+        }
+    }
+
+    private var micButtonIcon: String {
+        if presence.isActive { return "person.wave.2.fill" }
+        return gigi.isListening ? "waveform" : "mic.fill"
+    }
+
+    private var micButtonColor: Color {
+        if presence.isActive { return .purple.opacity(0.7) }
+        return gigi.isListening ? .purple : .white.opacity(0.1)
     }
 
     // MARK: - Actions

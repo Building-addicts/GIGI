@@ -17,6 +17,7 @@ struct GigiPairingSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     enum Phase {
+        case macSetup
         case scanning
         case validating
         // Stage 2 (Phase 6): bootstrap pair OK → run diagnostics before
@@ -27,7 +28,7 @@ struct GigiPairingSheet: View {
         case failure(message: String)
     }
 
-    @State private var phase: Phase = .scanning
+    @State private var phase: Phase = .macSetup
 
     /// Callback fired on successful pair so the hosting view can refresh
     /// its "paired" indicator without polling Keychain.
@@ -37,6 +38,9 @@ struct GigiPairingSheet: View {
         ZStack {
             Color.black.ignoresSafeArea()
             switch phase {
+            case .macSetup:
+                MacSetupView(onReady: { phase = .scanning }, onCancel: { dismiss() })
+
             case .scanning:
                 GigiPairScannerView(
                     onScan: handleScan(_:),
@@ -189,5 +193,203 @@ struct GigiPairingSheet: View {
     @MainActor
     private func fail(_ message: String) async {
         phase = .failure(message: message)
+    }
+}
+
+// MARK: - MacSetupView
+
+private struct MacSetupStep: Identifiable {
+    let id: Int
+    let emoji: String
+    let title: String
+    let subtitle: String
+    let command: String
+    let note: String?
+    let onceOnly: Bool
+}
+
+private struct MacSetupView: View {
+    let onReady: () -> Void
+    let onCancel: () -> Void
+
+    @State private var copiedId: Int? = nil
+
+    private let steps: [MacSetupStep] = [
+        MacSetupStep(id: 1,
+            emoji: "🧹",
+            title: "Stop any old processes",
+            subtitle: "Clears stale server processes and lock files.",
+            command: #"pkill -f "node server.js" 2>/dev/null; pkill -f "node panel.js" 2>/dev/null; echo "✓ Clean""#,
+            note: nil, onceOnly: false),
+        MacSetupStep(id: 2,
+            emoji: "📂",
+            title: "Navigate to the server folder",
+            subtitle: "Open Terminal on your Mac, then paste this.",
+            command: "cd /path/to/GIGI-harness/03_HARNESS/server",
+            note: "Use the real folder where you downloaded the project. The Mac /start page shows the exact path when the panel is running.", onceOnly: false),
+        MacSetupStep(id: 3,
+            emoji: "📦",
+            title: "Install dependencies",
+            subtitle: "Only required the first time — takes ~30 seconds.",
+            command: "npm install",
+            note: nil, onceOnly: true),
+        MacSetupStep(id: 4,
+            emoji: "🚀",
+            title: "Start the server",
+            subtitle: "Keep the Terminal window open while you use GIGI.",
+            command: "node panel.js",
+            note: "You should see: iOS HTTP+WS: http://0.0.0.0:7779", onceOnly: false),
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+
+                // Header
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Start your Mac server")
+                        .font(.title2.weight(.bold))
+                        .foregroundColor(.white)
+                    Text("Run these 4 commands in Terminal on your Mac, then come back here to scan the QR.")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 28)
+                .padding(.bottom, 24)
+
+                // Steps
+                VStack(spacing: 12) {
+                    ForEach(steps) { step in
+                        stepCard(step)
+                    }
+                }
+                .padding(.horizontal, 16)
+
+                // Expected output hint
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Expected Terminal output (step 4)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.white.opacity(0.4))
+                    Text("Control Panel: http://localhost:7777\n[bridge] GIGI harness server avviato\n[bridge] iOS HTTP+WS: http://0.0.0.0:<configured-port>")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(Color(red: 0.4, green: 0.85, blue: 0.55))
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(10)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+
+                // CTA
+                VStack(spacing: 12) {
+                    Button(action: onReady) {
+                        Label("Server is running — scan QR", systemImage: "qrcode.viewfinder")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.purple)
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
+                    }
+                    Button(action: onCancel) {
+                        Text("Cancel")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 24)
+                .padding(.bottom, 36)
+            }
+        }
+        .background(Color(red: 0.04, green: 0.04, blue: 0.08).ignoresSafeArea())
+    }
+
+    @ViewBuilder
+    private func stepCard(_ step: MacSetupStep) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row
+            HStack(spacing: 12) {
+                Text(step.emoji)
+                    .font(.title3)
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.06))
+                    .cornerRadius(10)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(step.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                        if step.onceOnly {
+                            Text("ONCE")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(Color.purple.opacity(0.9))
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color.purple.opacity(0.15))
+                                .cornerRadius(5)
+                        }
+                    }
+                    Text(step.subtitle)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.45))
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            // Command block
+            HStack(alignment: .top, spacing: 0) {
+                Text(step.command)
+                    .font(.system(size: 12.5, design: .monospaced))
+                    .foregroundColor(Color(red: 0.6, green: 1.0, blue: 0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 14)
+                    .padding(.vertical, 10)
+
+                Button(action: { copyCommand(step) }) {
+                    Text(copiedId == step.id ? "✓" : "Copy")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(copiedId == step.id ? .green : Color.white.opacity(0.4))
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(7)
+                }
+                .padding(.trailing, 10)
+                .padding(.top, 8)
+            }
+            .background(Color.black.opacity(0.5))
+            .cornerRadius(10)
+            .padding(.horizontal, 14)
+            .padding(.bottom, step.note != nil ? 8 : 14)
+
+            // Note
+            if let note = step.note {
+                Text(note)
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.35))
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+            }
+        }
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func copyCommand(_ step: MacSetupStep) {
+        UIPasteboard.general.string = step.command
+        withAnimation { copiedId = step.id }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation { if copiedId == step.id { copiedId = nil } }
+        }
     }
 }

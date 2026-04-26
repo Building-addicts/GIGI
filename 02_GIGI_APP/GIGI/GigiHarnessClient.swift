@@ -48,7 +48,11 @@ final class GigiHarnessClient {
             case .notConfigured: return "Harness not configured (URL/secret missing)"
             case .badResponse(let s, let b): return "HTTP \(s): \(Self.summarize(body: b, status: s))"
             case .decodeFailed(let e): return "decode: \(e.localizedDescription)"
-            case .transport(let e):    return "network: \(e.localizedDescription)"
+            case .transport(let e):
+                if Self.isLocalNetworkProhibited(e) {
+                    return "network: Local Network permission denied. Enable Local Network for GIGI in iOS Settings."
+                }
+                return "network: \(e.localizedDescription)"
             case .apiError(let c, let m): return "\(c): \(m)"
             }
         }
@@ -82,6 +86,19 @@ final class GigiHarnessClient {
                 return "tunnel unreachable (530) — regenerate the QR"
             }
             return String(plain.prefix(160))
+        }
+
+        fileprivate static func isLocalNetworkProhibited(_ error: Swift.Error) -> Bool {
+            let ns = error as NSError
+            if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorNotConnectedToInternet {
+                let text = "\(ns.userInfo)"
+                return text.localizedCaseInsensitiveContains("Local network prohibited")
+            }
+            if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+                let text = "\(underlying.userInfo)"
+                return text.localizedCaseInsensitiveContains("Local network prohibited")
+            }
+            return false
         }
     }
 
@@ -494,6 +511,9 @@ final class GigiHarnessClient {
                 return Self.decodeEnvelope(respData, as: T.self, status: http.statusCode)
             } catch {
                 lastError = .transport(error)
+                if Self.Error.isLocalNetworkProhibited(error) {
+                    return .failure(lastError)
+                }
                 continue
             }
         }
@@ -529,6 +549,8 @@ final class GigiHarnessStream: NSObject {
     private var onEvent: EventHandler?
     private var keepOpen = false
     private var reconnectMs: UInt64 = 500
+    private var streamFailures = 0
+    private var lastFailureLogAt: Date?
 
     /// Heartbeat period. Cloudflare Tunnel free tier closes idle WebSockets
     /// after 100s; 60s leaves a comfortable margin. Tailscale and LAN don't
@@ -537,7 +559,7 @@ final class GigiHarnessStream: NSObject {
     private var pingTask: Task<Void, Never>?
     private var missedPongs = 0
 
-    func connect(onEvent: @escaping EventHandler) {
+    func connect(onEvent: @escaping EventHandler, resetBackoff: Bool = true) {
         guard let wsURL = Self.makeWebSocketURL() else {
             GigiDebugLogger.log("GigiHarnessStream: URL WebSocket non disponibile")
             return
@@ -553,7 +575,11 @@ final class GigiHarnessStream: NSObject {
         task?.resume()
         Task { await readLoop() }
         startHeartbeat()
-        reconnectMs = 500
+        if resetBackoff {
+            reconnectMs = 500
+            streamFailures = 0
+            lastFailureLogAt = nil
+        }
     }
 
     func disconnect() {
@@ -602,7 +628,7 @@ final class GigiHarnessStream: NSObject {
         let handler = onEvent
         disconnect()
         keepOpen = true
-        if let h = handler { connect(onEvent: h) }
+        if let h = handler { connect(onEvent: h, resetBackoff: false) }
     }
 
     private func readLoop() async {
@@ -610,6 +636,8 @@ final class GigiHarnessStream: NSObject {
         while t === task, keepOpen {
             do {
                 let msg = try await t.receive()
+                streamFailures = 0
+                lastFailureLogAt = nil
                 switch msg {
                 case .string(let s):
                     if let d = s.data(using: .utf8),
@@ -623,32 +651,53 @@ final class GigiHarnessStream: NSObject {
                 @unknown default: break
                 }
             } catch {
-                GigiDebugLogger.log("GigiHarnessStream recv error: \(error.localizedDescription)")
+                streamFailures += 1
+                if shouldLogStreamFailure() {
+                    let detail = GigiHarnessClient.Error.isLocalNetworkProhibited(error)
+                        ? "Local Network permission denied"
+                        : error.localizedDescription
+                    GigiDebugLogger.log("GigiHarnessStream recv error: \(detail) · failure=\(streamFailures) nextRetryMs=\(reconnectMs)")
+                }
+                if GigiHarnessClient.Error.isLocalNetworkProhibited(error) {
+                    keepOpen = false
+                    stopHeartbeat()
+                    task?.cancel(with: .goingAway, reason: nil)
+                    task = nil
+                    return
+                }
                 if keepOpen {
                     try? await Task.sleep(nanoseconds: reconnectMs * 1_000_000)
                     reconnectMs = min(reconnectMs * 2, 30_000)
                     let handler = onEvent
                     disconnect()
-                    if let h = handler { connect(onEvent: h) }
+                    if let h = handler { connect(onEvent: h, resetBackoff: false) }
                 }
                 return
             }
         }
     }
 
+    private func shouldLogStreamFailure() -> Bool {
+        if streamFailures <= 3 { lastFailureLogAt = Date(); return true }
+        let now = Date()
+        if let lastFailureLogAt, now.timeIntervalSince(lastFailureLogAt) < 60 {
+            return false
+        }
+        lastFailureLogAt = now
+        return true
+    }
+
     private static func makeWebSocketURL() -> URL? {
         guard let baseRaw = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL),
               let baseURL = URL(string: baseRaw) else { return nil }
         let deviceId = GigiHarnessClient.ensureDeviceId()
-        guard let secret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) else { return nil }
         var comps = URLComponents()
         comps.scheme = baseURL.scheme == "https" ? "wss" : "ws"
         comps.host = baseURL.host
         comps.port = baseURL.port
         comps.path = "/ws/ios/stream"
         comps.queryItems = [
-            URLQueryItem(name: "deviceId", value: deviceId),
-            URLQueryItem(name: "token", value: secret)
+            URLQueryItem(name: "deviceId", value: deviceId)
         ]
         return comps.url
     }
