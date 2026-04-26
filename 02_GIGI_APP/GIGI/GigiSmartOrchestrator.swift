@@ -34,7 +34,19 @@ class GigiSmartOrchestrator: ObservableObject {
     private var usingRealtimeMic   = false
     private var pendingCallContact = ""
 
+    // MARK: - Quick Talk callbacks (set by QuickTalkController)
+    var onQuickTalkStateChange: ((QuickTalkController.Phase) -> Void)?
+    var onQuickTalkTranscript:  ((String) -> Void)?
+    var onQuickTalkResponse:    ((String) -> Void)?
+    var onQuickTalkFinished:    ((Bool) -> Void)?   // Bool = success
+
+    private var isQuickTalkSession = false
+
+    // MARK: - Presence Mode flag (set by PresenceSessionController)
+    var isPresenceActive = false
+
     private init() {
+        GigiDebugLogger.log("GigiSmartOrchestrator init START")
         GigiAudioManager.shared.onTranscription = { [weak self] text in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -62,7 +74,7 @@ class GigiSmartOrchestrator: ObservableObject {
             }
         }
 
-        // Barge-in: user spoke while Gemini Live was playing audio → stop TTS, listen
+        // Barge-in: user spoke while realtime voice was playing audio → stop TTS, listen
         GigiRealtimeEngine.shared.onBargein = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -92,6 +104,7 @@ class GigiSmartOrchestrator: ObservableObject {
                 self.showBanner("⚠️ \(req.summary)", autoHideAfter: 5)
             }
         }
+        GigiDebugLogger.log("GigiSmartOrchestrator init END")
     }
 
     // MARK: - Gateway helpers
@@ -137,6 +150,11 @@ class GigiSmartOrchestrator: ObservableObject {
         await GigiLiveActivityController.shared.transitionToThinking()
         status = "GIGI: Sto pensando..."
 
+        if isQuickTalkSession {
+            onQuickTalkStateChange?(.thinking)
+            onQuickTalkTranscript?(trimmed)
+        }
+
         // Update UI message list
         memory.addUser(trimmed)
         let thinkingID = memory.addThinking()
@@ -181,6 +199,12 @@ class GigiSmartOrchestrator: ObservableObject {
         }
 
         SoundEngine.play(result.isError ? .error : .taskDone)
+
+        if isQuickTalkSession {
+            onQuickTalkStateChange?(.speaking)
+            onQuickTalkResponse?(result.speech)
+        }
+
         speech.speak(result.speech)
 
         let banner = result.speech.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -231,13 +255,32 @@ class GigiSmartOrchestrator: ObservableObject {
         }
     }
 
-    // MARK: - Gemini Live tool execution (called by GigiRealtimeEngine)
+    // MARK: - Realtime voice tool execution (called by GigiRealtimeEngine)
 
     func executeRealtimeToolCall(_ call: GigiToolCall) async -> String {
         await dispatcher.executeRealtimeTool(call)
     }
 
     // MARK: - Listening control
+
+    // MARK: - Quick Talk entry point
+
+    func startQuickTalk() {
+        isQuickTalkSession = true
+        onQuickTalkStateChange?(.listening)
+        speech.stopSpeaking()
+        isListening = true
+        status = "GIGI: Listening..."
+        usingRealtimeMic = false
+        GigiAudioManager.shared.startRecording()
+        Task { await GigiLiveActivityController.shared.beginListening() }
+    }
+
+    func stopQuickTalk() {
+        isQuickTalkSession = false
+        stopMicCapture()
+        Task { await GigiLiveActivityController.shared.endImmediately() }
+    }
 
     func startListening() {
         GigiDebugLogger.log("startListening called")
@@ -266,8 +309,19 @@ class GigiSmartOrchestrator: ObservableObject {
         status     = "GIGI: Ready"
         isThinking = false
         SoundEngine.releaseSession()   // un-duck Spotify / other apps
-        GigiAudioManager.shared.startWakeWordListening()
         Task { await GigiLiveActivityController.shared.completeWithDone(message: message) }
+
+        if isQuickTalkSession {
+            // Quick Talk is discrete — do NOT resume wake word after TTS
+            let wasSuccess = true
+            isQuickTalkSession = false
+            onQuickTalkFinished?(wasSuccess)
+        } else if isPresenceActive {
+            // Presence: resume wake word immediately (shorter delay handled by GigiAudioManager)
+            GigiAudioManager.shared.startWakeWordListening()
+        } else {
+            GigiAudioManager.shared.startWakeWordListening()
+        }
     }
 
     /// Splits a text containing multiple sequential commands into individual parts.

@@ -11,3 +11,4 @@
 # Contesto dev privato (host MacInCloud, workflow SSH) — non committare
 /CLAUDE.md
 bug/
+*.gigi-secret.txt

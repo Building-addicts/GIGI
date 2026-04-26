@@ -8,21 +8,31 @@ import Contacts
 import EventKit
 import UserNotifications
 
-// MARK: - OnboardingView (T-23)
+// MARK: - OnboardingView
 //
-// Multi-step onboarding: welcome → permissions → API key → wake word → done.
+// Multi-step onboarding: welcome → permissions → API keys (Groq + Gemini) →
+// harness (Mac backend URL+secret, skippable) → profile → wake word → done.
 // Only shown once (UserDefaults flag). Permissions are requested in-flow.
 
 struct OnboardingView: View {
     @Binding var isPresented: Bool
     @State private var step = 0
     @State private var apiKey = ""
+    @State private var geminiKey = ""
     @State private var showKey = false
+    @State private var showGemini = false
     @State private var micGranted = false
     @State private var contactsGranted = false
     @State private var calendarGranted = false
     @State private var notifGranted = false
     @State private var isRequestingPermissions = false
+
+    // Harness step
+    @State private var harnessURL = ""
+    @State private var harnessSecret = ""
+    @State private var harnessStatus = ""   // "", "testing", "ok:<pid>", "fail:<err>"
+    @State private var isTestingHarness = false
+    @State private var showQRScanner = false
 
     // Profile step
     @State private var profileName = ""
@@ -33,7 +43,7 @@ struct OnboardingView: View {
     @State private var profileZip = ""
     @State private var isSavingProfile = false
 
-    private let totalSteps = 6
+    private let totalSteps = 7
 
     var body: some View {
         ZStack {
@@ -59,9 +69,10 @@ struct OnboardingView: View {
                     case 0: welcomeStep
                     case 1: permissionsStep
                     case 2: apiKeyStep
-                    case 3: profileStep
-                    case 4: wakeWordStep
-                    case 5: doneStep
+                    case 3: harnessStep
+                    case 4: profileStep
+                    case 5: wakeWordStep
+                    case 6: doneStep
                     default: EmptyView()
                     }
                 }
@@ -96,6 +107,17 @@ struct OnboardingView: View {
         }
         .preferredColorScheme(.dark)
         .task { loadExistingKey() }
+        .fullScreenCover(isPresented: $showQRScanner) {
+            HarnessQRScannerView(
+                onScanned: { payload in
+                    harnessURL = payload.url
+                    harnessSecret = payload.secret
+                    showQRScanner = false
+                    Task { await testAndSaveHarness() }
+                },
+                onCancel: { showQRScanner = false }
+            )
+        }
     }
 
     // MARK: - Steps
@@ -149,62 +171,154 @@ struct OnboardingView: View {
     }
 
     private var apiKeyStep: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "key.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.purple)
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.purple)
 
-            Text("Connect your AI")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+                Text("Connect your AI")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
 
-            Text("GIGI uses Groq as its brain — ultra fast, **free**, no credit card needed.\nGet your key at console.groq.com → API Keys.")
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .foregroundColor(.white.opacity(0.7))
-                .padding(.horizontal, 28)
+                Text("GIGI is free forever. Plug in your own keys — we never bill you.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.horizontal, 28)
 
-            VStack(spacing: 12) {
-                HStack {
-                    keyInputField
-                    Button(action: { showKey.toggle() }) {
-                        Image(systemName: showKey ? "eye.slash" : "eye")
-                            .foregroundColor(.white.opacity(0.4))
+                // Groq (brain)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Groq key — brain (required)")
+                        .font(.caption).foregroundColor(.white.opacity(0.5))
+                    HStack {
+                        if showKey {
+                            TextField("gsk_...", text: $apiKey)
+                                .font(.system(.body, design: .monospaced))
+                                .autocorrectionDisabled()
+                        } else {
+                            SecureField("Paste Groq key (gsk_...)", text: $apiKey)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        Button(action: { showKey.toggle() }) {
+                            Image(systemName: showKey ? "eye.slash" : "eye")
+                                .foregroundColor(.white.opacity(0.4))
+                        }
                     }
+                    .padding(14)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.purple.opacity(0.4), lineWidth: 1))
+                    Text("Free at console.groq.com → API Keys")
+                        .font(.caption2).foregroundColor(.white.opacity(0.4))
                 }
-                .padding(14)
-                .background(Color.white.opacity(0.07))
-                .cornerRadius(12)
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.purple.opacity(0.4), lineWidth: 1))
+                .padding(.horizontal, 24)
 
-                Button(action: pasteFromClipboard) {
-                    Label("Paste from clipboard", systemImage: "doc.on.clipboard")
-                        .font(.subheadline)
-                        .foregroundColor(.purple)
+                // Gemini (realtime voice)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Gemini key — realtime voice (optional)")
+                        .font(.caption).foregroundColor(.white.opacity(0.5))
+                    HStack {
+                        if showGemini {
+                            TextField("AIza...", text: $geminiKey)
+                                .font(.system(.body, design: .monospaced))
+                                .autocorrectionDisabled()
+                        } else {
+                            SecureField("Paste Gemini key (AIza...)", text: $geminiKey)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        Button(action: { showGemini.toggle() }) {
+                            Image(systemName: showGemini ? "eye.slash" : "eye")
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.purple.opacity(0.4), lineWidth: 1))
+                    Text("Free tier at aistudio.google.com/apikey. Without it, voice falls back to on-device TTS (slower, flat).")
+                        .font(.caption2).foregroundColor(.white.opacity(0.4))
                 }
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
-
-            let keyLooksValid = !apiKey.isEmpty && apiKey.hasPrefix("gsk_")
-            HStack(spacing: 8) {
-                Image(systemName: keyLooksValid ? "checkmark.circle.fill" : "circle.dashed")
-                    .foregroundColor(keyLooksValid ? .green : .white.opacity(0.3))
-                Text(keyLooksValid ? "Key looks valid" : "Paste your key above")
-                    .foregroundColor(keyLooksValid ? .green : .white.opacity(0.4))
-                    .font(.caption)
-            }
+            .padding(.vertical, 8)
         }
     }
 
-    @ViewBuilder
-    private var keyInputField: some View {
-        if showKey {
-            TextField("gsk_...", text: $apiKey)
-                .font(.system(.body, design: .monospaced))
-                .autocorrectionDisabled()
-        } else {
-            SecureField("Paste your API key here", text: $apiKey)
-                .font(.system(.body, design: .monospaced))
+    private var harnessStep: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: "cpu.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.purple)
+
+                Text("Connect your Mac brain")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Text("Optional but unlocks computer-use, proactive briefings and cross-device.\nRun the harness on your Mac, then paste URL + secret here.\nSkip if you don't have one yet.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.horizontal, 24)
+
+                // QR scan shortcut
+                Button {
+                    showQRScanner = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "qrcode.viewfinder")
+                        Text("Scan QR from Mac terminal")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 22).padding(.vertical, 10)
+                    .background(Color.purple)
+                    .clipShape(Capsule())
+                }
+
+                Text("— or enter manually —")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.3))
+
+                VStack(spacing: 10) {
+                    TextField("http://10.0.0.5:7779", text: $harnessURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                        .padding(14)
+                        .background(Color.white.opacity(0.07))
+                        .cornerRadius(12)
+
+                    SecureField("shared secret 32 char", text: $harnessSecret)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(14)
+                        .background(Color.white.opacity(0.07))
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal, 24)
+
+                if isTestingHarness {
+                    ProgressView().tint(.purple)
+                } else if !harnessStatus.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: harnessStatus.hasPrefix("ok") ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundColor(harnessStatus.hasPrefix("ok") ? .green : .red)
+                        Text(harnessStatus.hasPrefix("ok") ? "Connected ✓" : harnessStatus)
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+
+                Button("Test & save") { Task { await testAndSaveHarness() } }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 22).padding(.vertical, 10)
+                    .background(Color.purple)
+                    .clipShape(Capsule())
+                    .disabled(harnessURL.isEmpty || harnessSecret.isEmpty || isTestingHarness)
+            }
+            .padding(.vertical, 8)
         }
     }
 
@@ -345,12 +459,17 @@ struct OnboardingView: View {
     // MARK: - Actions
 
     private func handleContinue() {
-        // Save Groq key when leaving step 2
-        if step == 2, !apiKey.isEmpty {
-            GigiConfig.setGroqAPIKey(apiKey)
+        // Save keys when leaving step 2
+        if step == 2 {
+            let g = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !g.isEmpty { GigiConfig.setGroqAPIKey(g) }
+            let gem = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !gem.isEmpty {
+                GigiKeychain.save(gem, forKey: GigiKeychain.Key.geminiAPIKey)
+            }
         }
-        // Save profile when leaving step 3 (async, non-blocking)
-        if step == 3 {
+        // Save profile when leaving step 4
+        if step == 4 {
             isSavingProfile = true
             Task {
                 var p = UserProfileData()
@@ -372,6 +491,21 @@ struct OnboardingView: View {
         }
     }
 
+    private func testAndSaveHarness() async {
+        isTestingHarness = true
+        let url = harnessURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sec = harnessSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        GigiKeychain.save(url, forKey: GigiKeychain.Key.harnessBaseURL)
+        GigiKeychain.save(sec, forKey: GigiKeychain.Key.harnessSecret)
+        _ = GigiHarnessClient.ensureDeviceId()
+        switch await GigiHarnessClient.shared.health() {
+        case .success(let h): harnessStatus = "ok:\(h.pid)"
+        case .failure(let e): harnessStatus = "fail: \(e)"
+        }
+        await MainActor.run { GigiApnsSync.onConfigChanged() }
+        isTestingHarness = false
+    }
+
     private func pasteFromClipboard() {
         #if canImport(UIKit)
         if let s = UIPasteboard.general.string {
@@ -385,6 +519,11 @@ struct OnboardingView: View {
         if !existing.isEmpty, existing != "$(GROQ_API_KEY)" {
             apiKey = existing
         }
+        if let g = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !g.isEmpty {
+            geminiKey = g
+        }
+        if let u = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) { harnessURL = u }
+        if let s = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) { harnessSecret = s }
     }
 
     private func requestAllPermissions() async {
@@ -401,13 +540,7 @@ struct OnboardingView: View {
         if (try? await cn.requestAccess(for: .contacts)) == true { contactsGranted = true }
         // Calendar
         let ek = EKEventStore()
-        if #available(iOS 17, *) {
-            _ = try? await ek.requestFullAccessToEvents()
-        } else {
-            _ = await withCheckedContinuation { cont in
-                ek.requestAccess(to: .event) { ok, _ in cont.resume(returning: ok) }
-            }
-        }
+        _ = try? await ek.requestFullAccessToEvents()
         calendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
         // Notifications
         let nc = UNUserNotificationCenter.current()

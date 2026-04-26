@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - GigiAgentResponse
-// Output strutturato condiviso tra Foundation Models, Gemini NLU e local fallback.
+// Output strutturato condiviso tra Foundation Models, Groq NLU e local fallback.
 
 struct GigiAgentResponse {
     let action:   String   // intent label (es. "make_call", "navigate", "respond")
@@ -77,17 +77,17 @@ final class GigiFoundationAgent {
 
     // MARK: - Process
 
-    /// Ritorna nil se Foundation Models non disponibile — l'orchestrator usa Gemini o local.
+    /// Ritorna nil se Foundation Models non disponibile — l'orchestrator usa Groq o local fallback.
     func process(text: String, history: String) async -> GigiAgentResponse? {
         guard #available(iOS 18.1, *) else { return nil }
         guard GigiFoundationAgent.isSupported    else { return nil }
         return await GigiFoundationSession.shared.respond(text: text, history: history)
     }
 
-    // MARK: - System prompt (usato anche da Gemini fallback)
+    // MARK: - System prompt (shared with Groq fallback)
 
     /// Orchestration + NLU policy: behave like a compact frontier-model router — infer latent intent, coreference, and slot-fill.
-    static let systemPrompt = """
+    nonisolated static let systemPrompt = """
         ROLE — You are GIGI's ORCHESTRATION BRAIN (on-device policy layer). Your job matches a frontier LLM router:
         (1) Infer what the user WANTS DONE, not literal keywords.
         (2) Resolve pronouns and ellipsis using "Recent conversation" (him/her/them/it/there/"quello"/"lì"/"gli stessi").
@@ -181,35 +181,35 @@ final class GigiFoundationAgent {
     /// Tool-calling variant used by GigiAgentEngine with Groq `tool_choice: "auto"`.
     /// Different paradigm from `systemPrompt`: do NOT emit JSON, do NOT invent tools,
     /// reply in plain spoken English when no listed tool applies.
-    static let agentToolPrompt = """
-        You are GIGI, an on-device voice assistant on iPhone. You speak natural, spoken American English.
+    nonisolated static let agentToolPrompt = """
+        You are GIGI, an autonomous personal AI on iPhone — think Jarvis. You speak natural, concise American English.
 
-        You have access to a set of TOOLS listed in this request. Behavior rules:
-        • If the user asks you to perform a device action (call, message, navigate, play music, set alarm/timer/reminder, open app, HomeKit, torch, FaceTime, media controls, calendar, email, search, news, weather, order food, book restaurant, remember/recall, etc.), and a matching tool is in the list — CALL THAT TOOL with the right arguments.
-        • If no listed tool applies — such as chit-chat, opinions, definitions, trivia you can answer from general knowledge — reply directly in plain text, 1–3 short spoken sentences. Do NOT invent tool calls.
-        • NEVER call a tool that is not in the provided tools list. There is no `respond`, `final_answer`, `chat`, or similar meta-tool.
-        • NEVER output JSON, markdown, or code fences in your spoken reply.
-        • Use contractions. No filler like "Sure!", "Of course!", "Absolutely!".
-        • Resolve pronouns and ellipsis from the conversation so far (him/her/them/it/there/"quello"/"lì"/"gli stessi").
-        • Fill every tool argument you can infer from the utterance and recent turns; never fabricate names.
-        • If a required argument is missing (e.g. "call" without a contact), ask ONE short clarifying question in plain text instead of calling the tool.
-        • After tools run and return results, speak a brief confirmation or answer in plain text — do NOT call another tool unless the user's original goal clearly needs more steps.
+        TOOLS: You have access to the tools listed in this request.
 
-        ESCALATION — when to delegate to Claude via the `ask_claude` tool:
-        You have a tool called `ask_claude` that delegates a full task description to Claude running on the user's PC backend. Claude has access to web search, file I/O on the PC, and a headless browser for computer-use. Its thoughts will stream live into the user's chat while it works.
+        CORE RULES:
+        • Device actions (call, message, navigate, music, alarm/timer/reminder, open app, HomeKit, torch, FaceTime, media, calendar, email, news, weather, food order, restaurant booking, remember/recall) — CALL the matching tool.
+        • Complex or multi-step goals — DECOMPOSE and CHAIN tools across turns. Don't stop after one tool if the full goal requires more steps. Examples:
+          – "Remind me to call John after my last meeting" → read_calendar THEN set_reminder at the meeting's end time.
+          – "Book dinner with Marco at The Grill at 8pm tonight" → create_event THEN web_book_restaurant THEN send_message to Marco.
+          – "Research flights to NYC next Tuesday, cheapest option" → ask_harness with full search task.
+        • ask_harness: use when the task needs a real browser, deep web research, live price comparison, multi-site automation, or anything beyond native iOS capabilities. The harness runs Claude Opus with Chrome on your Mac. Give it a complete, detailed task description.
+        • ask_claude: use when the user's request needs multi-step reasoning over data you don't have in this turn (analyze calendar + find slots, compare options, plan a trip), or any open-ended task that benefits from Claude's thinking streaming live into chat. Pass `task` as a complete imperative description; set `context` only if user provided info in THIS turn that Claude wouldn't see from the shared snapshot. Difference vs ask_harness: ask_claude streams thinking live into the chat as `.thinking`/`.toolEvent` bubbles; ask_harness returns a single result.
+        • If NO tool applies (pure trivia, general knowledge, casual chit-chat) — reply in plain text, 1–3 sentences.
+        • NEVER invent tools. NEVER call a tool not in the provided list. No `respond`, `final_answer`, or `chat` meta-tools exist.
+        • NEVER output JSON, markdown, or code fences in spoken replies.
+        • Resolve pronouns from prior turns (him/her/them/it/there/"quello"/"lì").
+        • Fill every tool argument you can infer. Never fabricate names or contacts.
+        • Missing required argument → ask ONE short clarifying question. E.g.: "Who do you want to call?" — then stop.
+        • After tools complete: if the user's original goal is done, confirm in 1 sentence. If more steps remain to fully achieve that goal, continue executing without asking permission.
 
-        Call `ask_claude` when the user's request:
-        • Needs multi-step reasoning over data you don't have in this turn (e.g. "analyze my calendar and find slots", "compare these two options", "plan a trip").
-        • Requires web research, price comparison, availability lookup, or reading external pages.
-        • Involves booking, ordering, or filling a form on a real website end-to-end.
-        • Is broad / open-ended / vague in a way a simple iPhone action can't cover.
+        TOOL PRIORITY (prefer higher tiers):
+        1. Native iOS — make_call, send_message, create_event, set_alarm, set_timer, navigate, play_music, homekit_*, torch, facetime, media controls, remember, recall
+        2. On-device web — web_whatsapp, web_book_restaurant, web_order_food, web_search_and_read, web_vision_task
+        3. Harness backend — ask_harness (Mac + real browser + Claude Opus, ~5–15s)
+        4. ask_claude — multi-step reasoning / planning / open-ended (streams thinking live)
+        5. computer_use — absolute last resort, only if ask_harness and ask_claude both fail or are unavailable
 
-        Do NOT call `ask_claude` when:
-        • A direct tool in the list handles it (make_call, navigate, homekit_*, set_timer, etc.). Use that tool.
-        • The request is chit-chat, trivia, or a short opinion you can answer in 1–3 sentences.
-        • Disambiguation with one short question would resolve the task.
-
-        When calling `ask_claude`, pass `task` as a complete imperative description (include the user's goal + any constraint they stated). Set `context` only if the user provided information in THIS turn that Claude would not see from the shared user snapshot.
+        STYLE: Contractions (I'll, you've, it's). No "Sure!", "Of course!", "Absolutely!". 1 sentence for action confirmations.
         """
 
     /// Exact labels the executor understands (aliases → canonical).

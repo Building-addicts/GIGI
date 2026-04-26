@@ -27,6 +27,11 @@ struct DashboardView: View {
                     headerRow
                         .padding(.top, 56)
 
+                    // First-config banner
+                    if !groqReady {
+                        firstConfigBanner
+                    }
+
                     // ── Setup status cards ─────────────────────────
                     SectionHeader(title: "Setup")
 
@@ -127,24 +132,75 @@ struct DashboardView: View {
 
     private var headerRow: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Dashboard")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-                Text(groqReady ? "GIGI is ready" : "Complete setup below")
-                    .font(.system(size: 13))
-                    .foregroundColor(groqReady ? .green : .orange)
+
+                // Brain ON/OFF badge
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(groqReady ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                        .overlay(
+                            groqReady
+                                ? Circle().stroke(Color.green.opacity(0.4), lineWidth: 4)
+                                    .scaleEffect(1.6)
+                                : nil
+                        )
+                    Text(groqReady ? "BRAIN ON" : "BRAIN OFF")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(groqReady ? .green : .red)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background((groqReady ? Color.green : Color.red).opacity(0.1))
+                .clipShape(Capsule())
             }
+
             Spacer()
+
             ZStack {
                 Circle()
-                    .fill(groqReady ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
+                    .fill(groqReady ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
                     .frame(width: 44, height: 44)
-                Image(systemName: groqReady ? "checkmark" : "exclamationmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(groqReady ? .green : .orange)
+                Image(systemName: groqReady ? "brain.filled.head.profile" : "brain")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(groqReady ? .green : .red)
             }
         }
+    }
+
+    // MARK: - First-config banner
+
+    private var firstConfigBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 18))
+                .foregroundColor(.orange)
+                .frame(width: 36, height: 36)
+                .background(Color.orange.opacity(0.15))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Groq key required")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                Text("Go to Settings → AI Brain to add your free API key.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.55))
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12))
+                .foregroundColor(.white.opacity(0.3))
+        }
+        .padding(14)
+        .background(Color.orange.opacity(0.08))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.25), lineWidth: 1))
+        .cornerRadius(14)
     }
 
     // MARK: - Setup card
@@ -652,6 +708,7 @@ final class GuidedSetupSession: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            Task { @MainActor [weak self] in
             guard let self,
                   let userInfo = notification.userInfo,
                   let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -674,12 +731,11 @@ final class GuidedSetupSession: ObservableObject {
                 self.isInterrupted = false
                 // Re-ask the current question when audio resumes
                 if !self.isDone {
-                    Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
-                        self?.addGigi("Welcome back! " + (self?.steps[self?.currentStep ?? 0].prompt ?? ""))
-                    }
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    self.addGigi("Welcome back! " + self.steps[self.currentStep].prompt)
                 }
             @unknown default: break
+            }
             }
         }
     }

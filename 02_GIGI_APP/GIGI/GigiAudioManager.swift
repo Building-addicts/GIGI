@@ -34,6 +34,10 @@ final class GigiAudioManager {
     // Called whenever state transitions so observers can react
     var onStateChange: ((GigiAudioState, GigiAudioState) -> Void)?
 
+    // When true (Presence Mode), skip screen-dark / low-power wake suppression
+    // and use a shorter post-TTS resume delay.
+    var presenceMode: Bool = false
+
     // Forwarded from the underlying engines
     var onWakeWordDetected: (() -> Void)?
     var onTranscription:    ((String) -> Void)?
@@ -90,9 +94,11 @@ final class GigiAudioManager {
     func notifySpeakingFinished() {
         GigiAudioSequestrator.shared.notifySpeechFinished()
         transition(to: .idle)
-        // Small delay: let the audio hardware settle after TTS before seizing mic again
+        // Presence Mode uses a longer delay to prevent speaker→mic feedback loop.
+        // Quick Talk stays idle (wake word resume skipped — handled by GigiSmartOrchestrator).
+        let delayNs: UInt64 = presenceMode ? 600_000_000 : 300_000_000
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: delayNs)
             self?.resumeWakeWordIfEnabled()
         }
     }

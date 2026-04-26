@@ -133,10 +133,15 @@ export function spawnClaude(cfg, args, onEvent, onSpawn) {
       ? args.map(a => a === 'json' ? 'stream-json' : a).concat(['--verbose'])
       : args;
 
+    // Strip ANTHROPIC_API_KEY from env — Claude CLI uses its own stored credentials.
+    // A placeholder value in .env would override the stored key and cause "Invalid API key".
+    const claudeEnv = { ...process.env };
+    delete claudeEnv.ANTHROPIC_API_KEY;
     const child = spawn(cfg.claude.bin || 'claude', streamArgs, {
       shell: false,
       windowsHide: true,
-      timeout: cfg.claude.timeout_ms || 600000
+      timeout: cfg.claude.timeout_ms || 600000,
+      env: claudeEnv
     });
     if (onSpawn) { try { onSpawn(child); } catch {} }
     let stdout = '', stderr = '';
@@ -211,26 +216,63 @@ function injectSystemContext(baseSysPrompt) {
   return sysPrompt;
 }
 
-export async function runClaude(cfg, prompt, deviceId, onEvent, onSpawn, onSessionExpired) {
+export async function runClaude(cfg, prompt, deviceId, onEvent, onSpawn, onSessionExpired, options) {
   const sessions = loadSessions();
   const timeoutMin = parseInt(cfg.claude.session_timeout_minutes ?? 60, 10);
   const useSession = cfg.claude.continuous_session !== false;
   const active = useSession ? getActiveSession(sessions, deviceId, timeoutMin) : null;
 
+  // options.domain: route to domain-specific system prompt + MCP config
+  // options.schema: append JSON schema constraint to prompt
+  // options.mcp_config: explicit MCP config path override
+  const domain = options?.domain || null;
+  const schema = options?.schema || null;
+  const mcpConfigPath = options?.mcp_config || cfg.claude.mcp_config || null;
+
+  const __dirname = path.dirname(new URL(import.meta.url).pathname);
+
+  // Domain → MCP config (browser tools for web/research domains)
+  const DOMAIN_MCP = {
+    browser:  path.join(__dirname, 'mcp-browser.json'),
+    research: path.join(__dirname, 'mcp-browser.json'),
+  };
+
+  // Domain → system prompt override
+  const now = new Date().toISOString().slice(0, 10);
+  const DOMAIN_PROMPTS = {
+    browser:  `You are GIGI's browser automation agent. Use the harness-browser MCP tools to navigate pages, fill forms, extract data, and complete web tasks. If structured output is requested, respond ONLY with valid JSON. Today: ${now}.`,
+    research: `You are GIGI's research agent. Use browser tools to find live, accurate information from multiple sources. If structured output is requested, respond ONLY with valid JSON. Today: ${now}.`,
+    calendar: `You are GIGI's scheduling assistant. Help with calendar analysis, scheduling decisions, and time-related tasks. Today: ${now}.`,
+    messaging:`You are GIGI's communication assistant. Draft messages, emails, and notifications concisely. Today: ${now}.`,
+  };
+
+  const effectiveMcpConfig = mcpConfigPath || (domain ? DOMAIN_MCP[domain] : null);
+  const domainSystemPrompt = domain ? DOMAIN_PROMPTS[domain] : null;
+
+  // If schema requested, append constraint to prompt
+  const effectivePrompt = schema
+    ? `${prompt}\n\nIMPORTANT: Respond ONLY with valid JSON matching this schema: ${schema}`
+    : prompt;
+
   async function attempt(sessionId, isNew) {
-    const args = ['-p', prompt, '--output-format', 'json',
+    const args = ['-p', effectivePrompt, '--output-format', 'json',
       '--permission-mode', cfg.claude.permission_mode || 'bypassPermissions'];
     if (cfg.claude.model) args.push('--model', cfg.claude.model);
+    if (effectiveMcpConfig && fs.existsSync(effectiveMcpConfig)) {
+      args.push('--mcp-config', effectiveMcpConfig);
+    }
     if (useSession) {
       if (isNew) {
         args.push('--session-id', sessionId);
-        const sysPrompt = injectSystemContext(cfg.claude.system_prompt);
+        const baseSysPrompt = domainSystemPrompt || cfg.claude.system_prompt;
+        const sysPrompt = injectSystemContext(baseSysPrompt);
         if (sysPrompt) args.push('--append-system-prompt', sysPrompt);
       } else {
         args.push('--resume', sessionId);
       }
-    } else if (cfg.claude.system_prompt) {
-      args.push('--append-system-prompt', cfg.claude.system_prompt);
+    } else {
+      const baseSysPrompt = domainSystemPrompt || cfg.claude.system_prompt;
+      if (baseSysPrompt) args.push('--append-system-prompt', injectSystemContext(baseSysPrompt));
     }
     return spawnClaude(cfg, args, onEvent, onSpawn);
   }

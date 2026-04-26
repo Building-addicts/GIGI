@@ -1,24 +1,25 @@
 {
   "server": {
     "port": 7779,
-    "host": "127.0.0.1"
+    "host": "0.0.0.0"
   },
   "panel": {
     "port": 7777
   },
   "ios": {
     "shared_secret": "GENERA_UN_BEARER_SECRET_RANDOM_32_CHAR",
-    "allowed_device_ids": []
+    "allowed_device_ids": [],
+    "_pairing": "After start-all.sh, a QR code is printed in the terminal — scan it from GIGI iOS → Settings → Harness or during Onboarding step 3. Generate secret: openssl rand -hex 16"
   },
   "claude": {
-    "bin": "/Users/TUO_USER/.local/bin/claude",
+    "bin": "/opt/homebrew/bin/claude",
     "timeout_ms": 600000,
     "session_timeout_minutes": 60,
     "continuous_session": true,
     "show_live_window": false,
     "permission_mode": "bypassPermissions",
     "model": "claude-opus-4-7",
-    "system_prompt": "Sei il backend operativo di GIGI, l'app iOS assistente personale di Leonardo. Rispondi agli agent request provenienti dall'app, esegui task complessi (browser, memoria, computer-use), mantieni contesto tra richieste."
+    "system_prompt": "You are GIGI's Mac backend agent. Execute complex tasks delegated by the iOS app: web research, browser automation, file operations, computer-use. Return concise results. Maintain context across requests."
   },
   "anthropic": {
     "api_key": "sk-ant-... (per computer-use fase 14)"
@@ -27,12 +28,29 @@
     "key_path": "/Users/TUO_USER/.gigi/AuthKey_XXXXXXXXXX.p8",
     "key_id": "XXXXXXXXXX",
     "team_id": "XXXXXXXXXX",
-    "bundle_id": "com.leonardocorte.gigi",
+    "bundle_id": "com.killsiri.GIGI",
     "production": false
   },
   "memory": {
     "backend": "json",
     "upgrade_target": "lancedb"
+  },
+  "groq": {
+    "api_key": "gsk_... (same key used for brain — enables Whisper STT)"
+  },
+  "openai": {
+    "api_key": "sk-... (optional — for OpenAI TTS voice replies)"
+  },
+  "telegram": {
+    "bot_token": "... (from BotFather — enables Telegram Voice channel)",
+    "_setup": "Register webhook: curl 'https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://YOUR_DOMAIN/api/channels/telegram'"
+  },
+  "whatsapp": {
+    "access_token": "... (Meta Business Cloud API access token)",
+    "phone_number_id": "...",
+    "verify_token": "... (any random string you set in Meta Dashboard)",
+    "app_secret": "... (Meta App Secret for webhook signature verification)",
+    "_setup": "Register webhook in Meta Developer Console → WhatsApp → Configuration → Webhook URL: https://YOUR_DOMAIN/api/channels/whatsapp"
   },
   "browser": {
     "enabled": true,

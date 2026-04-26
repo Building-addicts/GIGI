@@ -35,7 +35,9 @@ import { handleSetup } from './api/setup.js';
 import { handleDiagnostics } from './api/diagnostics.js';
 import { handleAutofix } from './api/autofix.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
+import * as channelRouter from './api/channel-router.js';
 import { handlePanelRequest } from './api/panel-connections.js';
+import { handleDebugIngest } from './api/debug-ingest.js';
 
 // ─────────────────────────────────────────────────────────────
 // Lock file: evita istanze duplicate
@@ -82,10 +84,11 @@ function runParallelTaskWithMemo(cfg, deviceId, prompt, onProgress) {
   return claudeRunner.runParallelTask(cfg, deviceId, prompt, onProgress, memorySnapshot.saveMemorySnapshot);
 }
 
-function runClaudeWithExpiryMemo(cfg, prompt, deviceId, onEvent, onSpawn) {
+function runClaudeWithExpiryMemo(cfg, prompt, deviceId, onEvent, onSpawn, options) {
   return claudeRunner.runClaude(cfg, prompt, deviceId, onEvent, onSpawn,
     (expiredId) => memorySnapshot.saveMemorySnapshot(cfg, deviceId, expiredId, 'expiry')
-      .catch(e => log('auto-memo on expiry error:', e.message))
+      .catch(e => log('auto-memo on expiry error:', e.message)),
+    options
   );
 }
 
@@ -152,6 +155,8 @@ async function main() {
   log('config:', CONFIG_PATH);
   log('logs:', LOGS_DIR);
 
+  channelRouter.init(LOGS_DIR);
+
   try {
     watchers.start(cfg, log);
     log('watchers started');
@@ -177,6 +182,7 @@ async function main() {
       // /api/pair is loopback-only (enforced inside handlePair) and MUST
       // run before the iOS router, because it intentionally skips the
       // Bearer check (the QR itself hands out the Bearer).
+      if (await handleDebugIngest(req, res, { cfg })) return;
       if (await handlePair(req, res, { cfg })) return;
       // /api/setup/diagnostics — Bearer-authed (same secret as iOS API).
       // MUST run before handleSetup, since handleSetup also matches
@@ -192,7 +198,9 @@ async function main() {
       if (await handlePanelRequest(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
       // /api/setup/* — wizard endpoints, also loopback-only + bearer-free.
       if (await handleSetup(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
-      const handled = await handleIosRequest(req, res, { cfg, gigiServer });
+      // iOS router (Bearer-authed) → fallback to channel router (Telegram/WhatsApp/etc.)
+      const handled = await handleIosRequest(req, res, { cfg, gigiServer })
+        || await channelRouter.handle(req, res, { cfg, gigiServer, log });
       if (!handled) {
         res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'endpoint sconosciuto' } }));

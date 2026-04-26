@@ -3,30 +3,30 @@ import Foundation
 
 // MARK: - Shared value types
 
-struct ToolResult {
+struct ToolResult: Sendable {
     let value: String
     let error: String?
     let requiresConfirm: ConfirmRequest?
     let tokenEstimate: Int
 
-    static func success(_ value: String, tokenEstimate: Int = 10) -> ToolResult {
+    nonisolated static func success(_ value: String, tokenEstimate: Int = 10) -> ToolResult {
         ToolResult(value: value, error: nil, requiresConfirm: nil, tokenEstimate: tokenEstimate)
     }
 
-    static func failure(_ error: String) -> ToolResult {
+    nonisolated static func failure(_ error: String) -> ToolResult {
         ToolResult(value: "", error: error, requiresConfirm: nil, tokenEstimate: 5)
     }
 
-    static func confirm(_ request: ConfirmRequest, tokenEstimate: Int = 15) -> ToolResult {
+    nonisolated static func confirm(_ request: ConfirmRequest, tokenEstimate: Int = 15) -> ToolResult {
         ToolResult(value: "", error: nil, requiresConfirm: request, tokenEstimate: tokenEstimate)
     }
 }
 
-struct ConfirmRequest {
+struct ConfirmRequest: @unchecked Sendable {
     let type: ConfirmType
     let summary: String
     let action: String
-    let args: [String: Any]
+    let args: [String: Any]   // [String: Any] is not Sendable but args are read-only value copies
 }
 
 enum ConfirmType {
@@ -559,13 +559,7 @@ struct FindFreeSlotTool: GigiTool {
     }
 
     private func requestCalendarAccess(store: EKEventStore) async -> Bool {
-        if #available(iOS 17, *) {
-            return (try? await store.requestFullAccessToEvents()) ?? false
-        } else {
-            return await withCheckedContinuation { cont in
-                store.requestAccess(to: .event) { ok, _ in cont.resume(returning: ok) }
-            }
-        }
+        (try? await store.requestFullAccessToEvents()) ?? false
     }
 
     private func resolveDate(_ dateStr: String) -> (Date, Date) {
@@ -990,20 +984,20 @@ struct WebBookRestaurantTool: GigiTool {
 
 struct WebOrderFoodTool: GigiTool {
     let name = "web_order_food"
-    let requiresConfirmation = true
-    let tags = ["order", "food", "delivery", "pizza", "deliveroo", "ubereats", "doordash", "glovo", "cibo", "ordina", "consegna"]
+    let requiresConfirmation = false
+    let tags = ["order", "food", "delivery", "pizza", "deliveroo", "ubereats", "doordash", "glovo", "justeat", "just eat", "just-eat", "just hit", "cibo", "ordina", "ordinami", "consegna"]
 
     let declaration = FunctionDeclaration(
         name: "web_order_food",
-        description: "Order food via a delivery platform. ALWAYS requires payment confirmation before placing the order.",
+        description: "Order food via a delivery platform. Delegates to Mac harness for browser automation.",
         parameters: JSONSchema(
             type: "object",
             properties: [
-                "restaurant": JSONSchemaProperty(type: "string", description: "Restaurant or cuisine type", enumValues: nil),
+                "restaurant": JSONSchemaProperty(type: "string", description: "Restaurant name or cuisine type (e.g. 'Pizzeria Napoli', 'sushi'). Do NOT put the platform name here.", enumValues: nil),
                 "items":      JSONSchemaProperty(type: "string", description: "Items to order (optional)", enumValues: nil),
                 "platform":   JSONSchemaProperty(type: "string", description: "Delivery platform", enumValues: ["deliveroo", "ubereats", "doordash", "glovo", "justeat", "auto"])
             ],
-            required: ["restaurant"]
+            required: []
         )
     )
 
@@ -1074,15 +1068,14 @@ struct WebVisionTaskTool: GigiTool {
 struct ComputerUseTool: GigiTool {
     let name = "computer_use"
     let requiresConfirmation = true
-    let tags: [String] = []  // Never auto-selected by meta-classifier — only Gemini can invoke it explicitly
+    let tags: [String] = []  // Never auto-selected by meta-classifier — only harness can invoke it explicitly
 
     let declaration = FunctionDeclaration(
         name: "computer_use",
         description: """
-        LAST RESORT ONLY. Use this tool ONLY if web_whatsapp, web_book_restaurant, and web_order_food \
-        are not applicable or have already failed. This tool uses a backend Claude agent with a real \
-        browser. It costs ~$0.20 per execution and takes 20–40 seconds. Never use it for tasks that \
-        native iOS tools can handle (calls, messages, timers, HomeKit, calendar).
+        LAST RESORT ONLY. Use this tool ONLY if ask_harness is unavailable or has already failed. \
+        This tool uses a backend Claude agent with a real browser. It costs ~$0.20 per execution and \
+        takes 20–40 seconds. Never use it for tasks that native iOS tools can handle.
         """,
         parameters: JSONSchema(
             type: "object",
@@ -1096,7 +1089,63 @@ struct ComputerUseTool: GigiTool {
     }
 }
 
-// MARK: - Claude bridge escalation tool (Phase 1.5)
+// MARK: - Harness escalation tool (Leo lane)
+//
+// Routes the request through GigiHarnessClient.agentRun() — a single
+// HTTP round-trip to the harness backend's planner/agent loop. Returns
+// a finished result string. Use for tasks that fit the harness's
+// browser/research/booking automation.
+
+struct AskHarnessTool: GigiTool {
+    let name = "ask_harness"
+    let requiresConfirmation = false
+    let tags = [
+        "research", "find online", "flight", "hotel", "ticket", "prenotazione", "volo",
+        "cerca online", "compra", "acquista", "ordina online", "complex task",
+        "summarize", "riassumi", "analizza", "analyze", "report", "compare",
+        "book", "prenota", "schedule meeting", "agenda", "mac", "computer",
+        "cheapest", "price", "availability", "current", "latest",
+        "web", "online", "search", "find", "look up", "check", "browse",
+        "restaurant", "table", "reservation", "menu", "open",
+        "news", "article", "read", "translate", "form",
+        "deliveroo", "uber eats", "glovo", "amazon", "farfetch", "booking"
+    ]
+
+    let declaration = FunctionDeclaration(
+        name: "ask_harness",
+        description: """
+        Delegate a complex or multi-step task to the Mac harness backend (Claude Opus + real Chrome \
+        browser). Use for: deep web research, flight/hotel search, multi-site automation, reading \
+        live web pages, file operations, or any task beyond native iOS capabilities. \
+        Provide a complete, detailed task description including all context and desired output format.
+        """,
+        parameters: JSONSchema(
+            type: "object",
+            properties: [
+                "task": JSONSchemaProperty(
+                    type: "string",
+                    description: "Complete task description with all context, data needed, and desired output format",
+                    enumValues: nil
+                )
+            ],
+            required: ["task"]
+        )
+    )
+
+    func execute(args: [String: Any]) async -> ToolResult {
+        let task = str(args, "task")
+        guard !task.isEmpty else { return .failure("ask_harness: task description required") }
+        guard GigiHarnessClient.shared.isConfigured else {
+            return .failure("Harness backend not set up. Go to Settings → Harness Backend and scan the QR code from your Mac.")
+        }
+        switch await GigiHarnessClient.shared.agentRun(text: task, domain: "browser") {
+        case .success(let r): return .success(r.result, tokenEstimate: 50)
+        case .failure(let e): return .failure("Harness error: \(e.description)")
+        }
+    }
+}
+
+// MARK: - Claude bridge escalation tool (Phase 1.5 — Armando lane)
 //
 // Exposed to Groq so the LLM can delegate a task to Claude on the harness
 // backend. Execution does NOT call the iOS action dispatcher — it goes
@@ -1169,6 +1218,7 @@ final class GigiToolRegistry {
         RememberTool(), RecallTool(), SearchGroupsTool(),
         WebWhatsAppTool(), WebBookRestaurantTool(), WebOrderFoodTool(),
         WebSearchAndReadTool(), WebVisionTaskTool(), ComputerUseTool(),
+        AskHarnessTool(),
         AskClaudeTool()
     ]
 
@@ -1206,8 +1256,14 @@ final class GigiToolRegistry {
             return (tool, score)
         }
 
+        // Always include ask_harness when harness is configured — it handles what other tools can't.
+        if GigiHarnessClient.shared.isConfigured,
+           let idx = scored.firstIndex(where: { $0.tool.name == "ask_harness" }) {
+            scored[idx] = (scored[idx].tool, max(scored[idx].score, 50))
+        }
+
         scored.sort { $0.score > $1.score }
-        return Array(scored.prefix(10).map(\.tool))
+        return Array(scored.prefix(12).map(\.tool))
     }
 
     /// Lookup by name for execution in AgentEngine.

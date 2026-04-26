@@ -19,8 +19,9 @@ export function clearInterrupted() {
 }
 
 export function isRateLimit(res) {
-  if (res.code === 0) return false;
   const haystack = ((res.stderr || '') + ' ' + (res.error || '') + ' ' + (res.stdout || '')).toLowerCase();
+  if (haystack.includes("you've hit your limit") || haystack.includes('you have hit your limit')) return true;
+  if (res.code === 0) return false;
   return ['rate limit', 'rate_limit', 'too many requests', 'usage limit', 'overloaded', '529', 'claude ai usage', 'quota exceeded'].some(p => haystack.includes(p));
 }
 

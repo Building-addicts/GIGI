@@ -4,8 +4,10 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject var auth = GigiAuthManager.shared
     @ObservedObject private var orchestrator = GigiSmartOrchestrator.shared
+    @ObservedObject private var presence = PresenceSessionController.shared
 
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "gigi.onboarding.complete")
+    @State private var showPresence = false
     @State private var selection: Int = 0
     @State private var showPairingSheet = false
     @State private var harnessConfigured = GigiHarnessClient.shared.pairingState.isConfigured
@@ -18,6 +20,13 @@ struct MainTabView: View {
                     .tabItem {
                         Image(systemName: "waveform.badge.mic")
                         Text("GIGI")
+                    }
+
+                // Presence Mode tab
+                PresenceModeTabView(showPresence: $showPresence)
+                    .tabItem {
+                        Image(systemName: presence.isActive ? "person.wave.2.fill" : "person.wave.2")
+                        Text("Presence")
                     }
 
                 DashboardView()
@@ -68,6 +77,12 @@ struct MainTabView: View {
         }
         .animation(.easeInOut(duration: 0.4), value: showOnboarding)
         .animation(.easeInOut(duration: 0.3), value: harnessConfigured)
+        .sheet(isPresented: $showPresence) {
+            PresenceView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.black)
+        }
         .sheet(isPresented: $showPairingSheet) {
             GigiPairingSheet { _ in
                 refreshHarnessConfiguredState()
@@ -120,5 +135,47 @@ struct MainTabView: View {
         .padding(.horizontal, 14)
         .padding(.top, 56)
         .onTapGesture { showPairingSheet = true }
+    }
+}
+
+// MARK: - Presence Tab Entry
+
+private struct PresenceModeTabView: View {
+    @Binding var showPresence: Bool
+    @ObservedObject private var presence = PresenceSessionController.shared
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 24) {
+                Spacer()
+                Image(systemName: presence.isActive ? "person.wave.2.fill" : "person.wave.2")
+                    .font(.system(size: 52))
+                    .foregroundColor(presence.isActive ? .purple : .white.opacity(0.3))
+                Text(presence.isActive ? "Presence Active" : "Presence Mode")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Text(presence.isActive ? "GIGI is with you" : "Stay connected with GIGI")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.4))
+                Button {
+                    if presence.isActive {
+                        showPresence = true
+                    } else {
+                        presence.startSession()
+                        showPresence = true
+                    }
+                } label: {
+                    Text(presence.isActive ? "Open" : "Start")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 40)
+                        .padding(.vertical, 14)
+                        .background(presence.isActive ? Color.purple : Color.purple.opacity(0.7))
+                        .clipShape(Capsule())
+                }
+                Spacer()
+            }
+        }
     }
 }
