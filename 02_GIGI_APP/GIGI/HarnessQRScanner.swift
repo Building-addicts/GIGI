@@ -1,0 +1,179 @@
+import AVFoundation
+import SwiftUI
+import UIKit
+import AudioToolbox
+
+// Parses: gigi://harness?url=http://10.0.0.5:7779&secret=xxxxx
+struct HarnessPairingPayload {
+    let url: String
+    let secret: String
+
+    init?(from string: String) {
+        guard let comps = URLComponents(string: string),
+              comps.scheme == "gigi",
+              comps.host == "harness",
+              let url = comps.queryItems?.first(where: { $0.name == "url" })?.value,
+              let secret = comps.queryItems?.first(where: { $0.name == "secret" })?.value,
+              !url.isEmpty, !secret.isEmpty
+        else { return nil }
+        self.url = url
+        self.secret = secret
+    }
+}
+
+// MARK: - HarnessQRScannerView
+
+struct HarnessQRScannerView: UIViewControllerRepresentable {
+    let onScanned: (HarnessPairingPayload) -> Void
+    let onCancel: () -> Void
+
+    func makeUIViewController(context: Context) -> ScannerVC {
+        ScannerVC(onScanned: onScanned, onCancel: onCancel)
+    }
+
+    func updateUIViewController(_ vc: ScannerVC, context: Context) {}
+
+    // MARK: - UIViewController
+
+    final class ScannerVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+        private let session = AVCaptureSession()
+        private var previewLayer: AVCaptureVideoPreviewLayer?
+        private var didCapture = false
+
+        let onScanned: (HarnessPairingPayload) -> Void
+        let onCancel: () -> Void
+
+        init(onScanned: @escaping (HarnessPairingPayload) -> Void,
+             onCancel: @escaping () -> Void) {
+            self.onScanned = onScanned
+            self.onCancel = onCancel
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.backgroundColor = .black
+            setupCamera()
+            addOverlay()
+            addCancelButton()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            previewLayer?.frame = view.bounds
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.session.startRunning()
+            }
+        }
+
+        override func viewDidDisappear(_ animated: Bool) {
+            super.viewDidDisappear(animated)
+            session.stopRunning()
+        }
+
+        private func setupCamera() {
+            guard let device = AVCaptureDevice.default(for: .video),
+                  let input = try? AVCaptureDeviceInput(device: device),
+                  session.canAddInput(input) else { return }
+
+            session.addInput(input)
+
+            let output = AVCaptureMetadataOutput()
+            guard session.canAddOutput(output) else { return }
+            session.addOutput(output)
+            output.setMetadataObjectsDelegate(self, queue: .main)
+            output.metadataObjectTypes = [.qr]
+
+            let layer = AVCaptureVideoPreviewLayer(session: session)
+            layer.videoGravity = .resizeAspectFill
+            layer.frame = view.bounds
+            view.layer.insertSublayer(layer, at: 0)
+            previewLayer = layer
+        }
+
+        private func addOverlay() {
+            let overlay = UIView(frame: view.bounds)
+            overlay.backgroundColor = .clear
+            overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+            // dimmed mask with cutout
+            let maskLayer = CAShapeLayer()
+            let path = UIBezierPath(rect: view.bounds)
+            let cutSize: CGFloat = 240
+            let cx = view.bounds.midX - cutSize / 2
+            let cy = view.bounds.midY - cutSize / 2 - 40
+            let cutRect = CGRect(x: cx, y: cy, width: cutSize, height: cutSize)
+            path.append(UIBezierPath(roundedRect: cutRect, cornerRadius: 16).reversing())
+            maskLayer.path = path.cgPath
+            maskLayer.fillColor = UIColor.black.withAlphaComponent(0.55).cgColor
+            let dimLayer = CALayer()
+            dimLayer.frame = view.bounds
+            dimLayer.addSublayer(maskLayer)
+            overlay.layer.addSublayer(dimLayer)
+
+            // viewfinder border
+            let border = UIView(frame: cutRect)
+            border.layer.borderColor = UIColor.systemPurple.cgColor
+            border.layer.borderWidth = 2.5
+            border.layer.cornerRadius = 16
+            overlay.addSubview(border)
+
+            // label
+            let label = UILabel()
+            label.text = "Scan harness QR code"
+            label.textColor = .white
+            label.font = .systemFont(ofSize: 15, weight: .medium)
+            label.textAlignment = .center
+            label.frame = CGRect(x: 0, y: cutRect.maxY + 20, width: view.bounds.width, height: 30)
+            overlay.addSubview(label)
+
+            let sub = UILabel()
+            sub.text = "Generated by start-all.sh on your Mac"
+            sub.textColor = UIColor.white.withAlphaComponent(0.5)
+            sub.font = .systemFont(ofSize: 12)
+            sub.textAlignment = .center
+            sub.frame = CGRect(x: 0, y: cutRect.maxY + 52, width: view.bounds.width, height: 20)
+            overlay.addSubview(sub)
+
+            view.addSubview(overlay)
+        }
+
+        private func addCancelButton() {
+            let btn = UIButton(type: .system)
+            btn.setTitle("Cancel", for: .normal)
+            btn.setTitleColor(.white, for: .normal)
+            btn.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
+            btn.frame = CGRect(x: 0, y: 60, width: view.bounds.width, height: 44)
+            btn.autoresizingMask = [.flexibleWidth]
+            btn.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+            view.addSubview(btn)
+        }
+
+        @objc private func cancelTapped() { onCancel() }
+
+        // MARK: - AVCaptureMetadataOutputObjectsDelegate
+
+        func metadataOutput(
+            _ output: AVCaptureMetadataOutput,
+            didOutput objects: [AVMetadataObject],
+            from connection: AVCaptureConnection
+        ) {
+            guard !didCapture,
+                  let obj = objects.first as? AVMetadataMachineReadableCodeObject,
+                  let raw = obj.stringValue,
+                  let payload = HarnessPairingPayload(from: raw)
+            else { return }
+
+            didCapture = true
+            session.stopRunning()
+            AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
+            onScanned(payload)
+        }
+    }
+}

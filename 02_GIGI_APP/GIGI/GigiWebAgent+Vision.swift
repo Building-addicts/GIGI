@@ -85,7 +85,7 @@ extension GigiWebAgent {
 
             case "scroll":
                 let delta = action.direction == "up" ? -500 : 500
-                try? await js("window.scrollBy(0, \(delta))")
+                _ = try? await js("window.scrollBy(0, \(delta))")
 
             case "navigate":
                 guard let urlStr = action.url, let dest = URL(string: urlStr) else { continue }

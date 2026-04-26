@@ -1,54 +1,78 @@
 import Foundation
 
 class GigiDebugLogger {
-    static func log(_ msg: String, location: String = #file) {
-        print("DEBUG LOG: \(msg)")
-        
+    static let sessionId = UUID().uuidString.prefix(8).description
+
+    /// HARDCODED debug ingest endpoint for STEP 1 crash investigation.
+    /// Flip to nil to disable remote ingest entirely.
+    /// Will be removed once Step 1 is verified.
+    static let remoteIngestURL = "http://192.168.1.67:7779/api/debug/ingest"
+
+    static func log(_ msg: String, location: String = #file, function: String = #function, line: Int = #line) {
+        let file = (location as NSString).lastPathComponent
+        let entry = "\(file):\(line) \(function) — \(msg)"
+        print("DEBUG LOG: \(entry)")
+
         // Save to UserDefaults for crash recovery
         var logs = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss.SSS"
-        logs.append("[\(formatter.string(from: Date()))] \(location): \(msg)")
-        if logs.count > 50 { logs.removeFirst(logs.count - 50) }
+        logs.append("[\(formatter.string(from: Date()))] \(entry)")
+        if logs.count > 200 { logs.removeFirst(logs.count - 200) }
         UserDefaults.standard.set(logs, forKey: "gigi_crash_logs")
         UserDefaults.standard.synchronize()
+
+        // Fire-and-forget remote ingest (best effort, no blocking)
+        sendRemote(message: entry, location: file, recovery: false)
     }
-    
+
     static func flushCrashLogs() async {
         let logs = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
         guard !logs.isEmpty else { return }
-        
+
         print("--- PREVIOUS CRASH LOGS ---")
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fileURL = docs.appendingPathComponent("gigi_crash_logs.txt")
         try? logs.joined(separator: "\n").write(to: fileURL, atomically: true, encoding: .utf8)
-        
+
         for log in logs {
             print(log)
-            // Optional remote ingest (off by default — avoids connection spam when no debug server is running)
-            guard UserDefaults.standard.bool(forKey: "gigi_remote_debug_ingest") else { continue }
-            let logDict: [String: Any] = [
-                "sessionId": "9db571",
-                "id": UUID().uuidString,
-                "timestamp": Int(Date().timeIntervalSince1970 * 1000),
-                "location": "CRASH_RECOVERY",
-                "message": log,
-                "data": [:],
-                "runId": "run_crash",
-                "hypothesisId": "CRASH_TRACE"
-            ]
-            if let data = try? JSONSerialization.data(withJSONObject: logDict),
-               let reqUrl = URL(string: "http://192.168.1.45:7701/ingest/8f52b01a-d1d3-4394-8440-d47affbb3939") {
-                var req = URLRequest(url: reqUrl)
-                req.httpMethod = "POST"
-                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                req.setValue("9db571", forHTTPHeaderField: "X-Debug-Session-Id")
-                req.httpBody = data
-                _ = try? await URLSession.shared.data(for: req)
-            }
+            sendRemote(message: log, location: "CRASH_RECOVERY", recovery: true)
         }
         print("---------------------------")
         UserDefaults.standard.removeObject(forKey: "gigi_crash_logs")
         UserDefaults.standard.synchronize()
+    }
+
+    private static func sendRemote(message: String, location: String, recovery: Bool) {
+        let urlStr = remoteIngestURL
+        guard !urlStr.isEmpty, let url = URL(string: urlStr) else { return }
+        // Bearer comes from the harness Keychain entry written during pairing.
+        // For pre-pair crash logs we send anyway with a placeholder bearer;
+        // server can be configured to accept best-effort logs without strict
+        // bearer match (see ios-auth.js options).
+        let bearer = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? "unpaired"
+
+        let payload: [String: Any] = [
+            "sessionId": sessionId,
+            "timestamp": Int(Date().timeIntervalSince1970 * 1000),
+            "location": location,
+            "message": message,
+            "runId": recovery ? "run_crash_recovery" : "run_live",
+            "hypothesisId": recovery ? "CRASH_RECOVERY" : "LIVE_TRACE",
+            "data": ["bundle": Bundle.main.bundleIdentifier ?? "unknown"]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 1.5
+        req.httpBody = data
+
+        // Fire-and-forget
+        let task = URLSession.shared.dataTask(with: req) { _, _, _ in }
+        task.resume()
     }
 }

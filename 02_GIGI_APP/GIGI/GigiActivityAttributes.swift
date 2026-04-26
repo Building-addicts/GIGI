@@ -20,6 +20,8 @@ struct GigiActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         var phase: GigiPhase
         var message: String     // "Chiamo Marco...", "Elaborazione...", "Fatto."
+        var lastTranscript: String? = nil
+        var sessionId: String? = nil
     }
 }
 
@@ -32,6 +34,11 @@ enum GigiPhase: String, Codable, Hashable, CaseIterable {
     case thinking    // Pipeline NLU in elaborazione
     case executing   // Azione in esecuzione (chiamata, messaggio, ecc.)
     case done        // Completato — Live Activity si chiuderà dopo 3s
+    // Presence Mode phases
+    case sleeping    // Wake word attiva, nessuna attività
+    case speaking    // TTS in riproduzione
+    case muted       // Sessione silenziata dall'utente
+    case error       // Errore recuperabile
 
     var displayName: String {
         switch self {
@@ -39,6 +46,10 @@ enum GigiPhase: String, Codable, Hashable, CaseIterable {
         case .thinking:   return "Thinking..."
         case .executing:  return "Running..."
         case .done:       return "Done"
+        case .sleeping:   return "Ready"
+        case .speaking:   return "Speaking..."
+        case .muted:      return "Muted"
+        case .error:      return "Error"
         }
     }
 
@@ -48,6 +59,10 @@ enum GigiPhase: String, Codable, Hashable, CaseIterable {
         case .thinking:   return "brain"
         case .executing:  return "bolt.fill"
         case .done:       return "checkmark.circle.fill"
+        case .sleeping:   return "moon.circle.fill"
+        case .speaking:   return "speaker.wave.2.fill"
+        case .muted:      return "mic.slash.circle.fill"
+        case .error:      return "exclamationmark.circle.fill"
         }
     }
 }

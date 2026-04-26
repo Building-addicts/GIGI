@@ -6,7 +6,7 @@ import AVFoundation
 // between VAD capture, Realtime streaming, and TTS playback.
 //
 // Bluetooth strategy:
-//   playAndRecord  → .allowBluetoothHFP + .allowBluetooth (mic + HFP playback, used for all states)
+//   playAndRecord  -> .allowBluetoothHFP (mic + HFP playback, used for all states)
 //   TTS playback stays in playAndRecord — switching to .playback causes OSStatus -50 on device.
 //   prewarmBluetooth() is called at wake-word detection to start the 300-500ms HFP negotiation
 //   before the earcon fires, so the first blip is never cut off.
@@ -94,7 +94,7 @@ final class GigiAudioSequestrator: NSObject {
             try session.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP, .allowBluetooth]
+                options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP]
             )
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             GigiDebugLogger.log("prewarmBluetooth: session active")
@@ -134,7 +134,7 @@ final class GigiAudioSequestrator: NSObject {
                 try session.setCategory(
                     .playAndRecord,
                     mode: .voiceChat,
-                    options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP, .allowBluetooth]
+                    options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP]
                 )
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
             } catch {
@@ -162,10 +162,9 @@ final class GigiAudioSequestrator: NSObject {
                 .playAndRecord,
                 mode: .voiceChat,
                 // .allowBluetoothHFP — AirPods/BT mic + compressed playback (HFP, required for recording)
-                // .allowBluetooth    — legacy HFP compat for older Bluetooth devices
                 // .duckOthers        — lower Spotify/YouTube volume during interaction
                 // .defaultToSpeaker  — fallback if BT device disconnects mid-turn
-                options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP, .allowBluetooth]
+                options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP]
             )
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             GigiDebugLogger.log("activatePlayAndRecord SUCCESS")

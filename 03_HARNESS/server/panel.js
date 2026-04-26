@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -316,9 +317,36 @@ server.on('error', (err) => {
   }
 });
 
+function getLanIP() {
+  for (const iface of Object.values(os.networkInterfaces()).flat()) {
+    if (iface?.family === 'IPv4' && !iface.internal) return iface.address;
+  }
+  return '127.0.0.1';
+}
+
+async function printPairingQR() {
+  try {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const qrcode = require('qrcode-terminal');
+    const iosCfg = cfg.ios || {};
+    const secret = process.env.HARNESS_SHARED_SECRET || iosCfg.shared_secret || '';
+    const iosCfgPort = cfg.server?.port || 7779;
+    const ip = getLanIP();
+    const payload = `gigi://harness?url=http://${ip}:${iosCfgPort}&secret=${encodeURIComponent(secret)}`;
+    console.log('\n── GIGI Pairing QR (scan in Settings → Harness or Onboarding) ──');
+    qrcode.generate(payload, { small: true });
+    console.log(`URL: http://${ip}:${iosCfgPort}`);
+    console.log('────────────────────────────────────────────────────────────────\n');
+  } catch {
+    // qrcode-terminal not installed — run: npm install
+  }
+}
+
 server.listen(port, '127.0.0.1', () => {
   console.log(`Control Panel: http://localhost:${port}`);
   startBridge();
+  printPairingQR();
   if (cfg.browser?.enabled) {
     const insts = getInstances(cfg);
     insts.forEach((inst, i) => {

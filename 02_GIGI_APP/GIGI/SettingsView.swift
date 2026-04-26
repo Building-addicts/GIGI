@@ -5,7 +5,7 @@ import SwiftUI
 // All configuration in one place: API keys, wake word, privacy, debug.
 
 enum SettingsField: Hashable {
-    case geminiKey, harnessURL, harnessSecret
+    case groqKey, geminiKey, harnessURL, harnessSecret
 }
 
 private enum SettingsSheet: String, Identifiable {
@@ -18,7 +18,9 @@ private enum SettingsSheet: String, Identifiable {
 }
 
 struct SettingsView: View {
-    @State private var geminiKey = ""   // bound to Groq key slot
+    @State private var groqKey = ""
+    @State private var geminiKey = ""
+    @State private var showQRScanner = false
     @State private var picoKey = ""
     @State private var showKey = false
     @State private var connectionStatus: String = "—"
@@ -83,29 +85,29 @@ struct SettingsView: View {
             // Inline key editor
             HStack {
                 if showKey {
-                    TextField("gsk_...", text: $geminiKey)
+                    TextField("gsk_...", text: $groqKey)
                         .font(.system(.body, design: .monospaced))
                         .autocorrectionDisabled()
                         .submitLabel(.done)
-                        .focused($focusedField, equals: .geminiKey)
-                        .onSubmit { saveGeminiKey() }
+                        .focused($focusedField, equals: .groqKey)
+                        .onSubmit { saveGroqKey() }
                 } else {
-                    SecureField("Groq API Key", text: $geminiKey)
+                    SecureField("Groq API Key", text: $groqKey)
                         .font(.system(.body, design: .monospaced))
                         .submitLabel(.done)
-                        .focused($focusedField, equals: .geminiKey)
-                        .onSubmit { saveGeminiKey() }
+                        .focused($focusedField, equals: .groqKey)
+                        .onSubmit { saveGroqKey() }
                 }
                 Button(action: { showKey.toggle() }) {
                     Image(systemName: showKey ? "eye.slash" : "eye")
                         .foregroundColor(.secondary)
                 }
-                Button(action: saveGeminiKey) {
+                Button(action: saveGroqKey) {
                     Text("Save")
                         .foregroundColor(.purple)
                         .fontWeight(.semibold)
                 }
-                .disabled(geminiKey.isEmpty)
+                .disabled(groqKey.isEmpty)
             }
 
             HStack {
@@ -594,7 +596,7 @@ struct SettingsView: View {
         memoryCount = all.count
         accessoryList = await GigiHomeKit.shared.accessoryNames()
         let existing = GigiConfig.groqAPIKey
-        if !existing.isEmpty { geminiKey = existing }
+        if !existing.isEmpty { groqKey = existing }
         harnessURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) ?? ""
         harnessSecret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? ""
         let pairingState = GigiHarnessClient.shared.pairingState
@@ -625,6 +627,7 @@ struct SettingsView: View {
         case .success(let h): harnessStatus = "✓ OK · pid \(h.pid) · uptime \(h.uptime_s)s"
         case .failure(let e): harnessStatus = "✗ \(e)"
         }
+        // GigiApnsSync.onConfigChanged() already called above; no per-call sync API exists.
         isTestingHarness = false
     }
 
@@ -646,11 +649,18 @@ struct SettingsView: View {
         }
     }
 
-    private func saveGeminiKey() {
-        let trimmed = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func saveGroqKey() {
+        let trimmed = groqKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         GigiConfig.setGroqAPIKey(trimmed)
         connectionStatus = "Key saved"
+    }
+
+    private func saveGeminiKey() {
+        let trimmed = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        GigiConfig.setGeminiAPIKey(trimmed)
+        connectionStatus = "Gemini key saved"
     }
 
     private func testConnection() async {

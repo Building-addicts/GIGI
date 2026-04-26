@@ -46,6 +46,36 @@ class GigiActionBridge {
 
     private init() {}
 
+    // MARK: - EventKit authorization
+
+    private func ensureCalendarAccess() async -> Bool {
+        var status = EKEventStore.authorizationStatus(for: .event)
+        if status == .notDetermined {
+            let granted = await withCheckedContinuation { continuation in
+                eventStore.requestFullAccessToEvents { granted, _ in
+                    continuation.resume(returning: granted)
+                }
+            }
+            guard granted else { return false }
+            status = EKEventStore.authorizationStatus(for: .event)
+        }
+        return status == .fullAccess
+    }
+
+    private func ensureReminderAccess() async -> Bool {
+        var status = EKEventStore.authorizationStatus(for: .reminder)
+        if status == .notDetermined {
+            let granted = await withCheckedContinuation { continuation in
+                eventStore.requestFullAccessToReminders { granted, _ in
+                    continuation.resume(returning: granted)
+                }
+            }
+            guard granted else { return false }
+            status = EKEventStore.authorizationStatus(for: .reminder)
+        }
+        return status == .fullAccess
+    }
+
     // MARK: - Execute intent
 
     func execute(_ intent: GigiIntent) async -> String {
@@ -579,14 +609,7 @@ class GigiActionBridge {
     // MARK: - Calendar (read)
 
     private func readTodayEvents() async -> String {
-        var status = EKEventStore.authorizationStatus(for: .event)
-        if status == .notDetermined {
-            guard (try? await eventStore.requestAccess(to: .event)) == true else {
-                return "Enable Calendar access in Settings."
-            }
-            status = EKEventStore.authorizationStatus(for: .event)
-        }
-        guard status == .authorized || status == .fullAccess else {
+        guard await ensureCalendarAccess() else {
             return "I need Calendar access to check your schedule."
         }
 
@@ -612,14 +635,7 @@ class GigiActionBridge {
     // MARK: - Calendar intelligence (T-20)
 
     private func readWeekEvents() async -> String {
-        var status = EKEventStore.authorizationStatus(for: .event)
-        if status == .notDetermined {
-            guard (try? await eventStore.requestAccess(to: .event)) == true else {
-                return "Enable Calendar access in Settings."
-            }
-            status = EKEventStore.authorizationStatus(for: .event)
-        }
-        guard status == .authorized || status == .fullAccess else {
+        guard await ensureCalendarAccess() else {
             return "I need Calendar access to check your schedule."
         }
         let cal   = Calendar.current
@@ -640,14 +656,7 @@ class GigiActionBridge {
     }
 
     private func findFreeSlot(durationMinutes: Int, preferredTime: String) async -> String {
-        var status = EKEventStore.authorizationStatus(for: .event)
-        if status == .notDetermined {
-            guard (try? await eventStore.requestAccess(to: .event)) == true else {
-                return "Enable Calendar access in Settings."
-            }
-            status = EKEventStore.authorizationStatus(for: .event)
-        }
-        guard status == .authorized || status == .fullAccess else {
+        guard await ensureCalendarAccess() else {
             return "I need Calendar access to find free time."
         }
 
@@ -811,13 +820,7 @@ class GigiActionBridge {
     // MARK: - Reminder
 
     func createReminder(text: String) async -> String {
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        if status == .notDetermined {
-            guard (try? await eventStore.requestAccess(to: .reminder)) == true else {
-                return "Please grant Reminders access in Settings."
-            }
-        }
-        guard status == .authorized || status == .fullAccess else {
+        guard await ensureReminderAccess() else {
             return "Enable Reminders access in Settings."
         }
         let reminder = EKReminder(eventStore: eventStore)
@@ -834,13 +837,7 @@ class GigiActionBridge {
     // MARK: - Event (create)
 
     func createEvent(title: String, date: String, time: String) async -> String {
-        let status = EKEventStore.authorizationStatus(for: .event)
-        if status == .notDetermined {
-            guard (try? await eventStore.requestAccess(to: .event)) == true else {
-                return "Calendar access required."
-            }
-        }
-        guard status == .authorized || status == .fullAccess else {
+        guard await ensureCalendarAccess() else {
             return "Enable Calendar access in Settings."
         }
 

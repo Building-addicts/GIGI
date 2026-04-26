@@ -141,6 +141,8 @@ private struct LockScreenPhaseIndicator: View {
                 PhasePillDots(phase: phase)
             case .done:
                 PhaseIconView(phase: .done, size: 20)
+            case .sleeping, .speaking, .muted, .error:
+                PhaseIconView(phase: phase, size: 20)
             }
         }
     }
@@ -330,10 +332,14 @@ private struct PhaseProgressRibbon: View {
 
     private func ribbonWidth(total: CGFloat) -> CGFloat {
         switch phase {
-        case .listening: return total * 0.28
-        case .thinking: return total * 0.52
-        case .executing: return total * 0.78
-        case .done: return total
+        case .listening:  return total * 0.28
+        case .thinking:   return total * 0.52
+        case .executing:  return total * 0.78
+        case .done:       return total
+        case .sleeping:   return total * 0.10
+        case .speaking:   return total * 0.60
+        case .muted:      return 0
+        case .error:      return 0
         }
     }
 }
@@ -370,7 +376,10 @@ private struct PhaseIconSymbolEffectModifier: ViewModifier {
         case .executing:
             content
                 .symbolEffect(.variableColor.iterative, options: .repeating.speed(0.72))
-        case .done:
+        case .speaking:
+            content
+                .symbolEffect(.pulse, options: .repeating.speed(1.2))
+        case .done, .sleeping, .muted, .error:
             content
         }
     }
@@ -382,20 +391,28 @@ private extension GigiPhase {
     /// SF Symbol per la fase (Live Activity).
     var phaseSystemImage: String {
         switch self {
-        case .listening: return "mic.fill"
-        case .thinking: return "brain.head.profile"
-        case .executing: return "gearshape.fill"
-        case .done: return "checkmark.circle.fill"
+        case .listening:  return "mic.fill"
+        case .thinking:   return "brain.head.profile"
+        case .executing:  return "gearshape.fill"
+        case .done:       return "checkmark.circle.fill"
+        case .sleeping:   return "moon.circle.fill"
+        case .speaking:   return "speaker.wave.2.fill"
+        case .muted:      return "mic.slash.circle.fill"
+        case .error:      return "exclamationmark.circle.fill"
         }
     }
 
     /// Colore piatto per capsule / punti (ribbon): coerente con la fase.
     var phaseRibbonTint: Color {
         switch self {
-        case .listening: return GigiBrand.purple
-        case .thinking: return GigiBrand.purple
-        case .executing: return Color.orange
-        case .done: return GigiBrand.successGreen
+        case .listening:  return GigiBrand.purple
+        case .thinking:   return GigiBrand.purple
+        case .executing:  return Color.orange
+        case .done:       return GigiBrand.successGreen
+        case .sleeping:   return Color.white.opacity(0.3)
+        case .speaking:   return GigiBrand.purple
+        case .muted:      return Color.gray
+        case .error:      return Color.red
         }
     }
 
@@ -430,6 +447,14 @@ private extension GigiPhase {
             )
         case .done:
             AnyShapeStyle(GigiBrand.successGreen)
+        case .sleeping:
+            AnyShapeStyle(Color.white.opacity(0.35))
+        case .speaking:
+            AnyShapeStyle(GigiBrand.purple)
+        case .muted:
+            AnyShapeStyle(Color.gray)
+        case .error:
+            AnyShapeStyle(Color.red.opacity(0.85))
         }
     }
 }

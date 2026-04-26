@@ -9,9 +9,13 @@ struct GIGIApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        GigiDebugLogger.log("GIGIApp init started")
+        GigiDebugLogger.log("GIGIApp init STARTED — bundle=\(Bundle.main.bundleIdentifier ?? "nil")")
+        // Synchronous flush attempt for prior crash logs (so they reach the wire
+        // before THIS run potentially crashes too).
+        let prior = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
+        GigiDebugLogger.log("GIGIApp init: prior crash logs count=\(prior.count)")
         Task { await GigiDebugLogger.flushCrashLogs() }
-        GigiDebugLogger.log("GIGIApp init finished")
+        GigiDebugLogger.log("GIGIApp init FINISHED")
     }
 
     var body: some Scene {
@@ -20,6 +24,7 @@ struct GIGIApp: App {
             MainTabView()
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
+                        Task { @MainActor in GigiApnsSync.onAppDidBecomeActive() }
                         // Silently re-verify WhatsApp session after app resumes from background
                         Task {
                             guard UserDefaults.standard.bool(forKey: "gigi.whatsapp.linked"),

@@ -29,9 +29,10 @@ final class GigiAgentEngine {
 
     // MARK: - Config
 
-    private let maxIterations  = 5
-    private let globalTimeout: TimeInterval = 15.0
-    // Gemini 2.0 Flash pricing (USD): ~$0.075/1M input tokens, ~$0.30/1M output tokens.
+    private let maxIterations  = 8
+    private let fastTimeout: TimeInterval  = 20.0   // native iOS tools
+    private let slowTimeout: TimeInterval  = 90.0   // web / harness tools
+    // Groq llama-3.3-70b pricing (USD): ~$0.059/1M input tokens, ~$0.079/1M output tokens.
     // We use a blended rate for the simplified estimate.
     private let costPerToken = 0.00000015
 
@@ -62,13 +63,13 @@ final class GigiAgentEngine {
     /// Entry point: processes one user utterance end-to-end.
     func process(text: String) async -> AgentResult {
         let mem = GigiConversationMemory.shared
-
-        // Record user turn in persistent multi-turn history
         mem.addUserTurn(text)
 
-        // Phase 2 — Force Claude toggle: bypass the Groq agent loop entirely
-        // when Brain Mode → Force Claude is on. The harness streams Claude's
-        // thoughts as `.thinking` bubbles directly into memory.
+        // === Gate 1: Force Claude (Phase 2 — D4.a = YES, takes precedence over planner) ===
+        // When Brain Mode → Force Claude is on, route the entire request to Claude
+        // via the harness streaming bridge. The harness streams Claude's thoughts
+        // as `.thinking`/`.toolEvent` bubbles directly into conversation memory.
+        // If autoFallback is ON and Force Claude fails, fall through to Gate 2 (planner).
         if GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude) {
             let autoFallback = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
             if GigiHarnessClient.shared.isConfigured {
@@ -84,7 +85,7 @@ final class GigiAgentEngine {
                             isError: true
                         )
                     }
-                    // else: silent fallback to Groq agent loop below
+                    // else: silent fallback to Gate 2 (planner) below
                 } else {
                     return AgentResult(
                         speech: result.value,
@@ -105,20 +106,26 @@ final class GigiAgentEngine {
                     isError: true
                 )
             }
-            // else: fall through to Groq agent loop
+            // else: fall through to Gate 2 (planner) — D4.b = A
         }
 
+        // === Gate 2: Multi-agent planner (Leo lane, identical to harness-pre-armando-integration) ===
         // Build initial contents from pruned history (user turn already appended above)
         let history = mem.contents(pruningIfNeeded: true)
-
-        // Inject relevant long-term memories into system instruction.
-        // Use agent-tool prompt (not the legacy JSON orchestrator prompt) so Llama
-        // on Groq produces either a real tool call or plain text — never a fake
-        // `respond` tool call that would be rejected with 400.
         let memoryBlock = await buildMemoryBlock(for: text)
         var systemInstruction = GigiFoundationAgent.agentToolPrompt
         if !memoryBlock.isEmpty {
             systemInstruction += "\n\nUser memory (relevant):\n\(memoryBlock)"
+        }
+
+        // Planner gate: ~200ms fast call to decide if decomposition is needed.
+        // Falls back to simple react loop on any planner failure — zero regression risk.
+        let plan = await GigiPlannerEngine.shared.decompose(userText: text)
+        // Single non-iOS task: route to harness with domain (gives real browser tools).
+        // Multi-task: orchestrated execution respecting dependsOn DAG.
+        let hasNonIos = plan.tasks.contains { $0.domain != .ios && $0.domain != .unknown }
+        if !plan.isSimple && (plan.tasks.count >= 2 || (plan.tasks.count == 1 && hasNonIos)) {
+            return await orchestratedExecution(plan: plan, userText: text)
         }
 
         return await agentLoop(
@@ -126,6 +133,107 @@ final class GigiAgentEngine {
             userText:          text,
             systemInstruction: systemInstruction
         )
+    }
+
+    // MARK: - Orchestrated multi-task execution
+
+    private func orchestratedExecution(plan: TaskPlan, userText: String) async -> AgentResult {
+        var results: [String: String] = [:]
+        var executedDomains: [String] = []
+        var remaining = plan.tasks
+        let deadline = Date().addingTimeInterval(120.0)
+
+        // Topological execution: tasks whose dependsOn are all resolved run concurrently.
+        while !remaining.isEmpty, Date() < deadline {
+            let ready = remaining.filter { task in
+                task.dependsOn.allSatisfy { results[$0] != nil }
+            }
+            guard !ready.isEmpty else { break }
+
+            await withTaskGroup(of: (String, String).self) { group in
+                for task in ready {
+                    group.addTask { [weak self] in
+                        guard let self else { return (task.id, "engine deallocated") }
+                        let result = await self.executeSubTask(task, priorResults: results)
+                        return (task.id, result)
+                    }
+                }
+                for await (taskId, result) in group {
+                    results[taskId] = result
+                }
+            }
+
+            executedDomains.append(contentsOf: ready.map(\.domain.rawValue))
+            remaining.removeAll { ready.map(\.id).contains($0.id) }
+        }
+
+        // Synthesize: final fast Groq call to combine all results into spoken response
+        let speech = await synthesizeResults(userText: userText, results: results)
+        GigiConversationMemory.shared.addModelSpeech(speech)
+
+        return AgentResult(
+            speech:          speech,
+            executedTools:   executedDomains,
+            isFollowUp:      false,
+            costEstimate:    0,
+            requiresConfirm: nil,
+            isError:         false
+        )
+    }
+
+    private func executeSubTask(_ task: SubTask, priorResults: [String: String]) async -> String {
+        // Enrich with outputs of dependency tasks
+        var desc = task.description
+        for depId in task.dependsOn {
+            if let depResult = priorResults[depId] {
+                desc += "\n\nContext from step \(depId): \(depResult)"
+            }
+        }
+
+        switch task.domain {
+        case .ios:
+            // Route through single react-loop iteration (no planner recursion)
+            let r = await agentLoop(
+                initialContents:   [GigiContent.user(desc)],
+                userText:          desc,
+                systemInstruction: GigiFoundationAgent.agentToolPrompt
+            )
+            return r.speech
+
+        case .browser, .research, .calendar, .messaging:
+            guard GigiHarnessClient.shared.isConfigured else {
+                return "Harness not configured — skipping \(task.domain.rawValue) task."
+            }
+            switch await GigiHarnessClient.shared.agentRun(
+                text:   desc,
+                domain: task.domain.rawValue,
+                schema: task.schema,
+                stream: false
+            ) {
+            case .success(let r): return r.result
+            case .failure(let e): return "Error (\(task.domain.rawValue)): \(e.description)"
+            }
+
+        case .unknown:
+            return "Unknown domain for task \(task.id)"
+        }
+    }
+
+    private func synthesizeResults(userText: String, results: [String: String]) async -> String {
+        guard !results.isEmpty else {
+            return "I ran into trouble completing that — some steps didn't finish."
+        }
+        let summary = results.map { "[\($0.key)] \($0.value)" }.joined(separator: "\n")
+        let prompt = "User asked: \"\(userText)\"\n\nTask results:\n\(summary)\n\nSummarize what was accomplished in 1-2 spoken sentences. Be direct and specific. No filler."
+        guard let r = try? await GigiCloudService.shared.callWithFunctions(
+            systemInstruction: "You are GIGI. Summarize completed tasks in 1-2 spoken sentences. No markdown, no filler.",
+            contents: [GigiContent.user(prompt)],
+            tools: [],
+            model: "llama-3.1-8b-instant"
+        ), let text = r.text, !text.isEmpty else {
+            return results.values.first ?? "Done."
+        }
+        return text
     }
 
     // MARK: - Agent Loop
@@ -138,7 +246,6 @@ final class GigiAgentEngine {
         var contents    = initialContents
         var executedTools: [String] = []
         var totalCost: Double = 0
-        let deadline    = Date().addingTimeInterval(globalTimeout)
 
         // Tool selection: base on current utterance + every prior user turn in history
         // so follow-ups like "procedi" / "margarita" don't strip out tools the model
@@ -155,6 +262,15 @@ final class GigiAgentEngine {
 
         let relevantTools = Array(relevantByName.values)
         var toolDeclarations = registry.declarations(for: relevantTools)
+
+        // Slow tools need extra time; native-only requests use a tight timeout
+        // so a hanging Groq call doesn't block the user for 90s on "what time is it".
+        let slowToolNames: Set<String> = [
+            "web_order_food", "web_book_restaurant", "web_vision_task",
+            "web_whatsapp", "web_search_and_read", "ask_harness", "computer_use"
+        ]
+        let hasSlow = relevantTools.contains { slowToolNames.contains($0.name) }
+        let deadline = Date().addingTimeInterval(hasSlow ? slowTimeout : fastTimeout)
 
         for iteration in 0..<maxIterations {
 
@@ -185,15 +301,15 @@ final class GigiAgentEngine {
                 switch error {
                 case GigiCloudError.httpError(let status, let body):
                     let snippet = body.prefix(160)
-                    speech = "Errore Groq \(status). \(snippet)"
+                    speech = "Groq error \(status). \(snippet)"
                 case GigiCloudError.missingAPIKey:
-                    speech = "Manca la chiave Groq nelle impostazioni."
+                    speech = "Groq API key missing — add it in Settings."
                 case GigiCloudError.timeout:
-                    speech = "Timeout Groq — riprova."
+                    speech = "Groq timed out — try again."
                 case GigiCloudError.emptyResponse:
-                    speech = "Groq risposta vuota."
+                    speech = "Groq returned an empty response."
                 default:
-                    speech = "Errore di rete: \(error.localizedDescription)"
+                    speech = "Network error: \(error.localizedDescription)"
                 }
                 return AgentResult(
                     speech:          speech,
@@ -254,7 +370,7 @@ final class GigiAgentEngine {
                     .map { (call, r) in (name: call.name, result: r.error.map { "ERROR: \($0)" } ?? r.value) }
                 mem.addToolResults(toolResultPairs)
 
-                // Build tool results content for next Gemini turn
+                // Build tool results content for next LLM turn
                 let toolResultTuples: [(name: String, value: String, error: String?)] =
                     zip(response.functionCalls, results).map { (call, r) in
                         (name: call.name, value: r.value, error: r.error)
@@ -274,7 +390,7 @@ final class GigiAgentEngine {
                 )
 
             } else {
-                // Gemini returned neither text nor function calls — break and use safety lock
+                // LLM returned neither text nor function calls — break and use safety lock
                 break
             }
         }
@@ -323,7 +439,7 @@ final class GigiAgentEngine {
         guard let request = pendingConfirmRequest,
               let tool    = pendingConfirmTool else {
             return AgentResult(
-                speech:          "Nessuna operazione in attesa di conferma.",
+                speech:          "Nothing pending confirmation.",
                 executedTools:   [],
                 isFollowUp:      false,
                 costEstimate:    0,
@@ -339,7 +455,7 @@ final class GigiAgentEngine {
         pendingConfirmArgs    = [:]
 
         let result = await tool.execute(args: argsSnapshot)
-        let speech = result.error.map { "Non sono riuscito: \($0)" } ?? result.value
+        let speech = result.error.map { "Couldn't complete that: \($0)" } ?? result.value
 
         // Save to memory before returning (addModelSpeech internally calls saveSession)
         GigiConversationMemory.shared.addModelSpeech(speech)
@@ -372,7 +488,7 @@ final class GigiAgentEngine {
 
     private func safetyLock(tools: [String], cost: Double) -> AgentResult {
         AgentResult(
-            speech:          "Sto avendo difficoltà con questo compito — vuoi che provi in un altro modo?",
+            speech:          "I ran into trouble with that — want me to try a different approach?",
             executedTools:   tools,
             isFollowUp:      false,
             costEstimate:    cost,
@@ -411,6 +527,16 @@ final class GigiAgentEngine {
                 systemInstruction: systemInstruction,
                 contents:          contents,
                 tools:             toolDeclarations
+            )
+        } catch GigiCloudError.httpError(429, _) {
+            // Token rate limit on llama-3.3-70b — wait 3s then retry with fast model (30k TPM)
+            GigiDebugLogger.log("Groq 429 rate limit — waiting 3s, falling back to llama-3.1-8b-instant")
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            return try await GigiCloudService.shared.callWithFunctions(
+                systemInstruction: systemInstruction,
+                contents:          contents,
+                tools:             toolDeclarations,
+                model:             "llama-3.1-8b-instant"
             )
         }
     }

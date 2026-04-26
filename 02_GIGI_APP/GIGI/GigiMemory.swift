@@ -31,11 +31,15 @@ final class GigiMemory {
 
     private init() {
         GigiDebugLogger.log("GigiMemory init started")
-        if !Self.cloudContainerID.isEmpty {
-            container = CKContainer(identifier: Self.cloudContainerID)
-        } else {
-            container = nil
-        }
+        // CKContainer(identifier:) raises an uncatchable Objective-C exception
+        // ("You must call …with a container identifier registered in your
+        // application's entitlements") when the iCloud entitlement is missing
+        // — which happens on the Simulator without an iCloud account, or
+        // when Sideloadly with a free Apple ID strips the iCloud capability.
+        // Defer container creation to bootstrap() and guard it with
+        // FileManager.ubiquityIdentityToken (non-crashing API that returns
+        // nil exactly when CKContainer would crash).
+        container = nil
         Task { await bootstrap() }
         GigiDebugLogger.log("GigiMemory init finished")
     }
@@ -54,10 +58,34 @@ final class GigiMemory {
     // MARK: - Bootstrap
 
     private func bootstrap() async {
-        guard let container = container else {
-            print("GIGI Memory: CloudKit disabled (no container ID)")
+        // 1. We need a non-empty container identifier.
+        guard !Self.cloudContainerID.isEmpty else {
+            print("GIGI Memory: no bundle ID — local-only mode")
             return
         }
+        // 2. Detect Sideloadly bundle-ID rewrite (it appends .<TEAMID>).
+        // Original: com.killsiri.GIGI (3 parts) → resigned: com.killsiri.GIGI.X3KM3AL65P (4 parts).
+        // The iCloud entitlement registered in the app is for the ORIGINAL
+        // container "iCloud.com.killsiri.GIGI", but cloudContainerID derived
+        // from Bundle.main becomes "iCloud.com.killsiri.GIGI.X3KM3AL65P" — mismatch
+        // → CKContainer(identifier:) raises an uncatchable NSException.
+        // Skip CloudKit entirely on resigned builds (free Apple ID sideload).
+        let bid = Bundle.main.bundleIdentifier ?? ""
+        let bundleParts = bid.split(separator: ".").count
+        if bundleParts > 3 {
+            print("GIGI Memory: bundle ID resigned (\(bid), \(bundleParts) parts) — local-only mode")
+            return
+        }
+        // 3. ubiquityIdentityToken is the safe gate: returns non-nil only when
+        // iCloud is available AND the app has the iCloud entitlement.
+        // Returns nil (without raising) on Simulator with no iCloud account.
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            print("GIGI Memory: iCloud unavailable (no ubiquity token) — local-only mode")
+            return
+        }
+        // 4. Now safe to construct the container.
+        let container = CKContainer(identifier: Self.cloudContainerID)
+        self.container = container
         do {
             let status = try await container.accountStatus()
             iCloudAvailable = (status == .available)
@@ -101,7 +129,12 @@ final class GigiMemory {
             try await db.save(record)
             print("GIGI Memory: saved '\(normalizedKey)' [\(cat)] = '\(value.prefix(40))'")
         } catch {
-            print("GIGI Memory: save error — \(error.localizedDescription)")
+            if let ck = error as? CKError, ck.code == .quotaExceeded {
+                iCloudAvailable = false
+                print("GIGI Memory: iCloud quota exceeded — falling back to local cache only. Free up iCloud storage to re-enable.")
+            } else {
+                print("GIGI Memory: save error — \(error.localizedDescription)")
+            }
         }
         // Keep vector store in sync (async, non-blocking)
         GigiVectorStore.shared.upsert(key: normalizedKey, value: value)
@@ -277,7 +310,7 @@ final class GigiMemory {
         guard iCloudAvailable else { return }
         let recordID = CKRecord.ID(recordName: normalizedKey)
         guard let db = db else { return }
-        try? await db.deleteRecord(withID: recordID)
+        _ = try? await db.deleteRecord(withID: recordID)
         print("GIGI Memory: forgot '\(normalizedKey)'")
     }
 
@@ -367,6 +400,6 @@ final class GigiMemory {
             useCountByKey[k] = next
         }
         guard let db = db else { return }
-        try? await db.save(record)
+        _ = try? await db.save(record)
     }
 }

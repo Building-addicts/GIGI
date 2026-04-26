@@ -44,6 +44,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		4E14AE062F9C142D005800EB /* GIGIWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GIGIWidgetExtension.entitlements; sourceTree = "<group>"; };
 		4E4F378F2F898626005EC9B5 /* GIGI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GIGI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4EA05B702F8EA72A008954D8 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		4ECB09FF2F8D179F009066DD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -60,6 +61,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4E14AE082F9C16DB005800EB /* Exceptions for "GIGIWidget" folder in "GIGI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				GigiLiveActivityWidget.swift,
+			);
+			target = 4E4F378E2F898626005EC9B5 /* GIGI */;
+		};
 		4ECB09F92F8BE38A009066DD /* Exceptions for "GIGI" folder in "GIGI" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -90,6 +98,7 @@
 		012BB105FAE1C98CBC505CF5 /* GIGIWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				4E14AE082F9C16DB005800EB /* Exceptions for "GIGIWidget" folder in "GIGI" target */,
 				E986A306AEC423D7F2A1553D /* Exceptions for "GIGIWidget" folder in "GIGIWidgetExtension" target */,
 			);
 			path = GIGIWidget;
@@ -136,6 +145,7 @@
 		4E4F37862F898626005EC9B5 = {
 			isa = PBXGroup;
 			children = (
+				4E14AE062F9C142D005800EB /* GIGIWidgetExtension.entitlements */,
 				B5E4D3C22FAA4001005EC9B5 /* GIGIApp.xcconfig */,
 				4E4F37912F898626005EC9B5 /* GIGI */,
 				012BB105FAE1C98CBC505CF5 /* GIGIWidget */,
@@ -513,6 +523,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = GIGIWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R5N92QSPQ6;
@@ -544,6 +555,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = GIGIWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R5N92QSPQ6;

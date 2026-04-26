@@ -16,7 +16,7 @@ class GigiAuthManager: ObservableObject {
 
     private let clientID = "828342254195-dnrgigjogy3veckt6ef177baie3vdrek.apps.googleusercontent.com"
 
-    // Scopes necessari per Gemini API
+    // Google OAuth scopes (realtime voice provider)
     private let scopes = [
         "https://www.googleapis.com/auth/generative-language.retriever",
         "email",

@@ -3,9 +3,9 @@ import Foundation
 // MARK: - JSONAny — arbitrary JSON value
 
 struct JSONAny: Codable {
-    let value: Any
+    nonisolated(unsafe) let value: Any
 
-    init(_ value: Any) { self.value = value }
+    nonisolated init(_ value: Any) { self.value = value }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
@@ -128,7 +128,8 @@ final class GigiCloudService {
         systemInstruction: String = GigiFoundationAgent.systemPrompt,
         contents: [GigiContent],
         tools: [FunctionDeclaration],
-        cacheId: String? = nil  // ignored — Groq has no context cache
+        cacheId: String? = nil,  // ignored — Groq has no context cache
+        model: String? = nil     // nil = default agentModel; pass fastModel for 429 fallback
     ) async throws -> GigiLLMResponse {
         let apiKey = GigiConfig.groqAPIKey
         guard !apiKey.isEmpty else { throw GigiCloudError.missingAPIKey }
@@ -143,7 +144,7 @@ final class GigiCloudService {
         req.timeoutInterval = 15
 
         var body: [String: Any] = [
-            "model":       agentModel,
+            "model":       model ?? agentModel,
             "messages":    messages,
             "max_tokens":  1024,
             "temperature": 0.1
@@ -174,7 +175,7 @@ final class GigiCloudService {
         }
     }
 
-    // MARK: - NLU / Brain pipeline (replaces processWithGemini)
+    // MARK: - NLU / Brain pipeline (Groq)
 
     func processWithGroq(_ text: String, history: String) async -> GigiAgentResponse? {
         let apiKey = GigiConfig.groqAPIKey
@@ -423,7 +424,7 @@ final class GigiCloudService {
 
     // MARK: - Private: parse Groq response
 
-    private func parseGroqResponse(from data: Data) throws -> GigiLLMResponse {
+    private nonisolated func parseGroqResponse(from data: Data) throws -> GigiLLMResponse {
         guard let json    = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first   = choices.first,

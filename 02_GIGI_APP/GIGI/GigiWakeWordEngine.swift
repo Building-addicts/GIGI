@@ -140,10 +140,10 @@ final class GigiWakeWordEngine {
     private func shouldSuppressWake() -> Bool {
         let o = GigiSmartOrchestrator.shared
         if o.isThinking || o.isListening || hasActivePhoneCall() { return true }
+        // Presence Mode: user explicitly started a session — bypass battery/screen suppressions
+        if o.isPresenceActive { return false }
         // Low Power Mode: don't run continuous neural inference
         if ProcessInfo.processInfo.isLowPowerModeEnabled { return true }
-        // Screen has been dark long enough that the dark timer already fired
-        // (stopMonitoringHard was called) — screenDarkTimer nil + screen off = paused
         return false
     }
 
@@ -303,6 +303,15 @@ final class GigiWakeWordEngine {
                 self.scheduleRestart()
             }
         }
+    }
+
+    private var currentScreenBrightness: CGFloat {
+        if let screen = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.screen })
+            .first {
+            return screen.brightness
+        }
+        return 1
     }
 
     func stopMonitoringHard() {
