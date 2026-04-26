@@ -7,7 +7,7 @@ import UIKit
 // MARK: - GigiWakeWordEngine
 //
 // Always-on wake word using only native Apple frameworks — no external SDK required.
-// Uses SFSpeechRecognizer + AVAudioEngine to stream mic audio.
+// Uses SFSpeechRecognizer (en-US, on-device) + AVAudioEngine to stream mic audio.
 // Triggers on: "hey gigi", "ok gigi", "hi gigi", or plain "gigi".
 //
 // Battery strategy:
@@ -16,6 +16,7 @@ import UIKit
 //   • addsPunctuation = false → skips the punctuation model entirely
 //   • bufferSize 512 → halved from 1024, sufficient for keyword detection
 //   • restart interval: 50s (Apple task limit is ~60s)
+//     Restart is gap-free: audio engine tap stays alive, only the SFSpeech request is swapped.
 //   • App inactive > 2 min → full stop; resumes when app becomes active again
 //     (UIScreen.main.brightness is unreliable — it keeps the user's set value
 //      even after auto-lock, so brightness-based detection never fires)
@@ -23,6 +24,8 @@ import UIKit
 //   • Pauses automatically during calls (CallKit) and while GIGI is processing.
 //   • requiresOnDeviceRecognition = true → avoids pinning the cellular/Wi-Fi radio
 //     in high-power state 24/7 from continuous audio streaming to Apple servers.
+//   • Locale fixed to en-US — market is US/English; Locale.current causes acoustic
+//     model mismatch when device is set to another language.
 
 @MainActor
 final class GigiWakeWordEngine {
@@ -44,11 +47,14 @@ final class GigiWakeWordEngine {
     private var callObserver:         CXCallObserver?
     private var callObserverDelegate: WakeWordCallObserverDelegate?
 
-    // Wake keywords (lowercased). Longer phrases first to avoid false positives on "gigi".
+    // Wake keywords (lowercased). Longer phrases first — reduces false positives on bare "gigi".
+    // Italian variants included: en-US acoustic model maps "ehi"→"hey", but contextualStrings
+    // biases the decoder so the Italian forms are also recognized directly.
     private let keywords = ["hey gigi", "ok gigi", "hi gigi", "ehi gigi", "ciao gigi", "dai gigi", "gigi"]
 
     private init() {
-        recognizer = SFSpeechRecognizer(locale: Locale.current)
+        // en-US fixed: Locale.current causes acoustic model mismatch when device language differs
+        recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         recognizer?.defaultTaskHint = .unspecified  // lighter model than .dictation
 
         let obs = CXCallObserver()
@@ -126,8 +132,8 @@ final class GigiWakeWordEngine {
     // MARK: - Internal state management
 
     private func applyPreferredStateAsync() async {
-        // Default to enabled when key was never set (fresh install)
-        let isEnabled = UserDefaults.standard.object(forKey: Self.userDefaultsEnabledKey) as? Bool ?? true
+        // Default to disabled on fresh install — user opts in via onboarding or Settings
+        let isEnabled = UserDefaults.standard.object(forKey: Self.userDefaultsEnabledKey) as? Bool ?? false
         guard isEnabled else {
             stopMonitoringHard(); return
         }
@@ -189,7 +195,7 @@ final class GigiWakeWordEngine {
                 // on wake → VAD handoff. .measurement disables echo cancellation / AGC /
                 // speech DSP and keeps the ADC in high-fidelity mode — more power draw.
                 mode: .voiceChat,
-                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
+                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP]
             )
             try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
             return true
@@ -291,6 +297,9 @@ final class GigiWakeWordEngine {
     // UIScreen.main.brightness (unreliable: keeps the user's set value even when
     // locked). App inactivity already halts wake word via handleAppInactive, so
     // this interval only applies while the app is active.
+    //
+    // Gap-free restart: the audio engine tap stays alive; only the SFSpeech request
+    // is swapped. This eliminates the ~300-500ms blind window of the old stop+start approach.
     private func scheduleRestart() {
         restartTimer?.cancel()
         let interval: UInt64 = 50_000_000_000
@@ -298,10 +307,29 @@ final class GigiWakeWordEngine {
             try? await Task.sleep(nanoseconds: interval)
             guard let self, !Task.isCancelled, self.isMonitoring else { return }
             await MainActor.run {
-                self.stopRecognitionTask()
-                self.startRecognitionTask()
+                self.softRestartRecognitionTask()
                 self.scheduleRestart()
             }
+        }
+    }
+
+    // Swap only the SFSpeech request — engine and tap stay alive, zero audio gap.
+    private func softRestartRecognitionTask() {
+        guard isMonitoring, let recognizer, recognizer.isAvailable else { return }
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionReq?.endAudio()
+
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        req.addsPunctuation = false
+        req.contextualStrings = keywords
+        if recognizer.supportsOnDeviceRecognition {
+            req.requiresOnDeviceRecognition = true
+        }
+        recognitionReq = req
+        recognitionTask = recognizer.recognitionTask(with: req) { [weak self] result, error in
+            DispatchQueue.main.async { self?.handleResult(result, error: error) }
         }
     }
 
@@ -358,7 +386,7 @@ final class GigiWakeWordEngine {
         guard let text = result?.bestTranscription.formattedString.lowercased() else { return }
 
         for keyword in keywords {
-            if text.hasSuffix(keyword) || text.contains(keyword + " ") || text == keyword {
+            if matchesKeyword(text, keyword: keyword) {
                 print("GIGI WakeWord: detected '\(keyword)' in '\(text)'")
                 handleWakeDetection()
                 return
@@ -366,12 +394,29 @@ final class GigiWakeWordEngine {
         }
     }
 
+    // Word-boundary match: prevents "luigi" or "biologi" from triggering bare "gigi".
+    // Checks: exact match, keyword at start/end of sentence (with space), or mid-sentence.
+    private func matchesKeyword(_ text: String, keyword: String) -> Bool {
+        if text == keyword { return true }
+        if text.hasPrefix(keyword + " ") { return true }
+        if text.hasSuffix(" " + keyword) { return true }
+        if text.contains(" " + keyword + " ") { return true }
+        return false
+    }
+
     private func handleWakeDetection() {
         consecutiveFailures = 0
         stopMonitoringHard()
         GigiAudioSequestrator.shared.prewarmBluetooth()
         SoundEngine.play(.wakeWord)
-        GigiSmartOrchestrator.shared.startListening()
+        // Delay VAD start by 200ms so the earcon (120ms audio + 50ms scheduling) finishes
+        // before SoundEngine.didFinishPlaying() calls setActive(false) on the shared session.
+        // Without this delay, didFinishPlaying() deactivates the session mid-VAD setup.
+        Task { @MainActor [weak self] in
+            guard self != nil else { return }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            GigiSmartOrchestrator.shared.startListening()
+        }
     }
 }
 

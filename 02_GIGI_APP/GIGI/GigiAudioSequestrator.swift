@@ -56,7 +56,9 @@ final class GigiAudioSequestrator: NSObject {
                 Task { @MainActor in
                     // Wait 1.5s for hardware to fully settle (e.g. after phone call ends).
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    GigiWakeWordEngine.shared.applyPreferredState()
+                    // Route through AudioManager so the state machine stays in sync (idle→wakeWordListening).
+                    // Calling WakeWordEngine directly left AudioManager.state stuck at .idle.
+                    GigiAudioManager.shared.startWakeWordListening()
                 }
             }
         @unknown default:
@@ -82,6 +84,10 @@ final class GigiAudioSequestrator: NSObject {
             break
         }
     }
+
+    // MARK: - Session state query (used by SoundEngine to skip redundant deactivation)
+
+    var isSessionActive: Bool { captureRefCount > 0 || isSpeaking }
 
     // MARK: - Bluetooth pre-warm
     //

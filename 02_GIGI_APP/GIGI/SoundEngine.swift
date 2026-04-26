@@ -112,6 +112,10 @@ final class SoundEngine {
     private func didFinishPlaying() {
         engine.pause()
         engineRunning = false
+        // Skip deactivation when GigiAudioSequestrator already owns the session (TTS playing,
+        // mic active). Calling setActive(false) here would kill the concurrent session.
+        // Example race: confirmRequired earcon (~380ms) overlaps TTS didStart (~100ms).
+        guard !GigiAudioSequestrator.shared.isSessionActive else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
