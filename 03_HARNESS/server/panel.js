@@ -35,6 +35,8 @@ const LOGS_DIR = process.env.HARNESS_LOGS_DIR || path.join(__dirname, 'logs');
 const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, 'config.json');
 const LOG_FILE = path.join(LOGS_DIR, 'bridge.log');
 const STATE_FILE = path.join(LOGS_DIR, 'state.json');
+const PASSPORT_FILE = path.join(LOGS_DIR, 'browser-passport.json');
+const PASSPORT_INSTANCE = 'passport';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
 const TASK_NAME = 'GigiHarnessServer';
@@ -63,6 +65,134 @@ function saveConfig(cfg) { fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, nul
 let bridge = null;
 let bridgeStartedAt = null;
 let bridgeManuallyStopped = false;
+const LOGIN_SITES = [
+  { id: 'google',   domain: 'google.com' },
+  { id: 'ubereats', domain: 'ubereats.com' },
+  { id: 'doordash', domain: 'doordash.com' },
+  { id: 'amazon',   domain: 'amazon.com' },
+  { id: 'booking',  domain: 'booking.com' },
+  { id: 'airbnb',   domain: 'airbnb.com' },
+];
+
+const PASSPORT_DEFAULTS = {
+  version: 1,
+  domains: {},
+  events: [],
+  guardrails: {
+    confirmation_required_for: [
+      'pay / buy / place or confirm order / confirm payment / use card, PayPal, or Apple Pay',
+      'accept subscriptions, free trials, renewals, or recurring billing',
+      'modify or delete important files, accounts, data, reservations, bookings, or services'
+    ],
+    never_do: [
+      'bypass CAPTCHA',
+      'bypass MFA/2FA',
+      'steal, extract, or store passwords'
+    ]
+  }
+};
+
+const PASSPORT_CREDENTIAL_POLICY = {
+  ok: true,
+  mode: 'browser_os_managed_credentials',
+  summary: 'GIGI usa il profilo Chrome Passport persistente e delega credenziali, autofill, passkey e password manager al browser/OS.',
+  allowed: [
+    'riusare cookie/sessioni salvate nel profilo Chrome Passport dedicato',
+    'lasciare che Chrome, il sistema operativo o un password manager compilino credenziali/passkey',
+    'richiedere takeover umano per CAPTCHA, MFA/2FA, OTP e security challenge',
+    'stimare lo stato login da segnali non sensibili come URL, testo pagina e presenza/nomi cookie'
+  ],
+  never_do: [
+    'bypass CAPTCHA, reCAPTCHA o hCaptcha',
+    'bypass MFA/2FA, OTP o security challenge',
+    'leggere, estrarre, intercettare, loggare o salvare password/passkey/segreti',
+    'chiedere a GIGI di custodire password o token utente'
+  ],
+  user_action: 'Completa manualmente login/CAPTCHA/2FA nella finestra Chrome Passport; salva password/passkey solo nel browser/OS o nel tuo password manager.'
+};
+
+const AUTH_COOKIE_RE = /(session|sess|auth|token|sid|sso|login|logged|secure|remember|account|user|idp|oauth)/i;
+const LOGIN_TEXT_RE = /(sign in|log in|login|accedi|connexion|anmelden|password|passcode|email address|continue with google|forgot password)/i;
+const LOGGED_IN_TEXT_RE = /(sign out|log out|logout|account|profile|your orders|my trips|dashboard|settings|il tuo account|esci)/i;
+const EXPIRED_TEXT_RE = /(session expired|sessione scaduta|please sign in again|for your security|reauthenticate|login required)/i;
+const TAKEOVER_TEXT_RE = /(captcha|recaptcha|hcaptcha|two-factor|two factor|2fa|mfa|verification code|codice di verifica|one-time code|otp|security check|challenge|verify it's you|verifica che sia tu)/i;
+
+const GUARDRAIL_RULES = [
+  { id: 'payment_or_purchase', re: /(pay|payment|checkout|buy now|place order|confirm order|submit order|purchase|paga|pagamento|compra|acquista|ordine|carta|credit card|debit card|paypal|apple pay)/i, description: 'pagare/comprare/inviare ordine/confermare pagamento/usare carta-PayPal-Apple Pay' },
+  { id: 'subscription_trial_renewal', re: /(subscribe|subscription|free trial|trial|renew|renewal|abbonamento|prova gratuita|rinnovo|recurring|billing)/i, description: 'accettare abbonamenti/prove gratuite/rinnovi' },
+  { id: 'important_change_or_delete', re: /(delete|remove|cancel|modify|change|erase|close account|terminate|cancella|elimina|annulla|modifica|prenotazione|reservation|booking|account|file|data|servizio|service)/i, description: 'modificare/cancellare file/account/dati importanti/prenotazioni/servizi' }
+];
+
+function canonicalUrl(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try { return new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`); }
+  catch { return null; }
+}
+
+function hostnameForUrl(raw) {
+  const u = canonicalUrl(raw);
+  return u ? u.hostname.replace(/^www\./, '').toLowerCase() : null;
+}
+
+function cookieMatchesDomain(cookie, host) {
+  if (!host || !cookie?.domain) return false;
+  const d = cookie.domain.replace(/^\./, '').toLowerCase();
+  return host === d || host.endsWith(`.${d}`) || d.endsWith(`.${host}`);
+}
+
+function passportProfileDir() {
+  return path.join(dirnameSafe(), '..', 'browser-passport-profile');
+}
+
+function dirnameSafe() { return __dirname; }
+
+function loadPassport() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(PASSPORT_FILE, 'utf8'));
+    return { ...PASSPORT_DEFAULTS, ...parsed, domains: parsed.domains || {}, events: parsed.events || [] };
+  } catch {
+    return structuredClone(PASSPORT_DEFAULTS);
+  }
+}
+
+function savePassport(state) {
+  const compact = { ...state, events: (state.events || []).slice(-200) };
+  fs.writeFileSync(PASSPORT_FILE, JSON.stringify(compact, null, 2));
+  return compact;
+}
+
+function rememberPassportDomain(host, patch = {}) {
+  if (!host) return null;
+  const state = loadPassport();
+  const now = new Date().toISOString();
+  const cur = state.domains[host] || { domain: host, first_seen_at: now, visits: 0, urls: [] };
+  const next = { ...cur, ...patch, domain: host, last_seen_at: now, visits: (cur.visits || 0) + (patch.countVisit === false ? 0 : 1) };
+  delete next.countVisit;
+  if (patch.url) next.urls = Array.from(new Set([patch.url, ...(cur.urls || [])])).slice(0, 10);
+  state.domains[host] = next;
+  state.events = [...(state.events || []), { at: now, domain: host, state: next.state || patch.state || 'unknown', url: patch.url || null }].slice(-200);
+  savePassport(state);
+  return next;
+}
+
+function checkPassportGuardrails(input = '') {
+  const text = typeof input === 'string' ? input : JSON.stringify(input || {});
+  const hits = GUARDRAIL_RULES.filter(rule => rule.re.test(text)).map(rule => ({ id: rule.id, description: rule.description }));
+  return {
+    ok: true,
+    requires_confirmation: hits.length > 0,
+    reasons: hits,
+    policy: PASSPORT_DEFAULTS.guardrails,
+    note: hits.length ? 'Serve conferma esplicita dell’utente prima di procedere.' : 'Nessuna conferma speciale rilevata dalle guardrail testuali.'
+  };
+}
+
+function getPassportCredentialPolicy() {
+  return PASSPORT_CREDENTIAL_POLICY;
+}
+
 // Pool di istanze Chrome: name -> { proc, startedAt, manuallyStopped }
 const chromeProcs = new Map();
 // Crash counter per Chrome: name -> [timestamp, ...] (ultimi crash)
@@ -73,14 +203,25 @@ let termProc = null;
 
 function getInstances(cfg) {
   const br = cfg.browser || {};
-  if (Array.isArray(br.instances) && br.instances.length) return br.instances;
-  // Fallback retrocompatibile: un'unica istanza "main" dai campi legacy
-  return [{
+  const base = Array.isArray(br.instances) && br.instances.length ? br.instances : [{
     name: 'main',
     profile_dir: br.profile_dir,
     cdp_port: br.cdp_port || 9224,
     autostart: true
   }];
+  if (base.some(i => i.name === PASSPORT_INSTANCE)) return base;
+  const usedPorts = new Set(base.map(i => Number(i.cdp_port)).filter(Boolean));
+  let passportPort = Number(br.passport_cdp_port || 9234);
+  while (usedPorts.has(passportPort)) passportPort += 1;
+  return [
+    ...base,
+    {
+      name: PASSPORT_INSTANCE,
+      profile_dir: br.passport_profile_dir || passportProfileDir(),
+      cdp_port: passportPort,
+      autostart: br.passport_autostart !== false
+    }
+  ];
 }
 
 function findInstance(cfg, name) {
@@ -175,6 +316,15 @@ function stopChrome(name = 'main') {
   return { ok: true, name };
 }
 
+async function waitForChromeReady(name = 'main', timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await chromeAlive(name)) return true;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  return false;
+}
+
 async function chromeStatusAll() {
   const cfg = loadConfig();
   const out = [];
@@ -195,6 +345,143 @@ async function chromeStatusAll() {
   return out;
 }
 
+async function navigateInstance(name, url) {
+  const cfg = loadConfig();
+  const inst = findInstance(cfg, name);
+  if (!inst) return { ok: false, error: 'instance not found' };
+  try {
+    const b = await getPpBrowser(name, inst.cdp_port);
+    const pages = await b.pages();
+    const page = pages.find(p => !p.url().startsWith('devtools://')) || await b.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    return { ok: true, url: page.url() };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+async function getPassportStatus(name = PASSPORT_INSTANCE, rawUrl = null) {
+  const cfg = loadConfig();
+  const inst = findInstance(cfg, name);
+  if (!inst) return { ok: false, error: 'instance not found', state: 'unknown' };
+  const target = rawUrl ? canonicalUrl(rawUrl) : null;
+  const targetHost = target ? target.hostname.replace(/^www\./, '').toLowerCase() : null;
+
+  try {
+    const b = await getPpBrowser(name, inst.cdp_port);
+    const pages = await b.pages();
+    const page = pages.find(p => !p.url().startsWith('devtools://')) || pages[0] || await b.newPage();
+    const currentUrl = page.url();
+    const currentHost = hostnameForUrl(currentUrl);
+    const host = targetHost || currentHost;
+
+    const client = await page.createCDPSession();
+    const { cookies } = await client.send('Network.getAllCookies');
+    await client.detach().catch(() => {});
+    const domainCookies = cookies.filter(c => cookieMatchesDomain(c, host));
+    const authCookies = domainCookies.filter(c => AUTH_COOKIE_RE.test(c.name));
+
+    let pageSignals = { title: '', text: '', url: currentUrl };
+    if (!targetHost || targetHost === currentHost) {
+      pageSignals = await page.evaluate(() => ({
+        title: document.title || '',
+        text: (document.body?.innerText || '').slice(0, 12000),
+        url: location.href
+      })).catch(() => pageSignals);
+    }
+
+    const signalText = `${pageSignals.title}\n${pageSignals.text}`;
+    const loginLikeUrl = /(login|signin|sign-in|auth|account\/login|session)/i.test(pageSignals.url || '');
+    const takeoverRequired = TAKEOVER_TEXT_RE.test(signalText);
+    const expired = EXPIRED_TEXT_RE.test(signalText);
+    const loginPrompt = LOGIN_TEXT_RE.test(signalText) || loginLikeUrl;
+    const loggedInText = LOGGED_IN_TEXT_RE.test(signalText);
+
+    let state = 'unknown';
+    let confidence = 'low';
+    const evidence = {
+      domain_cookies: domainCookies.length,
+      auth_cookie_names: authCookies.map(c => c.name).slice(0, 12),
+      login_prompt: loginPrompt,
+      logged_in_text: loggedInText,
+      expired,
+      takeover_required: takeoverRequired,
+      current_url: currentUrl
+    };
+
+    if (takeoverRequired) { state = 'needs_login'; confidence = 'high'; }
+    else if (expired) { state = 'expired'; confidence = 'high'; }
+    else if (authCookies.length && !loginPrompt) { state = 'logged_in'; confidence = loggedInText ? 'high' : 'medium'; }
+    else if (domainCookies.length >= 3 && loggedInText && !loginPrompt) { state = 'logged_in'; confidence = 'medium'; }
+    else if (loginPrompt && !authCookies.length) { state = 'needs_login'; confidence = 'medium'; }
+    else if (loginPrompt && authCookies.length) { state = 'expired'; confidence = 'medium'; }
+
+    if (host) rememberPassportDomain(host, {
+      url: target ? target.href : currentUrl,
+      state,
+      confidence,
+      takeover_required: takeoverRequired,
+      last_checked_at: new Date().toISOString(),
+      cookie_count: domainCookies.length,
+      auth_cookie_count: authCookies.length
+    });
+
+    return {
+      ok: true,
+      instance: name,
+      domain: host,
+      url: target ? target.href : currentUrl,
+      current_url: currentUrl,
+      state,
+      confidence,
+      takeover_required: takeoverRequired,
+      user_takeover: takeoverRequired || state === 'needs_login' || state === 'expired',
+      evidence
+    };
+  } catch (e) {
+    return { ok: false, error: e.message, state: 'unknown' };
+  }
+}
+
+async function navigatePassport(name = PASSPORT_INSTANCE, rawUrl) {
+  const target = canonicalUrl(rawUrl);
+  if (!target) return { ok: false, error: 'valid url required' };
+  const started = await chromeAlive(name) ? { ok: true, already_running: true } : startChrome(name);
+  if (started.ok === false && !/già in esecuzione/i.test(started.msg || '')) return started;
+  if (!started.already_running) {
+    const ready = await waitForChromeReady(name);
+    if (!ready) return { ok: false, error: `Chrome "${name}" non pronto sul CDP dopo l'avvio` };
+  }
+  const result = await navigateInstance(name, target.href);
+  if (!result.ok) return result;
+  const host = target.hostname.replace(/^www\./, '').toLowerCase();
+  rememberPassportDomain(host, { url: result.url || target.href, state: 'unknown' });
+  const status = await getPassportStatus(name, result.url || target.href);
+  return { ...result, passport: status };
+}
+
+async function getLoginStatus(name) {
+  const cfg = loadConfig();
+  const inst = findInstance(cfg, name);
+  if (!inst) return {};
+  try {
+    const b = await getPpBrowser(name, inst.cdp_port);
+    const pages = await b.pages();
+    if (!pages.length) return {};
+    const client = await pages[0].createCDPSession();
+    const { cookies } = await client.send('Network.getAllCookies');
+    await client.detach().catch(() => {});
+    const result = {};
+    for (const site of LOGIN_SITES) {
+      result[site.id] = cookies.some(c =>
+        (c.domain === `.${site.domain}` || c.domain === site.domain || c.domain.endsWith(`.${site.domain}`)) &&
+        c.httpOnly === true
+      );
+    }
+    return result;
+  } catch { return {}; }
+}
+
 function startBridge() {
   if (bridge) return { ok: false, msg: 'già attivo' };
   bridge = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
@@ -203,8 +490,8 @@ function startBridge() {
     detached: false,
     stdio: ['ignore', 'pipe', 'pipe']
   });
-  bridge.stdout.on('data', () => {});
-  bridge.stderr.on('data', () => {});
+  bridge.stdout.on('data', (d) => process.stdout.write(`[bridge] ${d}`));
+  bridge.stderr.on('data', (d) => process.stderr.write(`[bridge:err] ${d}`));
   bridge.on('exit', (code) => {
     console.log(`bridge exited code=${code}`);
     bridge = null;
@@ -276,6 +563,7 @@ const deps = {
   chromeProcs, getInstances, findInstance,
   chromeAliveByPort, chromeStatusAll,
   startChrome, stopChrome, captureInstanceScreenshot,
+  navigateInstance, getLoginStatus, getPassportStatus, navigatePassport, loadPassport, checkPassportGuardrails, getPassportCredentialPolicy, rememberPassportDomain,
   startTerminal, stopTerminal,
   autostartEnabled, enableAutostart, disableAutostart,
   LOG_FILE, PUBLIC_DIR, dirname: __dirname,
@@ -325,21 +613,64 @@ function getLanIP() {
 }
 
 async function printPairingQR() {
+  // Wait for bridge (server.js / port 7779) to be up before printing, so the
+  // QR reflects the correct tunnel URL if one is already active.
+  const iosCfgPort = cfg.server?.port || 7779;
+  let bridgeReady = false;
+  for (let i = 0; i < 20; i++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${iosCfgPort}/api/pair`, { signal: AbortSignal.timeout(500) });
+      if (r.ok) { bridgeReady = true; break; }
+    } catch {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+
   try {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);
     const qrcode = require('qrcode-terminal');
-    const iosCfg = cfg.ios || {};
-    const secret = process.env.HARNESS_SHARED_SECRET || iosCfg.shared_secret || '';
-    const iosCfgPort = cfg.server?.port || 7779;
-    const ip = getLanIP();
-    const payload = `gigi://harness?url=http://${ip}:${iosCfgPort}&secret=${encodeURIComponent(secret)}`;
-    console.log('\n── GIGI Pairing QR (scan in Settings → Harness or Onboarding) ──');
-    qrcode.generate(payload, { small: true });
-    console.log(`URL: http://${ip}:${iosCfgPort}`);
+
+    // Build same JSON payload the web /pair page uses — iOS app decodes JSON.
+    let payload;
+    if (bridgeReady) {
+      // Fetch canonical payload from pair.js (includes tunnel URL if active).
+      try {
+        const r = await fetch(`http://127.0.0.1:${iosCfgPort}/api/pair`, { signal: AbortSignal.timeout(2000) });
+        const j = await r.json();
+        payload = j.data || j;
+      } catch { payload = null; }
+    }
+
+    // Fallback: build payload from config directly (LAN IP, no tunnel).
+    if (!payload) {
+      const iosCfg = cfg.ios || {};
+      const secret = process.env.HARNESS_SHARED_SECRET || iosCfg.shared_secret || '';
+      const mode = cfg?.tunnel?.mode || 'manual';
+      let url;
+      if (mode === 'named' && cfg?.tunnel?.named?.hostname) {
+        url = `https://${cfg.tunnel.named.hostname}`;
+      } else if (mode === 'quick' && cfg?.tunnel?.quick?.last_url) {
+        url = cfg.tunnel.quick.last_url;
+      } else {
+        url = `http://${getLanIP()}:${iosCfgPort}`;
+      }
+      payload = { url, secret, deviceName: os.hostname(), mode, createdAt: new Date().toISOString() };
+    }
+
+    const qrString = JSON.stringify(payload);
+    const tunnelNote = payload.mode && payload.mode !== 'manual'
+      ? ` [${payload.mode} tunnel]`
+      : ' [LAN only]';
+    console.log('\n── GIGI Pairing QR — scan from iPhone: Settings → Harness → Pair ──');
+    qrcode.generate(qrString, { small: true });
+    console.log(`URL: ${payload.url}${tunnelNote}`);
+    console.log(`Mode: ${payload.mode || 'manual'} · Device: ${payload.deviceName}`);
+    console.log('To regenerate: open http://localhost:7777/pair in browser');
     console.log('────────────────────────────────────────────────────────────────\n');
   } catch {
     // qrcode-terminal not installed — run: npm install
+    console.log('[pair] Install qrcode-terminal (npm install) to see the QR in terminal.');
+    console.log(`[pair] Or open http://localhost:7777/pair in browser to get the QR.`);
   }
 }
 

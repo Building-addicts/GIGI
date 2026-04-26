@@ -16,10 +16,16 @@ import os from 'node:os';
 import { cloudflared } from '../tunnel/cloudflared-manager.js';
 import { startAdvertise, stopAdvertise } from '../tunnel/mdns.js';
 
+function allowedCorsOrigin(req) {
+  const origin = req.headers.origin || '';
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return origin;
+  return 'http://localhost:7777';
+}
+
 function json(res, code, obj) {
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': 'http://localhost:7777',
+    'Access-Control-Allow-Origin': res._corsOrigin || 'http://localhost:7777',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Cache-Control': 'no-store'
@@ -74,11 +80,12 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
   if (!p.startsWith('/api/setup/') && p !== '/api/setup') return false;
+  res._corsOrigin = allowedCorsOrigin(req);
 
   // CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': 'http://localhost:7777',
+      'Access-Control-Allow-Origin': allowedCorsOrigin(req),
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
     });
@@ -91,6 +98,18 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
   if (!isLoopback(req)) {
     json(res, 403, { ok: false, error: { code: 'LOOPBACK_ONLY', message: '/api/setup/* reachable only from localhost' } });
     return true;
+  }
+
+  // ---- env (server path for start.html UX) ----
+  if (p === '/api/setup/env' && req.method === 'GET') {
+    return json(res, 200, {
+      ok: true,
+      data: {
+        serverDir: path.dirname(cfgPath),
+        nodeVersion: process.version,
+        platform: process.platform
+      }
+    }), true;
   }
 
   // ---- status ----

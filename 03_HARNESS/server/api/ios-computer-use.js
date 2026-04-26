@@ -8,7 +8,7 @@
 //   5. loop fino a "end_turn" senza tool oppure max 20 step / 2min
 //   6. CONFIRM_REQUIRED regex (checkout, totale €/$, pay, conferma)
 //      → pausa, broadcast "awaiting_confirm", attesa POST /confirm
-//      → se approved=true, riprende con "utente ha confermato"
+//      → se approved=true, riprende lo stesso job/browser con "utente ha confermato"
 //      → se approved=false, cancella job
 //   7. rilascia lease, salva cost (prompt_tokens, output_tokens, $ stima)
 //
@@ -30,7 +30,9 @@ const TIMEOUT_MS = 2 * 60 * 1000;
 const CONFIRM_PATTERNS = [
   /(?:totale|total|importo|amount|subtotal|grand\s*total)[^\d]{0,10}[€$£]\s*\d+(?:[.,]\d{2})?/i,
   /[€$£]\s*\d+(?:[.,]\d{2})?[^\d]{0,20}(?:paga|pay\b|checkout|confirm|conferm[ao])/i,
-  /\b(?:conferma\s+(?:ordine|pagamento|acquisto)|place\s+order|pay\s+now|complete\s+purchase)\b/i
+  /\b(?:conferma\s+(?:ordine|pagamento|acquisto)|place\s+order|pay\s+now|complete\s+purchase)\b/i,
+  /\b(?:subscribe|subscription|free\s+trial|start\s+trial|renewal|recurring|billing|abbonamento|prova\s+gratuita|rinnovo)\b/i,
+  /\b(?:delete|remove|erase|close\s+account|terminate|change\s+(?:email|password)|cancel\s+(?:booking|reservation|service)|cancella|elimina|modifica\s+(?:email|password)|cambia\s+(?:email|password)|annulla\s+(?:prenotazione|servizio))\b/i
 ];
 
 // Input token/output token placeholder prezzi Claude Opus 4.7
@@ -77,6 +79,39 @@ function matchesConfirm(text) {
     if (m) return m[0];
   }
   return null;
+}
+
+async function waitForConfirmation(job, messages, content, stepEntry, reason) {
+  updateJob(job.id, {
+    status: 'awaiting_confirm',
+    confirm_required: { reason, at: Date.now() },
+    confirm_response: null,
+    steps: [...((getJob(job.id) || job).steps || []), stepEntry]
+  });
+
+  const waitStart = Date.now();
+  while (Date.now() - waitStart < 10 * 60 * 1000) {
+    const c = getJob(job.id);
+    if (c?.status === 'cancelled') return 'cancelled';
+    if (c?.confirm_response) {
+      if (!c.confirm_response.approved) {
+        updateJob(job.id, { status: 'cancelled', error: 'confirm denied by user' });
+        return 'denied';
+      }
+      messages.push({ role: 'assistant', content });
+      messages.push({ role: 'user', content: [{ type: 'text', text: 'Utente ha confermato. Prosegui SOLO con questa azione già approvata, senza chiedere di nuovo.' }] });
+      updateJob(job.id, {
+        status: 'running',
+        confirm_required: null,
+        confirm_response: null
+      });
+      return 'approved';
+    }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  updateJob(job.id, { status: 'failed', error: 'confirmation timeout' });
+  return 'timeout';
 }
 
 async function executeToolCall(session, input) {
@@ -128,11 +163,17 @@ async function runLoop(job, cfg) {
 
   try {
     updateJob(job.id, { status: 'running' });
-    currentLease = await lease({ app: 'ios-computer-use', taskId: job.id });
-    session = await openSession(currentLease.cdp_url);
+    currentLease = await lease({ app: 'ios-computer-use', taskId: job.id, preferred: 'passport' });
+    session = await openSession(currentLease.cdp_url, currentLease.instance);
     updateJob(job.id, { browser_instance: currentLease.instance });
 
-    const systemPrompt = `Sei GIGI, assistente personale di Leonardo. Esegui il task sul browser con prudenza. Task: ${job.task}. Scatta screenshot prima di ogni azione complessa. Se arrivi a una pagina di conferma pagamento o checkout con importo visibile, FERMATI e rispondi in testo "CONFIRM_REQUIRED: <descrizione breve>" senza cliccare; sarà Leonardo ad approvare manualmente.`;
+    const systemPrompt = `Sei GIGI, assistente personale di Leonardo. Esegui il task sul browser Chrome Passport persistente già loggato quando possibile. Task: ${job.task}.
+Regole: fai tutto autonomamente finché non stai per finalizzare una delle 3 categorie sensibili:
+1) pagare/comprare/inviare ordine/confermare pagamento/usare carta-PayPal-Apple Pay;
+2) accettare abbonamenti/prove gratuite/rinnovi;
+3) modificare o cancellare file/account/dati importanti/prenotazioni/servizi.
+Quando arrivi a una di queste soglie, FERMATI prima del click/tasto finale e rispondi esattamente "CONFIRM_REQUIRED: <descrizione breve>".
+Se trovi login/CAPTCHA/2FA/OTP/security challenge, FERMATI e rispondi "CONFIRM_REQUIRED: takeover manuale richiesto per login/CAPTCHA/2FA". Non bypassare CAPTCHA/2FA e non leggere o salvare password.`;
 
     const messages = [
       { role: 'user', content: [{ type: 'text', text: job.task }] }
@@ -141,6 +182,7 @@ async function runLoop(job, cfg) {
     const startedAt = Date.now();
     let totalIn = 0, totalOut = 0;
 
+    stepLoop:
     for (let step = 0; step < MAX_STEPS; step++) {
       if (Date.now() - startedAt > TIMEOUT_MS) {
         return updateJob(job.id, { status: 'failed', error: `timeout dopo ${step} step` });
@@ -171,27 +213,9 @@ async function runLoop(job, cfg) {
           stepEntry.text += block.text + '\n';
           const hit = /CONFIRM_REQUIRED:\s*(.+)/i.exec(block.text) || (matchesConfirm(await session.text()) ? ['CONFIRM_REQUIRED', 'pattern prezzo/checkout'] : null);
           if (hit) {
-            updateJob(job.id, {
-              status: 'awaiting_confirm',
-              confirm_required: { reason: hit[1] || String(hit[0]), at: Date.now() },
-              steps: [...(job.steps || []), stepEntry]
-            });
-            // Wait polling per confirm response
-            const waitStart = Date.now();
-            while (Date.now() - waitStart < 10 * 60 * 1000) {
-              const c = getJob(job.id);
-              if (c?.status === 'cancelled') return;
-              if (c?.confirm_response) {
-                if (!c.confirm_response.approved) {
-                  return updateJob(job.id, { status: 'cancelled', error: 'confirm denied by user' });
-                }
-                messages.push({ role: 'assistant', content });
-                messages.push({ role: 'user', content: [{ type: 'text', text: 'Utente ha confermato. Prosegui con il checkout.' }] });
-                break;
-              }
-              await new Promise(r => setTimeout(r, 1500));
-            }
-            break;
+            const decision = await waitForConfirmation(job, messages, content, stepEntry, hit[1] || String(hit[0]));
+            if (decision === 'approved') continue stepLoop;
+            return;
           }
         }
       }
@@ -215,6 +239,13 @@ async function runLoop(job, cfg) {
 
       const toolResults = [];
       for (const tu of toolUses) {
+        const pageText = await session.text();
+        const sensitiveHit = matchesConfirm(pageText);
+        if (sensitiveHit && ['left_click', 'double_click', 'type', 'key'].includes(tu.input?.action)) {
+          const decision = await waitForConfirmation(job, messages, content, stepEntry, sensitiveHit);
+          if (decision === 'approved') continue stepLoop;
+          return;
+        }
         const r = await executeToolCall(session, tu.input || {});
         stepEntry.actions.push({ action: tu.input?.action, ok: true });
         toolResults.push({
