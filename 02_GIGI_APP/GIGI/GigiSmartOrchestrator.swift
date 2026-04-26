@@ -317,9 +317,12 @@ class GigiSmartOrchestrator: ObservableObject {
             isQuickTalkSession = false
             onQuickTalkFinished?(wasSuccess)
         } else if isPresenceActive {
-            // Presence: resume wake word immediately (shorter delay handled by GigiAudioManager)
+            // Safety net: resumes wake word if TTS empty/failed. Normal path is
+            // notifySpeakingFinished → 300 ms → resumeWakeWordIfEnabled.
+            // startWakeWordListening guard deduplicates when TTS already started.
             GigiAudioManager.shared.startWakeWordListening()
         } else {
+            // Same safety net as above.
             GigiAudioManager.shared.startWakeWordListening()
         }
     }
