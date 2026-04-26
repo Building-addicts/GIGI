@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import UIKit
 
 // MARK: - GigiAudioSequestrator
 // Manages AVAudioSession lifecycle and coordinates mic/speaker sharing
@@ -17,6 +18,10 @@ final class GigiAudioSequestrator: NSObject {
     private let session = AVAudioSession.sharedInstance()
     private var captureRefCount = 0   // mic users (VAD + Realtime)
     private var isSpeaking = false
+    // Tracks app background state without hitting UIApplication on non-main threads.
+    // Prevents deactivating the audio session in background — iOS starts a 30s kill timer
+    // the moment the session goes inactive while the app is backgrounded.
+    private var appIsBackground = false
 
     override init() {
         super.init()
@@ -32,7 +37,22 @@ final class GigiAudioSequestrator: NSObject {
             name: AVAudioSession.routeChangeNotification,
             object: session
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
     }
+
+    @objc private func handleDidEnterBackground() { appIsBackground = true }
+    @objc private func handleDidBecomeActive()    { appIsBackground = false }
 
     @objc private func handleInterruption(notification: Notification) {
         guard let userInfo = notification.userInfo,
@@ -181,6 +201,10 @@ final class GigiAudioSequestrator: NSObject {
     }
 
     private func deactivate() {
+        guard !appIsBackground else {
+            GigiDebugLogger.log("deactivate SKIPPED — app in background (keep session alive)")
+            return
+        }
         GigiDebugLogger.log("deactivate")
         do {
             try session.setActive(false, options: .notifyOthersOnDeactivation)

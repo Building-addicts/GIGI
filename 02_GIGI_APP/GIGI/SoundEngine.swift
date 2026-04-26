@@ -45,6 +45,9 @@ final class SoundEngine {
     /// The wake word session uses .mixWithOthers so other apps aren't ducked during passive listening.
     static func releaseSession() {
         guard !GigiWakeWordEngine.shared.isMonitoring else { return }
+        // Don't deactivate in background — iOS starts 30s kill timer if audio session goes inactive
+        // while app is backgrounded. Wake word needs the session to stay alive between turns.
+        guard UIApplication.shared.applicationState == .active else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
