@@ -122,7 +122,13 @@ final class GigiWakeWordEngine {
 
     func setUserEnabled(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: Self.userDefaultsEnabledKey)
-        enabled ? applyPreferredState() : stopMonitoringHard()
+        if enabled {
+            applyPreferredState()
+        } else {
+            stopMonitoringHard()
+            // User explicitly disabled wake word — end the persistent Dynamic Island pill.
+            Task { await GigiLiveActivityController.shared.stopWakeWordMonitoring() }
+        }
     }
 
     func applyPreferredState() {
@@ -180,6 +186,8 @@ final class GigiWakeWordEngine {
         startRecognitionTask()
         scheduleRestart()
         print("GIGI WakeWord: listening for 'Hey GIGI' ✓")
+        // Start persistent Dynamic Island pill. Idempotent — no-op if already showing.
+        Task { await GigiLiveActivityController.shared.startWakeWordMonitoring() }
     }
 
     // Wake word audio session: must use .playAndRecord to be compatible with
