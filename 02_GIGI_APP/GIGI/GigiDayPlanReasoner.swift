@@ -126,8 +126,9 @@ final class GigiDayPlanReasoner {
         - Massimo ~80 parole TOTALI.
         - NO JSON, NO bullet markdown (niente `-`, `*`, `1.`), NO emoji, NO heading.
         - È una risposta VOCALE: deve suonare naturale letta ad alta voce.
+        - Cita TUTTI gli eventi della sezione <events> con il loro ORARIO (riprendi orario e titolo letterali — sono impegni reali, non opzionali).
         - Cita esplicitamente almeno 2 preferenze utente e almeno 1 task quando disponibili (riprendi le parole esatte usate negli input).
-        - Se mancano dati, proponi comunque un piano onesto basato su ciò che c'è.
+        - Se mancano dati in una sezione, proponi comunque un piano onesto basato su ciò che c'è.
 
         DATI:
 
