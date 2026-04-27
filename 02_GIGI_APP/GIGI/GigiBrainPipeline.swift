@@ -197,7 +197,7 @@ final class GigiBrainPipeline {
             taskText: mergedTask,
             date:     pick(brain.date, "date"),
             time:     pick(brain.time, "time"),
-            speech:   brain.speech.isEmpty ? localSpeech(for: GigiIntent(label: enriched.label, confidence: enriched.confidence, params: p)) : brain.speech,
+            speech:   brain.speech.isEmpty ? Self.localSpeech(for: GigiIntent(label: enriched.label, confidence: enriched.confidence, params: p)) : brain.speech,
             followUp: brain.followUp
         )
     }
@@ -223,7 +223,7 @@ final class GigiBrainPipeline {
             taskText: intent.params["text"]        ?? intent.params["title"] ?? intent.params["restaurant"] ?? "",
             date:     intent.params["date"]        ?? "",
             time:     intent.params["time"]        ?? "",
-            speech:   localSpeech(for: intent),
+            speech:   Self.localSpeech(for: intent),
             followUp: ""
         )
     }
@@ -251,12 +251,12 @@ final class GigiBrainPipeline {
             taskText: resolved.params["text"]        ?? "",
             date:     resolved.params["date"]        ?? "",
             time:     resolved.params["time"]        ?? "",
-            speech:   localSpeech(for: resolved),
+            speech:   Self.localSpeech(for: resolved),
             followUp: ""
         )
     }
 
-    private func localSpeech(for intent: GigiIntent) -> String {
+    static func localSpeech(for intent: GigiIntent) -> String {
         let contact = intent.params["contact"]     ?? ""
         let dest    = intent.params["destination"] ?? ""
         let query   = intent.params["query"]       ?? ""

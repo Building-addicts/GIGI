@@ -27,6 +27,24 @@ enum InterimEvent {
 final class GigiAgentEngine {
     static let shared = GigiAgentEngine()
 
+    // Whitelist of NLU labels eligible for the deterministic fast-path.
+    // High-confidence (>=0.95) classifications for these intents skip the
+    // Groq round-trip entirely and dispatch straight to GigiActionBridge.
+    private static let fastPathIntents: Set<String> = [
+        "ask_time", "ask_date",
+        "torch_on", "torch_off",
+        "make_call", "send_message",
+        "navigation",
+        "set_timer", "set_alarm", "set_reminder",
+        "toggle_wifi", "toggle_bluetooth",
+        "media_next", "media_previous", "media_play_pause",
+        "play_music",
+        "read_calendar",
+        "remember",
+        "facetime", "facetime_audio",
+        "respond"
+    ]
+
     // MARK: - Config
 
     private let maxIterations  = 8
@@ -108,6 +126,49 @@ final class GigiAgentEngine {
             }
             // else: fall through to Gate 2 (planner) — D4.b = A
         }
+
+        // === Gate 1.5: NLU fast-path (deterministic intents, sub-100ms) ===
+        // GigiNLUEngine classifies the utterance with rule-based + ML pipelines.
+        // High-confidence hits on whitelisted labels skip Groq entirely and
+        // dispatch straight through GigiActionBridge — same speech, same memory,
+        // same side-effects as the Groq tool-call path, minus the round-trip.
+        let fpStart = Date()
+        let nluIntent = GigiNLUEngine.shared.classify(text)
+        if nluIntent.confidence >= 0.95,
+           Self.fastPathIntents.contains(nluIntent.label) {
+
+            print("GIGI fast-path: \(nluIntent.label) (conf=\(nluIntent.confidence))")
+            let dispatcher = GigiActionDispatcher.shared
+            let bridgeResult = await dispatcher.bridge.execute(nluIntent)
+
+            let speech: String
+            if !bridgeResult.isEmpty {
+                speech = bridgeResult
+            } else {
+                speech = GigiBrainPipeline.localSpeech(for: nluIntent)
+            }
+
+            // Side-effect parity with GigiActionDispatcher.execute default branch:
+            // touch contact memory for successful calls so frequency ranking stays current.
+            if nluIntent.label == "make_call", bridgeResult.hasPrefix("Calling ") {
+                let c = nluIntent.params["contact"] ?? ""
+                if !c.isEmpty { await GigiMemory.shared.touchContactIfKnown(c) }
+            }
+
+            mem.addModelSpeech(speech)
+            let elapsed = Int(Date().timeIntervalSince(fpStart) * 1000)
+            print("GIGI fast-path completed: \(elapsed)ms")
+
+            return AgentResult(
+                speech:          speech,
+                executedTools:   [nluIntent.label],
+                isFollowUp:      false,
+                costEstimate:    0,
+                requiresConfirm: nil,
+                isError:         false
+            )
+        }
+        // fall-through to Gate 2 (planner / agentLoop)
 
         // === Gate 2: Multi-agent planner (Leo lane, identical to harness-pre-armando-integration) ===
         // Build initial contents from pruned history (user turn already appended above)
