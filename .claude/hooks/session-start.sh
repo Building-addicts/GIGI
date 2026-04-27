@@ -114,13 +114,16 @@ for issue in issues[:8]:
     title = issue['title'][:80]
     lines.append(f"  {pri_emoji}{blocker}{bug} #{issue['number']} — {title}")
 
-print('|||'.join(lines))
-print(len(issues))
+# Stampa righe seguite da una marker line con il count (così bash sa dove tagliare)
+for line in lines:
+    print(line)
+print(f"__ISSUE_COUNT__={len(issues)}")
 PYEOF
 )"
 
-ISSUE_COUNT="$(echo "$FORMATTED" | tail -1)"
-ISSUE_LINES="$(echo "$FORMATTED" | head -n -1 | tr '|||' '\n' | sed 's/^|*//')"
+# Estrai count dalla marker line, e issue lines = tutto prima del marker
+ISSUE_COUNT="$(echo "$FORMATTED" | grep -oE '^__ISSUE_COUNT__=[0-9]+$' | tail -1 | cut -d= -f2)"
+ISSUE_LINES="$(echo "$FORMATTED" | grep -v '^__ISSUE_COUNT__=')"
 
 # 6. Componi messaggio di benvenuto + istruzioni di workflow
 echo "[GIGI session-start] — context per Claude"
