@@ -49,7 +49,35 @@ for entry in data.get('mapping', []):
 PYEOF
 )"
 
-[ -z "$LOOKUP" ] && exit 0
+if [ -z "$LOOKUP" ]; then
+  # Dev non riconosciuto dal mapping → istruzione Claude di chiedere esplicitamente
+  cat <<EOF
+[GIGI session-start] Dev NON riconosciuto
+
+\`git config user.name\` riporta: "$GIT_NAME"
+Il dev-mapping (.claude/dev-mapping.json) non ha match per questo nome.
+
+ISTRUZIONI per Claude in questa sessione:
+
+1. Quando il dev scrive il primo messaggio, chiedigli esplicitamente:
+   "Ciao! Non ti riconosco dal git config. Sei uno di questi?
+    (a) Armando Battaglino · @ArmandoBattaglino · PM
+    (b) Leonardo Corte    · @Leonardo-Corte    · iOS lead
+    (c) Federico          · @fc200490-sketch   · Harness lead
+    Rispondi a/b/c."
+
+2. Una volta che il dev risponde:
+   - Esegui: \`git config --global user.name "<Nome Cognome>"\` con nome canonico
+     (es. "Armando Battaglino" / "Leonardo Corte" / "Federico")
+   - Esegui: \`git config --global user.email "<email>"\` se non già settato
+   - Comunica al dev: "Settato. Riapri Claude Code per partire con il workflow corretto."
+
+3. Dopo che il dev riapre, il SessionStart hook lo riconoscerà e mostrerà le sue issue.
+
+⚠️ NON proseguire con worktree/branch/PR finché il dev non è identificato correttamente — i timeline post non funzionerebbero.
+EOF
+  exit 0
+fi
 
 HANDLE="$(echo "$LOOKUP" | cut -d'|' -f1)"
 ROLE="$(echo "$LOOKUP" | cut -d'|' -f2)"
@@ -70,6 +98,11 @@ if ! gh auth status >/dev/null 2>&1; then
 EOF
   exit 0
 fi
+
+# ─── Verifica CLAUDE.local.md (workflow personale del dev) ───
+LOCAL_MD="$ROOT/CLAUDE.local.md"
+HAS_LOCAL_MD="false"
+[ -f "$LOCAL_MD" ] && HAS_LOCAL_MD="true"
 
 # 4. Recupera issue aperte assegnate al dev
 ISSUES_JSON="$(gh issue list --repo Building-addicts/GIGI \
@@ -129,6 +162,12 @@ ISSUE_LINES="$(echo "$FORMATTED" | grep -v '^__ISSUE_COUNT__=')"
 echo "[GIGI session-start] — context per Claude"
 echo ""
 echo "Dev identificato: $FULL_NAME ($ROLE) · GitHub: @$HANDLE"
+if [ "$HAS_LOCAL_MD" = "false" ]; then
+  echo ""
+  echo "⚠️  CLAUDE.local.md NON presente. Quando il dev inizia a lavorare su task iOS,"
+  echo "    proponigli di crearlo dal template in CONTRIBUTING.md §\"Template CLAUDE.local.md\""
+  echo "    (contiene host SSH MacInCloud, drop folder IPA, comandi build) — NECESSARIO per il build verify."
+fi
 echo ""
 
 if [ "$ISSUE_COUNT" = "0" ] || [ -z "$ISSUE_COUNT" ]; then

@@ -12,6 +12,16 @@
 
 set -u
 
+# ─── Pre-flight: gh deve essere installato + autenticato ───
+if ! command -v gh >/dev/null 2>&1; then
+  echo "⚠️  post-timeline.sh: \`gh\` CLI non installato. Installa da https://cli.github.com" >&2
+  exit 1
+fi
+if ! gh auth status >/dev/null 2>&1; then
+  echo "⚠️  post-timeline.sh: \`gh\` non autenticato. Esegui: gh auth login" >&2
+  exit 1
+fi
+
 DEV_HANDLE="${1:?dev_handle required}"
 ISSUE_NUM="${2:?issue_num required}"
 EVENT="${3:?event required}"
