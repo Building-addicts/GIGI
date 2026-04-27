@@ -26,10 +26,16 @@ struct GigiLiveActivityWidget: Widget {
                     )
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    ExpandedTrailingView(phase: context.state.phase)
+                    ExpandedTrailingView(
+                        phase: context.state.phase,
+                        isLocked: context.state.isIslandLocked
+                    )
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    ExpandedBottomView(phase: context.state.phase)
+                    ExpandedBottomView(
+                        phase: context.state.phase,
+                        isLocked: context.state.isIslandLocked
+                    )
                 }
             } compactLeading: {
                 CompactLeadingView(phase: context.state.phase)
@@ -37,10 +43,14 @@ struct GigiLiveActivityWidget: Widget {
                 CompactTrailingView(
                     message: displayMessage(state: context.state, isStale: context.isStale),
                     phase: context.state.phase,
-                    isStale: context.isStale
+                    isStale: context.isStale,
+                    isLocked: context.state.isIslandLocked
                 )
             } minimal: {
-                MinimalIslandView(phase: context.state.phase)
+                MinimalIslandView(
+                    phase: context.state.phase,
+                    isLocked: context.state.isIslandLocked
+                )
             }
             .widgetURL(deepLinkURL(for: context.state.phase))
             .keylineTint(GigiBrand.purple)
@@ -232,15 +242,20 @@ private struct CompactTrailingView: View {
     let message: String
     let phase: GigiPhase
     let isStale: Bool
+    let isLocked: Bool
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(message)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.95))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .contentTransition(.opacity)
+            IslandLockButton(isLocked: isLocked, compact: true)
+
+            if !isLocked {
+                Text(message)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .contentTransition(.opacity)
+            }
 
             if !isStale, phase != .done {
                 CompactTrailingPulseDot(color: phase.executingWarmColor)
@@ -263,9 +278,16 @@ private struct CompactTrailingPulseDot: View {
 
 private struct MinimalIslandView: View {
     let phase: GigiPhase
+    let isLocked: Bool
 
     var body: some View {
-        PhaseIconView(phase: phase, size: 13)
+        if isLocked {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(GigiBrand.purple)
+        } else {
+            PhaseIconView(phase: phase, size: 13)
+        }
     }
 }
 
@@ -333,12 +355,14 @@ private struct ExpandedCenterView: View {
 
 private struct ExpandedTrailingView: View {
     let phase: GigiPhase
+    let isLocked: Bool
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 3) {
             Text("GIGI")
                 .font(.system(size: 12, weight: .heavy, design: .rounded))
                 .foregroundStyle(GigiBrand.purple)
+            IslandLockButton(isLocked: isLocked, compact: true)
             Capsule()
                 .fill(phase.phaseRibbonTint.opacity(0.85))
                 .frame(width: 6, height: 6)
@@ -350,12 +374,15 @@ private struct ExpandedTrailingView: View {
 
 private struct ExpandedBottomView: View {
     let phase: GigiPhase
+    let isLocked: Bool
 
     var body: some View {
         VStack(spacing: 9) {
             PhaseProgressRibbon(phase: phase)
 
             HStack(spacing: 10) {
+                IslandLockButton(isLocked: isLocked, compact: false)
+
                 if phase == .muted {
                     Button(intent: GigiUnmutePresenceIntent()) {
                         Label("Unmute", systemImage: "mic.fill")
@@ -380,6 +407,41 @@ private struct ExpandedBottomView: View {
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
+    }
+}
+
+private struct IslandLockButton: View {
+    let isLocked: Bool
+    let compact: Bool
+
+    var body: some View {
+        Group {
+            if isLocked {
+                Button(intent: GigiUnlockIslandIntent()) {
+                    label(title: "Unlock", systemImage: "lock.fill")
+                }
+            } else {
+                Button(intent: GigiLockIslandIntent()) {
+                    label(title: "Lock", systemImage: "lock.open.fill")
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isLocked ? "Unlock GIGI Island" : "Lock GIGI Island")
+    }
+
+    @ViewBuilder
+    private func label(title: String, systemImage: String) -> some View {
+        if compact {
+            Image(systemName: systemImage)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(isLocked ? GigiBrand.purple : .white.opacity(0.86))
+        } else {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(isLocked ? GigiBrand.purple : .white.opacity(0.92))
+        }
     }
 }
 

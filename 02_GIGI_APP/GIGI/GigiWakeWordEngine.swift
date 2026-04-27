@@ -118,6 +118,13 @@ final class GigiWakeWordEngine {
                 guard let self else { return }
                 self.screenDarkTimer = nil
                 if self.isMonitoring {
+                    if GigiLiveActivityController.shared.isIslandLocked {
+                        // DI lock is explicit user intent to keep Presence reachable.
+                        // It keeps the existing background-audio wake session alive until
+                        // the same Island control unlocks it; no other activities are touched.
+                        print("GIGI WakeWord: app inactive but Island locked — keeping wake word alive")
+                        return
+                    }
                     print("GIGI WakeWord: app inactive 2 min — pausing to save battery")
                     self.stopMonitoringHard()
                 }

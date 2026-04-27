@@ -136,6 +136,7 @@ final class PresenceSessionController: ObservableObject {
             GigiSmartOrchestrator.shared.isPresenceActive = false
             GigiAudioManager.shared.presenceMode = false
             GigiAudioManager.shared.stopAll()
+            Task { await GigiLiveActivityController.shared.setIslandLocked(false) }
             return
         }
         state = .inactive
@@ -150,6 +151,7 @@ final class PresenceSessionController: ObservableObject {
         GigiAudioManager.shared.stopAll()
 
         Task {
+            await GigiLiveActivityController.shared.setIslandLocked(false)
             await GigiLiveActivityController.shared.endPresenceActivity()
             // Keep a passive island entry point, but no wake-word engine runs outside Presence.
             await GigiLiveActivityController.shared.startPersistentPill()
@@ -198,8 +200,58 @@ final class PresenceSessionController: ObservableObject {
                 self.unmuteFromIsland()
             case .stop:
                 self.stopFromIsland()
+            case .lockIsland:
+                self.lockIslandFromIsland()
+            case .unlockIsland:
+                self.unlockIslandFromIsland()
             }
         }
+    }
+
+    private func lockIslandFromIsland() {
+        // User-pinned Dynamic Island is a session-scoped hold: it keeps the Live
+        // Activity from visually falling back to Ready and keeps Presence timers awake.
+        inactivityTask?.cancel()
+        Task { await GigiLiveActivityController.shared.setIslandLocked(true) }
+        if isActive, state != .muted {
+            GigiAudioManager.shared.presenceMode = true
+            GigiAudioManager.shared.startWakeWordListening()
+        }
+    }
+
+    private func unlockIslandFromIsland() {
+        Task {
+            await GigiLiveActivityController.shared.setIslandLocked(false)
+            await reconcileIslandAfterUnlock()
+        }
+    }
+
+    private func reconcileIslandAfterUnlock() async {
+        if isActive {
+            resetInactivityTimer()
+            switch state {
+            case .sleeping:
+                await GigiLiveActivityController.shared.updatePresence(state: .sleeping, message: "Ready — say Hey GIGI")
+            case .listening:
+                await GigiLiveActivityController.shared.updatePresence(state: .listening, message: "I heard you")
+            case .thinking:
+                await GigiLiveActivityController.shared.updatePresence(state: .thinking, message: "Thinking about it", transcript: lastTranscript)
+            case .speaking:
+                await GigiLiveActivityController.shared.updatePresence(state: .speaking, message: "Say GIGI or tap to interrupt")
+            case .muted:
+                await GigiLiveActivityController.shared.updatePresence(state: .muted, message: "Muted — tap Mute to resume")
+            case .inactive:
+                await GigiLiveActivityController.shared.updateMonitoringPill(state: .sleeping, message: "Ready — say Hey GIGI")
+            case .error(let message):
+                await GigiLiveActivityController.shared.updatePresence(state: .error, message: message)
+            }
+            return
+        }
+
+        await GigiLiveActivityController.shared.updateMonitoringPill(
+            state: .sleeping,
+            message: standaloneMuted ? "Muted — tap Mute to resume" : "Ready — say Hey GIGI"
+        )
     }
 
     private func toggleMuteFromIsland() {
@@ -239,6 +291,7 @@ final class PresenceSessionController: ObservableObject {
 
     private func stopFromIsland() {
         standaloneMuted = false
+        Task { await GigiLiveActivityController.shared.setIslandLocked(false) }
         if isActive {
             stopSession()
             return
@@ -298,6 +351,9 @@ final class PresenceSessionController: ObservableObject {
         // In always-available mode GIGI must stay Ready all day. Silence only returns
         // the audio state to wake-word standby; it must not end the Presence session.
         guard !Self.isAlwaysAvailableEnabled else { return }
+        // Dynamic Island lock is also explicit user intent to keep this session alive
+        // until unlock; do not let the legacy inactivity timeout tear down wake word.
+        guard !GigiLiveActivityController.shared.isIslandLocked else { return }
         inactivityTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(nanoseconds: UInt64(inactivityTimeout * 1_000_000_000))
