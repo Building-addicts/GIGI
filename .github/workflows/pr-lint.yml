@@ -1,0 +1,113 @@
+name: PR Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  issues: read
+
+jobs:
+  lint:
+    name: Validate PR title + body
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Conventional Commits title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            chore
+            refactor
+            test
+            perf
+            ci
+            build
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            Il subject del titolo deve iniziare in minuscolo.
+            Esempi validi:
+              feat(ios): add Talking Session continuous mode
+              fix(harness): empty speech guard
+
+      - name: Check PR body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const errors = [];
+
+            // 1. Closes / Refs an issue
+            if (!/(close[sd]?|fixe[sd]?|resolve[sd]?|refs?)\s+#\d+/i.test(body)) {
+              errors.push('❌ Manca `Closes #N` o `Refs #N` nel body. Linka una issue del Project.');
+            }
+
+            // 2. Section "What" non vuota
+            const whatMatch = body.match(/##\s*What\s*\n+([^\n#]+)/i);
+            if (!whatMatch || whatMatch[1].trim().length < 10) {
+              errors.push('❌ Sezione `## What` mancante o troppo corta (min 10 caratteri).');
+            }
+
+            // 3. Section "Why" non vuota
+            const whyMatch = body.match(/##\s*Why\s*\n+([^\n#]+)/i);
+            if (!whyMatch || whyMatch[1].trim().length < 10) {
+              errors.push('❌ Sezione `## Why` mancante o troppo corta.');
+            }
+
+            // 4. Section "Test plan" con almeno un checkbox
+            const testMatch = body.match(/##\s*Test plan/i);
+            if (!testMatch) {
+              errors.push('❌ Sezione `## Test plan` mancante.');
+            } else {
+              const afterTest = body.substring(body.search(/##\s*Test plan/i));
+              if (!/-\s*\[[ x]\]/i.test(afterTest)) {
+                errors.push('❌ Sezione `## Test plan` deve avere almeno un checkbox `- [ ]` o `- [x]`.');
+              }
+            }
+
+            // 5. Diff size warning (non bloccante)
+            const additions = context.payload.pull_request.additions || 0;
+            const deletions = context.payload.pull_request.deletions || 0;
+            const total = additions + deletions;
+            const warning = total > 400
+              ? `⚠️ Diff grande (${total} righe). Considera di splittare il PR in 2+.`
+              : '';
+
+            const commentBody = errors.length > 0
+              ? `## ❌ PR Lint failed\n\n${errors.join('\n')}\n\n${warning}\n\nFixa il body del PR e riprova. Vedi \`.github/PULL_REQUEST_TEMPLATE.md\`.`
+              : `## ✅ PR Lint passed\n\n${warning}`;
+
+            // Comment (riusa se già esiste)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('PR Lint')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: commentBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: commentBody,
+              });
+            }
+
+            if (errors.length > 0) {
+              core.setFailed('PR body validation failed');
+            }
