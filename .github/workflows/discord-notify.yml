@@ -4,9 +4,9 @@ on:
   issue_comment:
     types: [created]
   issues:
-    types: [opened, labeled, closed]
+    types: [opened, labeled, closed, reopened]
   pull_request:
-    types: [opened, closed]
+    types: [opened, closed, ready_for_review]
 
 permissions:
   issues: read
@@ -16,34 +16,125 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
+      # ────────────────────────────────────────────────────────────
+      # 1. Comment su #19 LIVE FEED — Discord embed colorato
+      # Parsa l'emoji iniziale del commento per dedurre TYPE + COLOR
+      # ────────────────────────────────────────────────────────────
       - name: Issue comment on LIVE FEED 19
         if: github.event_name == 'issue_comment' && github.event.issue.number == 19
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           AUTHOR: ${{ github.event.comment.user.login }}
+          AUTHOR_AVATAR: ${{ github.event.comment.user.avatar_url }}
           BODY: ${{ github.event.comment.body }}
           URL: ${{ github.event.comment.html_url }}
+          REPO: ${{ github.repository }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          SHORT=$(printf '%s' "$BODY" | head -c 1500)
-          CONTENT=$(printf '📊 **LIVE FEED** — @%s\n%s\n\n[apri commento](%s)' "$AUTHOR" "$SHORT" "$URL")
-          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+
+          # Parsa il body per estrarre referenced issue + tipo evento
+          ISSUE_REF=$(printf '%s' "$BODY" | grep -oE '#[0-9]+' | head -1 || echo '')
+          FIRST_LINE=$(printf '%s' "$BODY" | sed -n '1p')
+          REST=$(printf '%s' "$BODY" | tail -n +2)
+
+          # Mappa emoji → titolo + colore (Discord int color)
+          TITLE="📊 Live Feed"
+          COLOR=10181046
+          TAG="📊 update"
+          case "$BODY" in
+            *🚀*)  TITLE="🚀 Inizio lavoro";    COLOR=3447003;  TAG="🚀 START" ;;
+            *✅*)  TITLE="✅ Build OK";          COLOR=3066993;  TAG="✅ BUILD" ;;
+            *❌*)  TITLE="❌ Build FAILED";      COLOR=15158332; TAG="❌ FAIL"  ;;
+            *🟢*)  TITLE="🟢 AC verificati";    COLOR=5763719;  TAG="🟢 TEST"  ;;
+            *🐛*)  TITLE="🐛 Bug trovato";      COLOR=15158332; TAG="🐛 BUG"   ;;
+            *📤*)  TITLE="📤 PR aperto";        COLOR=3447003;  TAG="📤 PR"    ;;
+            *🎉*)  TITLE="🎉 Mergiato";         COLOR=3066993;  TAG="🎉 MERGE" ;;
+            *⏸*)   TITLE="⏸️ Stand-by";         COLOR=15844367; TAG="⏸️ WAIT"  ;;
+          esac
+
+          DESC=$(printf '%s\n%s' "$FIRST_LINE" "$REST" | head -c 1500)
+
+          PAYLOAD=$(jq -n \
+            --arg title "$TITLE" \
+            --arg desc "$DESC" \
+            --arg url "$URL" \
+            --argjson color "$COLOR" \
+            --arg author "$AUTHOR" \
+            --arg avatar "$AUTHOR_AVATAR" \
+            --arg ref "${ISSUE_REF:-—}" \
+            --arg tag "$TAG" \
+            --arg repo "$REPO" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $desc,
+                color: $color,
+                author: { name: $author, icon_url: $avatar },
+                fields: [
+                  { name: "Tag",   value: $tag, inline: true },
+                  { name: "Issue", value: $ref, inline: true },
+                  { name: "Repo",  value: $repo, inline: true }
+                ],
+                footer: { text: "GIGI Lancio v1 · LIVE FEED" },
+                timestamp: now | todate
+              }]
+            }')
           curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
+      # ────────────────────────────────────────────────────────────
+      # 2. Bug issue aperta
+      # ────────────────────────────────────────────────────────────
       - name: Bug issue opened
         if: github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'bug')
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           NUM: ${{ github.event.issue.number }}
           TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
           URL: ${{ github.event.issue.html_url }}
           AUTHOR: ${{ github.event.issue.user.login }}
+          AUTHOR_AVATAR: ${{ github.event.issue.user.avatar_url }}
+          ASSIGNEES: ${{ join(github.event.issue.assignees.*.login, ', ') }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          CONTENT=$(printf '🐛 **BUG APERTO** — #%s\n**%s**\nby @%s\n%s' "$NUM" "$TITLE" "$AUTHOR" "$URL")
-          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+
+          DESC=$(printf '%s' "$BODY" | head -c 1200)
+          [ -z "$DESC" ] && DESC="(no description)"
+          [ -z "$ASSIGNEES" ] && ASSIGNEES="(unassigned)"
+
+          PAYLOAD=$(jq -n \
+            --arg title "🐛 Bug Aperto: $TITLE" \
+            --arg desc "$DESC" \
+            --arg url "$URL" \
+            --arg author "$AUTHOR" \
+            --arg avatar "$AUTHOR_AVATAR" \
+            --arg num "#$NUM" \
+            --arg assignees "$ASSIGNEES" \
+            --arg labels "$LABELS" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $desc,
+                color: 15158332,
+                author: { name: $author, icon_url: $avatar },
+                fields: [
+                  { name: "Tag",       value: "🐛 BUG",      inline: true },
+                  { name: "Issue",     value: $num,          inline: true },
+                  { name: "Assignees", value: $assignees,    inline: true },
+                  { name: "Labels",    value: $labels,       inline: false }
+                ],
+                footer: { text: "GIGI Lancio v1 · Sub-issue automatica" },
+                timestamp: now | todate
+              }]
+            }')
           curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
+      # ────────────────────────────────────────────────────────────
+      # 3. Release-blocker label
+      # ────────────────────────────────────────────────────────────
       - name: Release blocker labeled
         if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'release-blocker'
         env:
@@ -51,26 +142,86 @@ jobs:
           NUM: ${{ github.event.issue.number }}
           TITLE: ${{ github.event.issue.title }}
           URL: ${{ github.event.issue.html_url }}
+          ASSIGNEES: ${{ join(github.event.issue.assignees.*.login, ', ') }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          CONTENT=$(printf '🚨 **RELEASE-BLOCKER** — #%s\n**%s**\n%s' "$NUM" "$TITLE" "$URL")
-          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+          [ -z "$ASSIGNEES" ] && ASSIGNEES="(unassigned)"
+
+          PAYLOAD=$(jq -n \
+            --arg title "🚨 Release-Blocker: $TITLE" \
+            --arg url "$URL" \
+            --arg num "#$NUM" \
+            --arg assignees "$ASSIGNEES" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 10038562,
+                fields: [
+                  { name: "Tag",       value: "🚨 BLOCKER", inline: true },
+                  { name: "Issue",     value: $num,         inline: true },
+                  { name: "Assignees", value: $assignees,   inline: true }
+                ],
+                footer: { text: "GIGI Lancio v1 · Da chiudere prima del lancio" },
+                timestamp: now | todate
+              }]
+            }')
           curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
+      # ────────────────────────────────────────────────────────────
+      # 4. PR aperto
+      # ────────────────────────────────────────────────────────────
       - name: PR opened
-        if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review')
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           NUM: ${{ github.event.pull_request.number }}
           TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
           URL: ${{ github.event.pull_request.html_url }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          ADD: ${{ github.event.pull_request.additions }}
+          DEL: ${{ github.event.pull_request.deletions }}
+          FILES: ${{ github.event.pull_request.changed_files }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          CONTENT=$(printf '📤 **PR APERTO** — #%s\n**%s**\nby @%s\n%s' "$NUM" "$TITLE" "$AUTHOR" "$URL")
-          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+
+          DESC=$(printf '%s' "$BODY" | head -c 1200)
+          [ -z "$DESC" ] && DESC="(no description)"
+
+          PAYLOAD=$(jq -n \
+            --arg title "📤 PR Aperto: $TITLE" \
+            --arg desc "$DESC" \
+            --arg url "$URL" \
+            --arg author "$AUTHOR" \
+            --arg avatar "$AUTHOR_AVATAR" \
+            --arg num "#$NUM" \
+            --arg branch "$BRANCH" \
+            --arg diff "+$ADD / -$DEL ($FILES file)" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $desc,
+                color: 3447003,
+                author: { name: $author, icon_url: $avatar },
+                fields: [
+                  { name: "Tag",    value: "📤 PR",  inline: true },
+                  { name: "PR",     value: $num,    inline: true },
+                  { name: "Branch", value: $branch, inline: true },
+                  { name: "Diff",   value: $diff,   inline: false }
+                ],
+                footer: { text: "GIGI Lancio v1 · In attesa review" },
+                timestamp: now | todate
+              }]
+            }')
           curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
+      # ────────────────────────────────────────────────────────────
+      # 5. PR mergiato
+      # ────────────────────────────────────────────────────────────
       - name: PR merged
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
         env:
@@ -78,12 +229,46 @@ jobs:
           NUM: ${{ github.event.pull_request.number }}
           TITLE: ${{ github.event.pull_request.title }}
           URL: ${{ github.event.pull_request.html_url }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
+          MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          ADD: ${{ github.event.pull_request.additions }}
+          DEL: ${{ github.event.pull_request.deletions }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          CONTENT=$(printf '🎉 **PR MERGIATO** — #%s\n**%s**\n%s' "$NUM" "$TITLE" "$URL")
-          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+
+          PAYLOAD=$(jq -n \
+            --arg title "🎉 PR Mergiato: $TITLE" \
+            --arg url "$URL" \
+            --arg author "$AUTHOR" \
+            --arg avatar "$AUTHOR_AVATAR" \
+            --arg num "#$NUM" \
+            --arg branch "$BRANCH" \
+            --arg merger "$MERGED_BY" \
+            --arg diff "+$ADD / -$DEL" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 3066993,
+                author: { name: $author, icon_url: $avatar },
+                fields: [
+                  { name: "Tag",       value: "🎉 MERGE", inline: true },
+                  { name: "PR",        value: $num,       inline: true },
+                  { name: "Branch",    value: $branch,    inline: true },
+                  { name: "Mergiato da", value: $merger, inline: true },
+                  { name: "Diff",      value: $diff,      inline: true }
+                ],
+                footer: { text: "GIGI Lancio v1 · Done" },
+                timestamp: now | todate
+              }]
+            }')
           curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
+      # ────────────────────────────────────────────────────────────
+      # 6. Issue chiusa (non solo via PR)
+      # ────────────────────────────────────────────────────────────
       - name: Issue closed
         if: github.event_name == 'issues' && github.event.action == 'closed'
         env:
@@ -91,8 +276,62 @@ jobs:
           NUM: ${{ github.event.issue.number }}
           TITLE: ${{ github.event.issue.title }}
           URL: ${{ github.event.issue.html_url }}
+          CLOSER: ${{ github.event.sender.login }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          CONTENT=$(printf '✅ **Issue chiusa** — #%s\n%s\n%s' "$NUM" "$TITLE" "$URL")
-          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+
+          PAYLOAD=$(jq -n \
+            --arg title "✅ Issue Chiusa: $TITLE" \
+            --arg url "$URL" \
+            --arg num "#$NUM" \
+            --arg closer "$CLOSER" \
+            --arg labels "$LABELS" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 5763719,
+                fields: [
+                  { name: "Tag",         value: "✅ DONE", inline: true },
+                  { name: "Issue",       value: $num,     inline: true },
+                  { name: "Chiusa da",   value: $closer,  inline: true },
+                  { name: "Labels",      value: ($labels | if . == "" then "—" else . end), inline: false }
+                ],
+                footer: { text: "GIGI Lancio v1" },
+                timestamp: now | todate
+              }]
+            }')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+
+      # ────────────────────────────────────────────────────────────
+      # 7. Issue riaperta
+      # ────────────────────────────────────────────────────────────
+      - name: Issue reopened
+        if: github.event_name == 'issues' && github.event.action == 'reopened'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          NUM: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          URL: ${{ github.event.issue.html_url }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
+
+          PAYLOAD=$(jq -n \
+            --arg title "🔄 Issue Riaperta: $TITLE" \
+            --arg url "$URL" \
+            --arg num "#$NUM" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 15844367,
+                fields: [
+                  { name: "Tag",   value: "🔄 REOPEN", inline: true },
+                  { name: "Issue", value: $num,        inline: true }
+                ],
+                footer: { text: "GIGI Lancio v1" },
+                timestamp: now | todate
+              }]
+            }')
           curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
