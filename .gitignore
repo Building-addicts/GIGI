@@ -9,6 +9,8 @@
 02_GIGI_APP/Config.xcconfig
 
 # Contesto dev privato (host MacInCloud, workflow SSH) — non committare
-/CLAUDE.md
+# CLAUDE.md (root) ora è team-shared (committato). Il contesto privato vive in CLAUDE.local.md
+/CLAUDE.local.md
 bug/
 *.gigi-secret.txt
+.playwright-mcp/
