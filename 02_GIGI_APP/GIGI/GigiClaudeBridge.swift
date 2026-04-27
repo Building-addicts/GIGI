@@ -242,10 +242,10 @@ final class GigiClaudeBridge {
 
         // --- MVP Preferences (sub #52) — first so they sit at the top of the
         //     8 KB snapshot Claude sees, where attention is highest ---
-        let prefs = await GigiUserProfile.shared.mvpPreferencesContext()
-        if !prefs.isEmpty {
-            sections.append(prefs)
-            GigiDebugLogger.log("LLM[bridge] systemPrompt prefix=\(prefs.prefix(80))")
+        let mvpPrefs = await GigiUserProfile.shared.mvpPreferencesContext()
+        if !mvpPrefs.isEmpty {
+            sections.append(mvpPrefs)
+            GigiDebugLogger.log("LLM[bridge] systemPrompt prefix=\(mvpPrefs.prefix(80))")
         }
 
         // --- Profile ---
