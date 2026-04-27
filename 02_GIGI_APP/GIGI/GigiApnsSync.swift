@@ -26,6 +26,8 @@ import CryptoKit
 
 @MainActor
 enum GigiApnsSync {
+    private static var lastFailureAt: Date?
+    private static let retryCooldown: TimeInterval = 60
 
     // MARK: - Trigger pubblici
 
@@ -76,6 +78,12 @@ enum GigiApnsSync {
         if lastSynced == expected {
             return  // già in sync con questo backend + questo token
         }
+        if reason == "app-active",
+           let lastFailureAt,
+           Date().timeIntervalSince(lastFailureAt) < retryCooldown {
+            GigiDebugLogger.log("APNS sync: skipped after recent failure (reason=\(reason))")
+            return
+        }
 
         GigiDebugLogger.log("APNS sync: tentativo (reason=\(reason))")
         let bundleId = Bundle.main.bundleIdentifier
@@ -84,10 +92,12 @@ enum GigiApnsSync {
         )
         switch result {
         case .success:
+            lastFailureAt = nil
             GigiKeychain.save(expected, forKey: GigiKeychain.Key.harnessApnsSyncedTo)
             GigiDebugLogger.log("APNS sync: OK (reason=\(reason))")
         case .failure(let e):
             // Non tocchiamo harnessApnsSyncedTo → al prossimo trigger ritenterà.
+            lastFailureAt = Date()
             GigiDebugLogger.log("APNS sync: fallito (reason=\(reason)): \(e)")
         }
     }

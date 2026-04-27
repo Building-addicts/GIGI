@@ -12,6 +12,8 @@ const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, '..', 'se
 const LEASES_DIR = process.env.HARNESS_LOGS_DIR || path.join(__dirname, '..', 'server', 'logs');
 const LEASES_FILE = path.join(LEASES_DIR, 'browser_leases.json');
 const LOCK_FILE = LEASES_FILE + '.lock';
+const PASSPORT_INSTANCE = 'passport';
+const PANEL_URL = process.env.HARNESS_PANEL_URL || 'http://127.0.0.1:7777';
 const LEASE_TTL_MS = 10 * 60 * 1000;
 const LOCK_STALE_MS = 10 * 1000;
 
@@ -71,7 +73,14 @@ function loadInstances() {
     const list = Array.isArray(br.instances) && br.instances.length
       ? br.instances
       : [{ name: 'main', cdp_port: br.cdp_port || 9224 }];
-    return list.map(i => ({ name: i.name, cdp_url: `http://127.0.0.1:${i.cdp_port}` }));
+    const out = list.map(i => ({ name: i.name, cdp_url: `http://127.0.0.1:${i.cdp_port}` }));
+    if (!out.some(i => i.name === PASSPORT_INSTANCE)) {
+      const usedPorts = new Set(list.map(i => Number(i.cdp_port)).filter(Boolean));
+      let passportPort = Number(br.passport_cdp_port || 9234);
+      while (usedPorts.has(passportPort)) passportPort += 1;
+      out.unshift({ name: PASSPORT_INSTANCE, cdp_url: `http://127.0.0.1:${passportPort}` });
+    }
+    return out;
   } catch {
     return [{ name: 'main', cdp_url: 'http://127.0.0.1:9224' }];
   }
@@ -117,8 +126,41 @@ export async function release(taskId) {
 // ─────────────────────────────────────────────────────────────
 // Session wrapper: Playwright connectOverCDP + ContextPage + primitives.
 // ─────────────────────────────────────────────────────────────
-export async function openSession(cdpUrl) {
-  const browser = await chromium.connectOverCDP(cdpUrl);
+
+async function tryAutostartInstance(name) {
+  if (!name) return false;
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 3000);
+    const r = await fetch(`${PANEL_URL}/api/browser/start?instance=${encodeURIComponent(name)}`, { method: 'POST', signal: ac.signal });
+    clearTimeout(t);
+    if (!r.ok) return false;
+  } catch { return false; }
+  for (let i = 0; i < 20; i++) {
+    await sleep(500);
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 1500);
+      const r = await fetch(`${PANEL_URL}/api/browser/status?instance=${encodeURIComponent(name)}`, { signal: ac.signal });
+      clearTimeout(t);
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.alive) return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
+export async function openSession(cdpUrl, instanceName = null) {
+  let browser;
+  try {
+    browser = await chromium.connectOverCDP(cdpUrl);
+  } catch (e) {
+    const started = await tryAutostartInstance(instanceName);
+    if (!started) throw e;
+    browser = await chromium.connectOverCDP(cdpUrl);
+  }
   const ctx = browser.contexts()[0] || await browser.newContext();
   const pages = ctx.pages();
   const page = pages.find(p => !p.url().startsWith('devtools://')) || await ctx.newPage();

@@ -1,4 +1,6 @@
-// WebSocket /ws/ios/stream?deviceId=...&token=...
+// WebSocket /ws/ios/stream?deviceId=...
+// Auth: Authorization: Bearer <secret>. The shared secret is intentionally
+// not accepted in the query string to avoid leaking it through URLs/logs.
 // Broadcast degli eventi interim (thoughts, tool calls, progress) per un device
 // iOS mentre il runClaude sottostante è in volo. Più client possono connettersi
 // allo stesso deviceId (es. app + dashboard admin).
@@ -44,7 +46,7 @@ export function attachWebSocketServer(httpServer, cfg) {
       socket.destroy();
       return;
     }
-    const token = url.searchParams.get('token') || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
     const deviceId = url.searchParams.get('deviceId') || '';
     const expected = getSharedSecret(cfg);
     if (!expected || token !== expected) {

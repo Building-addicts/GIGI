@@ -14,6 +14,18 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, '..', 'server', 'config.json');
+const PASSPORT_INSTANCE = 'passport';
+
+function addPassportInstance(result, br, list) {
+  if (result.has(PASSPORT_INSTANCE)) return;
+  const usedPorts = new Set((list || []).map(i => Number(i.cdp_port)).filter(Boolean));
+  let passportPort = Number(br.passport_cdp_port || 9234);
+  while (usedPorts.has(passportPort)) passportPort += 1;
+  result.set(PASSPORT_INSTANCE, {
+    name: PASSPORT_INSTANCE,
+    cdp_url: `http://127.0.0.1:${passportPort}`
+  });
+}
 
 function loadInstances() {
   const result = new Map();
@@ -26,6 +38,7 @@ function loadInstances() {
     for (const inst of list) {
       result.set(inst.name, { name: inst.name, cdp_url: `http://127.0.0.1:${inst.cdp_port}` });
     }
+    addPassportInstance(result, br, list);
   } catch {
     const port = process.env.HARNESS_CDP_URL?.match(/:(\d+)/)?.[1] || 9224;
     result.set('main', { name: 'main', cdp_url: `http://127.0.0.1:${port}` });
@@ -198,6 +211,32 @@ process.on('SIGINT', () => { releaseOwnLeasesSync(); process.exit(0); });
 // Playwright glue
 // ═══════════════════════════════════════════════════════════════════
 
+const PANEL_URL = process.env.HARNESS_PANEL_URL || 'http://127.0.0.1:7777';
+
+async function tryAutostartInstance(name) {
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 3000);
+    const r = await fetch(`${PANEL_URL}/api/browser/start?instance=${encodeURIComponent(name)}`, { method: 'POST', signal: ac.signal });
+    clearTimeout(t);
+    if (!r.ok) return false;
+  } catch { return false; }
+  for (let i = 0; i < 20; i++) {
+    await sleep(500);
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 1500);
+      const r = await fetch(`${PANEL_URL}/api/browser/status?instance=${encodeURIComponent(name)}`, { signal: ac.signal });
+      clearTimeout(t);
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.alive) return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
 async function getBrowser(instanceName) {
   const name = instanceName || 'main';
   if (!INSTANCES.has(name)) throw new Error(`Istanza browser "${name}" non configurata. Disponibili: ${[...INSTANCES.keys()].join(', ')}`);
@@ -212,7 +251,20 @@ async function getBrowser(instanceName) {
     browser.on('disconnected', () => browsers.delete(name));
     return entry;
   } catch (e) {
-    throw new Error(`Cannot connect to Harness browser "${name}" at ${cdp}. Is Chrome running with --remote-debugging-port? Original error: ${e.message}`);
+    const started = await tryAutostartInstance(name);
+    if (started) {
+      try {
+        const browser = await chromium.connectOverCDP(cdp);
+        const context = browser.contexts()[0] || await browser.newContext();
+        const entry = { browser, context };
+        browsers.set(name, entry);
+        browser.on('disconnected', () => browsers.delete(name));
+        return entry;
+      } catch (e2) {
+        throw new Error(`Autostarted "${name}" but still cannot connect at ${cdp}: ${e2.message}`);
+      }
+    }
+    throw new Error(`Cannot connect to Harness browser "${name}" at ${cdp}. Autostart via panel failed. Original error: ${e.message}`);
   }
 }
 

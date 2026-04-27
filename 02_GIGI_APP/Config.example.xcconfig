@@ -1,6 +1,6 @@
 // Copia questo file come `Config.xcconfig` e sostituisci con la tua chiave.
 // `Config.xcconfig` è in .gitignore e non va committato.
-GEMINI_API_KEY = AIzaSyBttOEw-VU8XtXlrbOiTgWLAPtN4edlOxI
+GEMINI_API_KEY = YOUR_GEMINI_API_KEY_HERE
 // Picovoice Console (wake word — https://console.picovoice.ai/)
 PICOVOICE_ACCESS_KEY =
 // GIGI_Gateway iCloud install link (onboarding “Get shortcut”). Override if you publish a new shortcut.

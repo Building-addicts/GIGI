@@ -95,7 +95,7 @@ final class GigiBrainPipeline {
         Task { @MainActor in
             GigiSmartOrchestrator.shared.showBanner("⚠️ Offline — limited responses", autoHideAfter: 3)
         }
-        return localFallback(text: text)
+        return localFallback(text: text, precomputed: localIntent)
     }
 
     // MARK: - Refine Foundation / Gemini with deterministic NLU
@@ -230,8 +230,8 @@ final class GigiBrainPipeline {
 
     // MARK: - Level 3 implementation
 
-    private func localFallback(text: String) -> GigiAgentResponse {
-        let intent   = nlu.classify(text)
+    private func localFallback(text: String, precomputed: GigiIntent) -> GigiAgentResponse {
+        let intent   = precomputed   // reuse already-classified intent from resolve()
         let entities = nlu.extractEntities(from: text)
         let enriched = Self.enrichIntent(intent, with: entities, text: text)
 

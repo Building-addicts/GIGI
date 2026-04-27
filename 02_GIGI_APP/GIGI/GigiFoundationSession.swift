@@ -70,7 +70,7 @@ final class GigiFoundationSession {
         guard !permanentlyDisabled else { return }
         let model = SystemLanguageModel.default
         guard model.availability == .available else {
-            print("GIGI Foundation: Apple Intelligence not available — enable it in Settings → Apple Intelligence & Siri.")
+            print("GIGI Foundation: optional Apple Intelligence unavailable — using Groq/local fallback.")
             isAvailable = false
             return
         }

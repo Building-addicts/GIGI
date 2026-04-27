@@ -21,11 +21,12 @@ struct SettingsView: View {
     @State private var groqKey = ""
     @State private var geminiKey = ""
     @State private var showQRScanner = false
-    @State private var picoKey = ""
     @State private var showKey = false
     @State private var connectionStatus: String = "—"
     @State private var isTestingConnection = false
-    @State private var wakeWordEnabled = UserDefaults.standard.bool(forKey: GigiWakeWordEngine.userDefaultsEnabledKey)
+    @AppStorage(GigiWakeWordEngine.userDefaultsEnabledKey) private var wakeWordEnabled = false
+    @ObservedObject private var audioManager = GigiAudioManager.shared
+    @ObservedObject private var presence = PresenceSessionController.shared
     @State private var ttsRate: Double = 0.52
     @State private var memoryCount = 0
     @State private var showClearMemoryAlert = false
@@ -396,36 +397,59 @@ struct SettingsView: View {
 
     private var wakeWordSection: some View {
         Section {
-            Toggle("Enable Wake Word", isOn: $wakeWordEnabled)
+            Toggle("Presence: Always Available", isOn: $wakeWordEnabled)
                 .tint(.purple)
                 .onChange(of: wakeWordEnabled) { _, new in
-                    GigiWakeWordEngine.shared.setUserEnabled(new)
+                    PresenceSessionController.shared.setAlwaysAvailable(new)
                 }
+
+            Text("Keeps a Presence session visible through the Live Activity. Wake word runs only while iOS keeps the app eligible; if iOS pauses it, tap the Live Activity or app shortcut to resume.")
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             HStack {
                 Text("Keyword")
                 Spacer()
-                let hasCustom = Bundle.main.path(forResource: "HeyGIGI", ofType: "ppn") != nil
-                Text(hasCustom ? "\"Hey GIGI\"" : "\"Jarvis\" (built-in)")
+                Text("\"Hey GIGI\" / \"GIGI\"")
                     .foregroundColor(.secondary)
                     .font(.subheadline)
             }
 
-            let picoSet = !GigiConfig.picovoiceAccessKey.isEmpty
             HStack {
-                Text("Picovoice Key")
+                Text("Audio state")
                 Spacer()
-                Image(systemName: picoSet ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundColor(picoSet ? .green : .orange)
-                Text(picoSet ? "Set" : "Required for custom keyword")
-                    .foregroundColor(picoSet ? .green : .orange)
+                Text(audioStateLabel)
+                    .foregroundColor(.secondary)
+                    .font(.subheadline.monospaced())
+            }
+
+            HStack {
+                Text("Wake engine")
+                Spacer()
+                Text(audioManager.wakeWordEngineRunning ? "Running" : "Stopped")
+                    .foregroundColor(audioManager.wakeWordEngineRunning ? .green : .secondary)
+                    .font(.subheadline)
+            }
+
+            if let err = audioManager.lastWakeWordError {
+                Label(err, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
+                    .foregroundColor(.orange)
             }
         } header: {
-            Text("🎙️ Wake Word")
+            Text("🎙️ Presence")
         } footer: {
-            Text("Requires PICOVOICE_ACCESS_KEY in Config.xcconfig. For \"Hey GIGI\" add HeyGIGI.ppn to bundle.")
+            Text("Say \"Hey GIGI\" or \"GIGI\" while Presence is Ready. Ready does not mean continuous recording; Listening appears only during active capture.")
                 .font(.caption)
+        }
+    }
+
+    private var audioStateLabel: String {
+        switch audioManager.state {
+        case .idle: return presence.isActive ? "Ready" : "Off"
+        case .wakeWordListening: return "Ready"
+        case .recording: return "Listening"
+        case .speaking: return "Speaking"
         }
     }
 

@@ -229,8 +229,8 @@ final class GigiRealtimeEngine: @unchecked Sendable {
 
     private func connectLocked() {
         let apiKey = GigiConfig.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !apiKey.isEmpty, apiKey != "$(GEMINI_API_KEY)" else {
-            print("GIGI Realtime: skip connect — GEMINI_API_KEY mancante")
+        guard !apiKey.isEmpty else {
+            print("GIGI Realtime: skip connect — Gemini key mancante in Keychain")
             return
         }
 
@@ -692,7 +692,7 @@ final class GigiRealtimeEngine: @unchecked Sendable {
 
     private func startStreamingOnMain() {
         guard isStreamingMic == false else { return }
-        guard isConnectedFlag else {
+        guard stateLock.withLock({ isConnectedFlag }) else {
             print("GIGI Realtime: startStreaming — socket non pronto")
             return
         }
@@ -701,28 +701,29 @@ final class GigiRealtimeEngine: @unchecked Sendable {
 
         let engine = AVAudioEngine()
         let input = engine.inputNode
+
+        // Reset stale hardware format before querying — same fix as GigiVADEngine / GigiWakeWordEngine.
+        input.removeTap(onBus: 0)
+        engine.reset()
+
         let inFormat = input.outputFormat(forBus: 0)
-        
         guard inFormat.channelCount > 0 else {
             print("GIGI Realtime: errore — formato audio non valido (permesso microfono negato?)")
             GigiAudioSequestrator.shared.releaseControl()
             return
         }
 
-        guard let outFormat = AVAudioFormat(
+        streamingEngine = engine
+        // streamingConverter is built lazily in downsample() and rebuilt on format change.
+        // Pre-warm it here so the first tap callback doesn't pay the allocation cost.
+        if let outFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
             sampleRate: targetSampleRate,
             channels: 1,
             interleaved: true
-        ),
-        let converter = AVAudioConverter(from: inFormat, to: outFormat) else {
-            print("GIGI Realtime: impossibile creare AVAudioConverter 16 kHz int16")
-            GigiAudioSequestrator.shared.releaseControl()
-            return
+        ), let converter = AVAudioConverter(from: inFormat, to: outFormat) {
+            streamingConverter = converter
         }
-
-        streamingEngine = engine
-        streamingConverter = converter
         pcmAccum.removeAll(keepingCapacity: true)
         vadSilenceSeconds = 0
         vadAllowsSend = true
@@ -730,7 +731,9 @@ final class GigiRealtimeEngine: @unchecked Sendable {
 
         input.removeTap(onBus: 0)
         let bufferFrames: AVAudioFrameCount = 4096
-        input.installTap(onBus: 0, bufferSize: bufferFrames, format: inFormat) { [weak self] buffer, _ in
+        // nil format: AVAudioEngine infers actual hardware format at tap-install time.
+        // Explicit format after reset() can return stale data → NSException crash.
+        input.installTap(onBus: 0, bufferSize: bufferFrames, format: nil) { [weak self] buffer, _ in
             self?.handleStreamingTap(buffer: buffer)
         }
 
@@ -759,9 +762,9 @@ final class GigiRealtimeEngine: @unchecked Sendable {
             streamingEngine?.stop()
         }
         streamingEngine = nil
-        streamingConverter = nil
 
         streamingStateLock.lock()
+        streamingConverter = nil
         pcmAccum.removeAll(keepingCapacity: false)
         vadSilenceSeconds = 0
         vadAllowsSend = true
@@ -841,7 +844,9 @@ final class GigiRealtimeEngine: @unchecked Sendable {
             self.vadSilenceSeconds = 0
             if !text.isEmpty {
                 print("GIGI Realtime: utterance → pipeline (\(text.prefix(80))…)")
-                self.onStreamingUtteranceComplete?(text)
+                DispatchQueue.main.async {
+                    self.onStreamingUtteranceComplete?(text)
+                }
             }
         }
     }
@@ -850,7 +855,11 @@ final class GigiRealtimeEngine: @unchecked Sendable {
 
     /// PCM buffer → PCM Int16, 16 kHz, mono Data. Reuses `streamingConverter`; recreates on format change.
     private func downsample(_ buffer: AVAudioPCMBuffer) -> Data? {
-        if streamingConverter == nil || streamingConverter?.inputFormat != buffer.format {
+        streamingStateLock.lock()
+        let current = streamingConverter
+        streamingStateLock.unlock()
+
+        if current == nil || current?.inputFormat != buffer.format {
             guard let outFormat = AVAudioFormat(
                 commonFormat: .pcmFormatInt16,
                 sampleRate: targetSampleRate,
@@ -860,10 +869,13 @@ final class GigiRealtimeEngine: @unchecked Sendable {
             let conv = AVAudioConverter(from: buffer.format, to: outFormat) else {
                 return nil
             }
+            streamingStateLock.lock()
             streamingConverter = conv
+            streamingStateLock.unlock()
             print("GIGI Realtime: downsample converter (re)built for format \(buffer.format.sampleRate) Hz")
+            return convertBufferToInt16PCM(buffer: buffer, converter: conv)
         }
-        guard let converter = streamingConverter else { return nil }
+        guard let converter = current else { return nil }
         return convertBufferToInt16PCM(buffer: buffer, converter: converter)
     }
 
