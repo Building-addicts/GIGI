@@ -16,6 +16,16 @@
 
 set -u
 
+# ─── Pre-flight: gh deve essere installato + autenticato ───
+if ! command -v gh >/dev/null 2>&1; then
+  echo "⚠️  track-bug.sh: \`gh\` CLI non installato. Installa da https://cli.github.com" >&2
+  exit 1
+fi
+if ! gh auth status >/dev/null 2>&1; then
+  echo "⚠️  track-bug.sh: \`gh\` non autenticato. Esegui: gh auth login" >&2
+  exit 1
+fi
+
 PARENT="${1:?parent_issue required}"
 AC_NUM="${2:?ac_number required}"
 DEV_HANDLE="${3:?dev_handle required}"

@@ -1,0 +1,147 @@
+name: System Health Check
+
+# Gira ogni mattina (8:00 CET = 6:00 UTC) e posta su Discord lo stato del sistema:
+# - Workflow runs: tutti success negli ultimi 24h?
+# - Issue counts: aperte, P0, release-blocker, bug
+# - Project items: count per status
+#
+# Trigger anche manuale (workflow_dispatch) per debug.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 6:00 UTC = 8:00 CET (07:00 in BST)
+  workflow_dispatch:       # bottone manuale "Run workflow"
+
+permissions:
+  issues: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute health metrics
+        id: metrics
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+
+          # ── Workflow status ultimi 24h ──
+          WORKFLOWS=("pr-lint.yml" "discord-notify.yml" "auto-timeline.yml" "project-status.yml" "progress-tracker.yml")
+          FAILURES=""
+          OK_COUNT=0
+
+          for WF in "${WORKFLOWS[@]}"; do
+            LAST=$(gh run list --repo "$REPO" --workflow="$WF" --limit 1 \
+              --created ">=$(date -d '24 hours ago' -Iseconds 2>/dev/null || date -u -v-24H +%Y-%m-%dT%H:%M:%SZ)" \
+              --json conclusion --jq '.[0].conclusion' 2>/dev/null)
+            if [ "$LAST" = "failure" ]; then
+              FAILURES="$FAILURES $WF"
+            else
+              OK_COUNT=$((OK_COUNT + 1))
+            fi
+          done
+
+          # ── Issue counts ──
+          OPEN_TOTAL=$(gh issue list --repo "$REPO" --state open --json number --jq '. | length')
+          P0_OPEN=$(gh issue list --repo "$REPO" --state open --label "priority:P0" --json number --jq '. | length')
+          BLOCKERS=$(gh issue list --repo "$REPO" --state open --label "release-blocker" --json number --jq '. | length')
+          BUGS=$(gh issue list --repo "$REPO" --state open --label "bug" --json number --jq '. | length')
+
+          # ── PR counts ──
+          PR_OPEN=$(gh pr list --repo "$REPO" --state open --json number --jq '. | length')
+          PR_DRAFT=$(gh pr list --repo "$REPO" --state open --draft --json number --jq '. | length')
+
+          # ── Project status counts ──
+          PROJECT_DATA=$(gh api graphql -f query='
+            query {
+              organization(login: "Building-addicts") {
+                projectV2(number: 1) {
+                  items(first: 100) {
+                    nodes {
+                      fieldValueByName(name: "Status") {
+                        ... on ProjectV2ItemFieldSingleSelectValue { name }
+                      }
+                    }
+                  }
+                }
+              }
+            }' --jq '[.data.organization.projectV2.items.nodes[].fieldValueByName.name] | group_by(.) | map({key: .[0], value: length}) | from_entries')
+
+          echo "ok_count=$OK_COUNT" >> "$GITHUB_OUTPUT"
+          echo "failures=$FAILURES" >> "$GITHUB_OUTPUT"
+          echo "open_total=$OPEN_TOTAL" >> "$GITHUB_OUTPUT"
+          echo "p0_open=$P0_OPEN" >> "$GITHUB_OUTPUT"
+          echo "blockers=$BLOCKERS" >> "$GITHUB_OUTPUT"
+          echo "bugs=$BUGS" >> "$GITHUB_OUTPUT"
+          echo "pr_open=$PR_OPEN" >> "$GITHUB_OUTPUT"
+          echo "pr_draft=$PR_DRAFT" >> "$GITHUB_OUTPUT"
+          echo "project_data=$PROJECT_DATA" >> "$GITHUB_OUTPUT"
+
+      - name: Post health report on Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          OK: ${{ steps.metrics.outputs.ok_count }}
+          FAILURES: ${{ steps.metrics.outputs.failures }}
+          OPEN: ${{ steps.metrics.outputs.open_total }}
+          P0: ${{ steps.metrics.outputs.p0_open }}
+          BLOCKERS: ${{ steps.metrics.outputs.blockers }}
+          BUGS: ${{ steps.metrics.outputs.bugs }}
+          PR_OPEN: ${{ steps.metrics.outputs.pr_open }}
+          PR_DRAFT: ${{ steps.metrics.outputs.pr_draft }}
+          PROJECT: ${{ steps.metrics.outputs.project_data }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
+
+          # Color: verde se tutti workflow ok, rosso se almeno uno failure
+          if [ -z "$FAILURES" ]; then
+            COLOR=3066993
+            HEADER="🟢 Sistema operativo"
+            TAG="✅ HEALTHY"
+          else
+            COLOR=15158332
+            HEADER="⚠️ Workflow falliti rilevati"
+            TAG="⚠️ ALERT"
+          fi
+
+          # Project breakdown
+          PROJECT_TXT=$(echo "$PROJECT" | jq -r 'to_entries | map("\(.key): \(.value)") | join(" · ")')
+          [ -z "$PROJECT_TXT" ] && PROJECT_TXT="—"
+          [ -z "$FAILURES" ] && FAIL_TXT="—" || FAIL_TXT="$FAILURES"
+
+          PAYLOAD=$(jq -n \
+            --arg title "$HEADER" \
+            --arg tag "$TAG" \
+            --argjson color "$COLOR" \
+            --arg ok "$OK / 5 workflow OK ultimi 24h" \
+            --arg fail "$FAIL_TXT" \
+            --arg open "$OPEN" \
+            --arg p0 "$P0" \
+            --arg blockers "$BLOCKERS" \
+            --arg bugs "$BUGS" \
+            --arg pr_open "$PR_OPEN" \
+            --arg pr_draft "$PR_DRAFT" \
+            --arg project "$PROJECT_TXT" \
+            '{
+              embeds: [{
+                title: $title,
+                color: $color,
+                fields: [
+                  { name: "Tag",       value: $tag,       inline: true },
+                  { name: "Workflow",  value: $ok,        inline: true },
+                  { name: "Failures",  value: $fail,      inline: true },
+                  { name: "Issue aperte",     value: $open,     inline: true },
+                  { name: "Priority P0",      value: $p0,       inline: true },
+                  { name: "Release-blocker",  value: $blockers, inline: true },
+                  { name: "Bug aperti",       value: $bugs,     inline: true },
+                  { name: "PR aperti",        value: $pr_open,  inline: true },
+                  { name: "PR in draft",      value: $pr_draft, inline: true },
+                  { name: "Project board",    value: $project,  inline: false }
+                ],
+                footer: { text: "GIGI Lancio v1 · Health check giornaliero (8:00 CET)" },
+                timestamp: now | todate
+              }]
+            }')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
