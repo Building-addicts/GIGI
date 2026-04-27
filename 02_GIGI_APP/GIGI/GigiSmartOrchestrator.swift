@@ -78,6 +78,22 @@ class GigiSmartOrchestrator: ObservableObject {
         GigiAudioManager.shared.onSpeakingFinished = { [weak self] in
             Task { @MainActor [weak self] in self?.fireDone() }
         }
+        // T8: empty-speech safety net. If any call site (DashboardView intro/outro,
+        // ActionDispatcher confirms, WebAgent) passes "" to speak(), force the pill
+        // to close so it does not dangle in .thinking forever.
+        GigiSpeechService.shared.onEmptyText = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                GigiDebugLogger.voiceEvent("orchestrator.onEmptyText", self.currentVoiceTurnId)
+                self.pendingDoneMessage = nil
+                self.doneSafetyTask?.cancel()
+                self.doneSafetyTask = nil
+                await GigiLiveActivityController.shared.completeWithDone(message: "Done.")
+                self.status = "GIGI: Ready"
+                self.isThinking = false
+                self.currentVoiceTurnId = nil
+            }
+        }
         GigiRealtimeEngine.shared.onStreamingUtteranceComplete = { [weak self] text in
             Task { @MainActor [weak self] in
                 guard let self else { return }
