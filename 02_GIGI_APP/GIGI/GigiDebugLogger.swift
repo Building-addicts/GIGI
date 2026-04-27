@@ -4,9 +4,10 @@ class GigiDebugLogger {
     static let sessionId = UUID().uuidString.prefix(8).description
 
     /// HARDCODED debug ingest endpoint for STEP 1 crash investigation.
-    /// Flip to nil to disable remote ingest entirely.
-    /// Will be removed once Step 1 is verified.
-    static let remoteIngestURL = "http://192.168.1.67:7779/api/debug/ingest"
+    /// Step 1 verified — disabled to silence Local Network -1009 floods that
+    /// can starve the URLSession pool and starve the main actor on cold launch.
+    /// Re-enable by setting a non-nil URL string.
+    static let remoteIngestURL: String? = nil
 
     static func log(_ msg: String, location: String = #file, function: String = #function, line: Int = #line) {
         let file = (location as NSString).lastPathComponent
@@ -24,6 +25,25 @@ class GigiDebugLogger {
 
         // Fire-and-forget remote ingest (best effort, no blocking)
         sendRemote(message: entry, location: file, recovery: false)
+    }
+
+    static func voiceEvent(
+        _ name: String,
+        turnId: String? = nil,
+        _ data: [String: String] = [:],
+        location: String = #file,
+        function: String = #function,
+        line: Int = #line
+    ) {
+        var fields = data
+        if let turnId { fields["turnId"] = turnId }
+        let suffix = fields.isEmpty
+            ? ""
+            : " " + fields
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: " ")
+        log("VOICE \(name)\(suffix)", location: location, function: function, line: line)
     }
 
     static func flushCrashLogs() async {
@@ -45,8 +65,8 @@ class GigiDebugLogger {
     }
 
     private static func sendRemote(message: String, location: String, recovery: Bool) {
-        let urlStr = remoteIngestURL
-        guard !urlStr.isEmpty, let url = URL(string: urlStr) else { return }
+        guard let urlStr = remoteIngestURL, !urlStr.isEmpty,
+              let url = URL(string: urlStr) else { return }
         // Bearer comes from the harness Keychain entry written during pairing.
         // For pre-pair crash logs we send anyway with a placeholder bearer;
         // server can be configured to accept best-effort logs without strict

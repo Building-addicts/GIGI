@@ -122,6 +122,28 @@
 </head>
 <body>
 <main>
+  <!-- First-time banner: shown when iOS server (7779) is not responding -->
+  <div id="notRunningBanner" style="display:none; margin-bottom:20px;
+    background:#1a0808; border:1px solid #5a2020; border-radius:14px;
+    padding:16px 20px; display:none;">
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span style="font-size:20px">⚠️</span>
+      <div style="flex:1">
+        <strong style="color:#ff8888; font-size:14px">Server not running on port 7779</strong>
+        <div style="color:#a06060; font-size:12.5px; margin-top:2px">
+          The tunnel controls below need the iOS backend to be active first.
+        </div>
+      </div>
+      <a href="/start" style="text-decoration:none">
+        <button style="background:#8b6eff; color:white; border:0; border-radius:9px;
+          padding:9px 14px; font:13px/1.2 -apple-system,system-ui,sans-serif;
+          font-weight:600; cursor:pointer; white-space:nowrap;">
+          → Start server guide
+        </button>
+      </a>
+    </div>
+  </div>
+
   <h1>GIGI Setup 🎛</h1>
   <p class="sub">Choose how your iPhone reaches this PC. You can change this anytime.</p>
 
@@ -254,14 +276,27 @@
 
   <p class="foot">
     Setup endpoint: <code>/api/setup/*</code> (localhost only).<br>
-    Pair QR: <a href="/pair">/pair</a>
+    Pair QR: <a href="/pair">/pair</a> ·
+    <a href="/start">Getting Started guide</a>
   </p>
 </main>
 
 <script>
-  // Panel lives on :7777 but setup endpoints live on the iOS HTTP server
-  // (:7779) — both same host, CORS allowlist handles the origin check.
-  const API_BASE = 'http://' + location.hostname + ':7779';
+  // Panel and setup pages share the same host. The iOS HTTP server port is
+  // read from /api/config so custom ports do not break /setup, /start or /pair.
+  let API_BASE = 'http://' + location.hostname + ':7779';
+
+  async function configureApiBase() {
+    try {
+      const r = await fetch('/api/config', { cache: 'no-store' });
+      if (!r.ok) return;
+      const cfg = await r.json();
+      const port = cfg.server?.port || cfg.server?.ios_port || 7779;
+      API_BASE = 'http://' + location.hostname + ':' + port;
+      const portEl = document.getElementById('iosApiPort');
+      if (portEl) portEl.textContent = String(port);
+    } catch {}
+  }
 
   async function api(method, path, body) {
     const r = await fetch(API_BASE + path, {
@@ -398,8 +433,24 @@
     });
   } catch {}
 
-  refresh();
-  setInterval(refresh, 3000);
+  async function initSetup() {
+    await configureApiBase();
+    await refresh();
+    await checkIosServer();
+    setInterval(refresh, 3000);
+    setInterval(checkIosServer, 5000);
+  }
+
+  // Show "server not running" banner if iOS API is unreachable
+  async function checkIosServer() {
+    try {
+      const r = await fetch(API_BASE + '/api/setup/status', { signal: AbortSignal.timeout(2000) });
+      document.getElementById('notRunningBanner').style.display = r.ok ? 'none' : 'block';
+    } catch {
+      document.getElementById('notRunningBanner').style.display = 'block';
+    }
+  }
+  initSetup();
 </script>
 </body>
 </html>

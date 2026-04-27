@@ -10,13 +10,7 @@ struct GigiStartPresenceIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        await MainActor.run {
-            if PresenceSessionController.shared.isActive {
-                PresenceSessionController.shared.stopSession()
-            } else {
-                PresenceSessionController.shared.startSession()
-            }
-        }
+        GigiPresenceAppGroup.postCommand(.start)
         return .result()
     }
 }
@@ -29,7 +23,7 @@ struct GigiStopPresenceIntent: AppIntent {
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {
-        await MainActor.run { PresenceSessionController.shared.stopSession() }
+        GigiPresenceAppGroup.postCommand(.stop)
         return .result()
     }
 }
@@ -38,14 +32,24 @@ struct GigiStopPresenceIntent: AppIntent {
 
 @available(iOS 16.0, *)
 struct GigiMutePresenceIntent: AppIntent {
-    static var title: LocalizedStringResource = "Mute/Unmute GIGI"
+    static var title: LocalizedStringResource = "Mute GIGI"
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {
-        await MainActor.run {
-            let c = PresenceSessionController.shared
-            if c.state == .muted { c.unmute() } else { c.mute() }
-        }
+        GigiPresenceAppGroup.postCommand(.mute)
+        return .result()
+    }
+}
+
+// MARK: - GigiUnmutePresenceIntent (from Dynamic Island widget button)
+
+@available(iOS 16.0, *)
+struct GigiUnmutePresenceIntent: AppIntent {
+    static var title: LocalizedStringResource = "Unmute GIGI"
+    static var openAppWhenRun: Bool = false
+
+    func perform() async throws -> some IntentResult {
+        GigiPresenceAppGroup.postCommand(.unmute)
         return .result()
     }
 }

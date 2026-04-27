@@ -5,6 +5,7 @@ struct MainTabView: View {
     @StateObject var auth = GigiAuthManager.shared
     @ObservedObject private var orchestrator = GigiSmartOrchestrator.shared
     @ObservedObject private var presence = PresenceSessionController.shared
+    @ObservedObject private var liveActivity = GigiLiveActivityController.shared
 
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "gigi.onboarding.complete")
     @State private var showPresence = false
@@ -69,6 +70,12 @@ struct MainTabView: View {
                     .zIndex(50)
             }
 
+            if let err = liveActivity.lastActivityError, !showOnboarding {
+                liveActivityBanner(err)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(49)
+            }
+
             if showOnboarding {
                 OnboardingView(isPresented: $showOnboarding)
                     .transition(.opacity)
@@ -107,6 +114,23 @@ struct MainTabView: View {
         // app is killed. The top banner only means "pair this phone with a
         // PC", so persisted Keychain config is the correct source of truth.
         harnessConfigured = GigiHarnessClient.shared.pairingState.isConfigured
+    }
+
+    private func liveActivityBanner(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+            Text(message)
+                .font(.caption.weight(.medium))
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color.orange.opacity(0.9))
+        .cornerRadius(12)
+        .padding(.horizontal, 14)
+        .padding(.top, harnessConfigured ? 56 : 116)
     }
 
     private var pairingBanner: some View {
@@ -152,10 +176,10 @@ private struct PresenceModeTabView: View {
                 Image(systemName: presence.isActive ? "person.wave.2.fill" : "person.wave.2")
                     .font(.system(size: 52))
                     .foregroundColor(presence.isActive ? .purple : .white.opacity(0.3))
-                Text(presence.isActive ? "Presence Active" : "Presence Mode")
+                Text(presence.isActive ? "Presence: \(presenceStateLabel)" : "Presence Mode")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-                Text(presence.isActive ? "GIGI is with you" : "Stay connected with GIGI")
+                Text(presence.isActive ? "Live Activity mirrors this state" : "Start iOS-compliant wake-word Presence")
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.4))
                 Button {
@@ -176,6 +200,18 @@ private struct PresenceModeTabView: View {
                 }
                 Spacer()
             }
+        }
+    }
+
+    private var presenceStateLabel: String {
+        switch presence.state {
+        case .inactive: return "Ready"
+        case .sleeping: return "Ready"
+        case .listening: return "Listening"
+        case .thinking: return "Thinking"
+        case .speaking: return "Speaking"
+        case .muted: return "Muted"
+        case .error: return "Needs Attention"
         }
     }
 }

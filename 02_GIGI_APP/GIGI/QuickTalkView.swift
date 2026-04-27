@@ -16,7 +16,13 @@ struct QuickTalkView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                phaseIndicator
+                VStack(spacing: 14) {
+                    phaseIndicator
+
+                    Text(controller.phase.displayName)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                }
 
                 if !controller.transcript.isEmpty {
                     Text("\"\(controller.transcript)\"")
@@ -71,7 +77,9 @@ struct QuickTalkView: View {
                     .multilineTextAlignment(.center)
             }
         case .idle:
-            EmptyView()
+            Image(systemName: "bolt.circle.fill")
+                .font(.system(size: 44))
+                .foregroundColor(.purple.opacity(0.7))
         }
     }
 

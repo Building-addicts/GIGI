@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GIGI — Start Server</title>
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      background: #07070f;
+      color: #e6e6ec;
+      font: 15px/1.6 -apple-system, 'SF Pro Text', system-ui, sans-serif;
+    }
+    main { max-width: 680px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    /* Header */
+    .logo { font-size: 32px; margin: 0 0 4px; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 6px; }
+    .sub { color: #7a7a90; margin: 0 0 36px; font-size: 14px; }
+
+    /* Status banner */
+    .status-bar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; border-radius: 14px;
+      border: 1px solid #26263a;
+      background: #12121c;
+      margin-bottom: 32px;
+      transition: border-color 0.3s;
+    }
+    .status-bar.ok     { border-color: #1f4a30; background: #0b1a11; }
+    .status-bar.warn   { border-color: #4a3800; background: #1a1400; }
+    .status-bar.error  { border-color: #4a1010; background: #1a0808; }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+      background: #3a3a55;
+      box-shadow: 0 0 0 3px rgba(100,100,160,0.15);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .status-dot.green  { background: #44d476; box-shadow: 0 0 0 4px rgba(68,212,118,0.2); }
+    .status-dot.yellow { background: #f0c040; box-shadow: 0 0 0 4px rgba(240,192,64,0.2); }
+    .status-dot.red    { background: #f05050; box-shadow: 0 0 0 4px rgba(240,80,80,0.2); }
+    .status-text { flex: 1; font-size: 13.5px; }
+    .status-text strong { font-weight: 600; }
+    .status-text .detail { color: #8888a8; font-size: 12px; margin-top: 1px; }
+    .status-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* CTA bar (when server is up) */
+    .cta-bar {
+      display: none;
+      background: linear-gradient(135deg, #1a0e3a 0%, #0e1a3a 100%);
+      border: 1px solid #8b6eff40;
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-bottom: 32px;
+      text-align: center;
+    }
+    .cta-bar.visible { display: block; }
+    .cta-bar h3 { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: #cabfff; }
+    .cta-bar p { margin: 0 0 16px; font-size: 13.5px; color: #9a90c0; }
+    .cta-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 16px; }
+
+    .step {
+      background: #12121c;
+      border: 1px solid #22223a;
+      border-radius: 16px;
+      overflow: hidden;
+      transition: border-color 0.2s, opacity 0.2s;
+    }
+    .step.done { border-color: #1f4a2a; opacity: 0.7; }
+    .step.done .step-header { background: #0b1a11; }
+
+    .step-header {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 16px 18px;
+      cursor: default;
+    }
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: #1e1e32;
+      border: 1.5px solid #3a3a5a;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: #8888a8;
+      flex-shrink: 0; margin-top: 1px;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+    .step.done .step-num {
+      background: #1a3a22; border-color: #44d476; color: #44d476;
+    }
+    .step-num.checkmark::after { content: '✓'; }
+
+    .step-info { flex: 1; }
+    .step-title { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+    .step-desc { font-size: 13px; color: #8888a8; margin: 0; }
+
+    .step-once {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #7a6aff; background: #1e1838; border-radius: 6px;
+      padding: 2px 7px;
+    }
+
+    .step-body {
+      padding: 0 18px 16px;
+    }
+
+    .cmd-block {
+      position: relative;
+      background: #09090f;
+      border: 1px solid #1e1e2e;
+      border-radius: 10px;
+      padding: 13px 52px 13px 14px;
+      margin-top: 10px;
+    }
+    .cmd-block code {
+      font: 13px/1.5 'SF Mono', 'Fira Code', Consolas, monospace;
+      color: #b9ffc8;
+      white-space: pre-wrap;
+      word-break: break-all;
+      display: block;
+    }
+    .cmd-block code .dim { color: #555578; }
+    .copy-btn {
+      position: absolute; top: 10px; right: 10px;
+      background: #1e1e32; border: 1px solid #3a3a5a;
+      border-radius: 7px; color: #9090b8;
+      font: 11px/1.2 -apple-system, system-ui, sans-serif;
+      padding: 5px 9px; cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+    }
+    .copy-btn:hover { background: #28284a; color: #cabfff; }
+    .copy-btn.copied { background: #1a3a22; color: #44d476; border-color: #44d476; }
+
+    /* Buttons */
+    button.primary, button.secondary, button.ghost {
+      font: 14px/1.2 -apple-system, system-ui, sans-serif;
+      border: 0; border-radius: 10px;
+      padding: 10px 18px; cursor: pointer;
+      transition: background 0.1s, transform 0.05s;
+    }
+    button.primary  { background: #8b6eff; color: white; font-weight: 600; }
+    button.primary:hover  { background: #7a5dff; }
+    button.secondary { background: #1e1e2e; color: #cabfff; border: 1px solid #32325a; }
+    button.secondary:hover { background: #252540; }
+    button.ghost { background: transparent; color: #7a7a90; border: 1px solid #28283a; font-size: 13px; }
+    button.ghost:hover { color: #a0a0c0; }
+    button:disabled { opacity: 0.45; cursor: default; }
+
+    .hint {
+      font-size: 12px; color: #5a5a78;
+      margin-top: 10px; line-height: 1.5;
+    }
+    .hint a { color: #7a6aff; text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+
+    .divider { border: 0; border-top: 1px solid #1a1a28; margin: 28px 0; }
+
+    /* Expected output preview */
+    .expected {
+      background: #08080e; border: 1px solid #1a1a28; border-radius: 8px;
+      padding: 10px 12px; margin-top: 8px;
+    }
+    .expected .label { font-size: 10px; color: #4a4a6a; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+    .expected code { font: 12px/1.5 'SF Mono', Consolas, monospace; color: #6eb4ff; display: block; white-space: pre; }
+
+    footer { margin-top: 40px; text-align: center; color: #3a3a55; font-size: 12px; }
+    footer a { color: #5a5aff; text-decoration: none; }
+  </style>
+</head>
+<body>
+<main>
+
+  <div class="logo">🚀</div>
+  <h1>Start the GIGI Harness</h1>
+  <p class="sub">Run these 4 commands in Terminal on your Mac — then scan the QR from your iPhone.</p>
+
+  <!-- Live status banner -->
+  <div class="status-bar" id="statusBar">
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-text">
+      <strong id="statusTitle">Checking server…</strong>
+      <div class="detail" id="statusDetail">Polling localhost:7779</div>
+    </div>
+    <div class="status-actions">
+      <button class="ghost" id="btnRecheck" onclick="checkHealth(true)">Recheck</button>
+    </div>
+  </div>
+
+  <!-- CTA when server is already running -->
+  <div class="cta-bar" id="ctaBar">
+    <h3>✅ Server is already running!</h3>
+    <p>You can skip the setup steps below and go straight to pairing.</p>
+    <div class="cta-row">
+      <a href="/setup"><button class="secondary">Setup page</button></a>
+      <a href="/pair"><button class="primary">→ Open pairing QR</button></a>
+    </div>
+  </div>
+
+  <!-- Steps -->
+  <div class="steps">
+
+    <!-- Step 1: Kill old processes -->
+    <div class="step" id="step1">
+      <div class="step-header">
+        <div class="step-num" id="num1">1</div>
+        <div class="step-info">
+          <div class="step-title">Stop any old server processes</div>
+          <p class="step-desc">Clears stale processes and lock files from previous sessions.</p>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="cmd-block">
+          <code><span id="cmd1">pkill -f "node server.js" 2&gt;/dev/null; pkill -f "node panel.js" 2&gt;/dev/null; rm -f "<span id="lockpath">…/server/logs/bridge.lock</span>"; echo "✓ Clean"</span></code>
+          <button class="copy-btn" onclick="copyCmd('cmd1', this)">Copy</button>
+        </div>
+        <div class="expected">
+          <div class="label">Expected output</div>
+          <code>✓ Clean</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Navigate -->
+    <div class="step" id="step2">
+      <div class="step-header">
+        <div class="step-num" id="num2">2</div>
+        <div class="step-info">
+          <div class="step-title">Navigate to the server folder</div>
+          <p class="step-desc">Open Terminal → paste this command.</p>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="cmd-block">
+          <code>cd "<span id="serverpath">…/03_HARNESS/server</span>"</code>
+          <button class="copy-btn" onclick="copyCmd('serverpath', this, true)">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: npm install -->
+    <div class="step" id="step3">
+      <div class="step-header">
+        <div class="step-num" id="num3">3</div>
+        <div class="step-info">
+          <div class="step-title">Install dependencies</div>
+          <p class="step-desc">Only needed the first time — takes ~30 seconds.</p>
+          <span class="step-once">One-time only</span>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="cmd-block">
+          <code>npm install</code>
+          <button class="copy-btn" onclick="copyRaw('npm install', this)">Copy</button>
+        </div>
+        <div class="expected">
+          <div class="label">Expected output</div>
+          <code>added N packages …</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Start -->
+    <div class="step" id="step4">
+      <div class="step-header">
+        <div class="step-num" id="num4">4</div>
+        <div class="step-info">
+          <div class="step-title">Start the server</div>
+          <p class="step-desc">Keep this Terminal window open — closing it stops the server.</p>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="cmd-block">
+          <code>node panel.js</code>
+          <button class="copy-btn" onclick="copyRaw('node panel.js', this)">Copy</button>
+        </div>
+        <div class="expected">
+          <div class="label">Expected output (wait for all 3 lines)</div>
+          <code>Control Panel: http://localhost:7777
+[bridge] GIGI harness server avviato
+[bridge] iOS HTTP+WS: http://0.0.0.0:7779</code>
+        </div>
+        <p class="hint">
+          ⚠️ If you see <code style="color:#e06666">[bridge:err]</code> errors → copy the error message and
+          <a href="https://github.com/Leonardo-Corte/GIGI/issues" target="_blank">open an issue</a>.
+        </p>
+      </div>
+    </div>
+
+  </div><!-- /steps -->
+
+  <hr class="divider">
+
+  <div style="text-align:center">
+    <p style="color:#6a6a88; font-size:13.5px; margin:0 0 14px">
+      Once you see <code style="color:#44d476; font-size:12px">iOS HTTP+WS: http://0.0.0.0:7779</code> in Terminal,
+      this page will update automatically.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="secondary" onclick="checkHealth(true)">↻ Check again now</button>
+      <a href="/setup"><button class="secondary">Go to Setup →</button></a>
+      <a href="/pair"><button class="primary">Scan QR from iPhone →</button></a>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/">Panel</a> · <a href="/setup">Setup</a> · <a href="/pair">Pair</a>
+    <br>GIGI Harness · <span id="serverVer">localhost:7779</span>
+  </footer>
+
+</main>
+
+<script>
+const PANEL_API = '';          // same origin: :7777
+let IOS_API     = 'http://' + location.hostname + ':7779';
+
+let healthy = false;
+let checkTimer = null;
+
+async function configureIosApi() {
+  try {
+    const r = await fetch(PANEL_API + '/api/config', { cache: 'no-store' });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    const port = cfg.server?.port || cfg.server?.ios_port || 7779;
+    IOS_API = 'http://' + location.hostname + ':' + port;
+    document.getElementById('serverVer').textContent = 'localhost:' + port;
+  } catch {}
+}
+
+async function checkHealth(force = false) {
+  // 1) Ask panel (/api/status) if the bridge child process is alive.
+  let bridgeAlive = false;
+  try {
+    const r = await fetch(PANEL_API + '/api/status');
+    const j = await r.json();
+    bridgeAlive = !!j.running;
+  } catch { bridgeAlive = false; }
+
+  // 2) Directly ping the iOS server if bridge reports alive.
+  let iosAlive = false;
+  if (bridgeAlive) {
+    try {
+      const r = await fetch(IOS_API + '/api/setup/status', { signal: AbortSignal.timeout(2000) });
+      iosAlive = r.ok;
+    } catch { iosAlive = false; }
+  }
+
+  const bar  = document.getElementById('statusBar');
+  const dot  = document.getElementById('statusDot');
+  const title = document.getElementById('statusTitle');
+  const detail = document.getElementById('statusDetail');
+  const cta  = document.getElementById('ctaBar');
+
+  if (bridgeAlive && iosAlive) {
+    bar.className = 'status-bar ok';
+    dot.className = 'status-dot green';
+    title.textContent = 'Server is running ✓';
+    detail.textContent = 'Panel :' + location.port + ' · iOS API ' + IOS_API.replace(/^https?:\/\//, '') + ' · both responding';
+    cta.classList.add('visible');
+    healthy = true;
+    // slow down polling
+    scheduleCheck(10000);
+  } else if (bridgeAlive) {
+    bar.className = 'status-bar warn';
+    dot.className = 'status-dot yellow';
+    title.textContent = 'Panel up, bridge starting…';
+    detail.textContent = IOS_API.replace(/^https?:\/\//, '') + ' not yet responding — wait a few seconds';
+    cta.classList.remove('visible');
+    healthy = false;
+    scheduleCheck(2000);
+  } else {
+    bar.className = 'status-bar error';
+    dot.className = 'status-dot red';
+    title.textContent = 'Server not running';
+    detail.textContent = 'Follow the 4 steps below, then this page updates automatically';
+    cta.classList.remove('visible');
+    healthy = false;
+    scheduleCheck(3000);
+  }
+}
+
+function scheduleCheck(ms) {
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(() => checkHealth(), ms);
+}
+
+// ── Path detection ──────────────────────────────────────────────────────────
+async function detectPaths() {
+  try {
+    const r = await fetch(IOS_API + '/api/setup/env', { signal: AbortSignal.timeout(1500) });
+    if (!r.ok) return;
+    const j = await r.json();
+    const d = j.data || j;
+    if (d.serverDir) {
+      const sd = d.serverDir;
+      const lockFile = sd + '/logs/bridge.lock';
+      // Update cmd1 with real paths
+      document.getElementById('cmd1').innerHTML =
+        `pkill -f "node server.js" 2>/dev/null; pkill -f "node panel.js" 2>/dev/null; rm -f "${escHtml(lockFile)}"; echo "✓ Clean"`;
+      document.getElementById('lockpath').textContent = lockFile;
+      document.getElementById('serverpath').textContent = sd;
+    }
+  } catch { /* offline: paths stay as placeholders */ }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Copy helpers ────────────────────────────────────────────────────────────
+function copyCmd(spanId, btn, isPath = false) {
+  const el = document.getElementById(spanId);
+  let text = el ? el.textContent : '';
+  if (isPath) text = `cd "${text}"`;
+  navigator.clipboard.writeText(text).then(() => flash(btn)).catch(() => fallbackCopy(text, btn));
+}
+function copyRaw(text, btn) {
+  navigator.clipboard.writeText(text).then(() => flash(btn)).catch(() => fallbackCopy(text, btn));
+}
+function fallbackCopy(text, btn) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+  document.body.removeChild(ta); flash(btn);
+}
+function flash(btn) {
+  const orig = btn.textContent;
+  btn.textContent = '✓ Copied'; btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+configureIosApi().then(() => {
+  checkHealth();
+  detectPaths();
+});
+</script>
+</body>
+</html>

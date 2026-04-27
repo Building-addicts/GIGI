@@ -34,6 +34,19 @@ final class GigiComputerUse {
         }
     }
 
+    /// Conferma un job già in `awaiting_confirm` e continua a fare polling
+    /// sullo stesso job backend. Non rilancia il task da zero.
+    func approveAndWait(jobId: String) async -> String {
+        let ok = await confirm(jobId: jobId, approved: true)
+        guard ok else { return "ERROR: conferma non accettata dal backend" }
+        return await poll(jobId: jobId, timeoutSec: 180)
+    }
+
+    /// Rifiuta un job in attesa, così il backend non resta bloccato.
+    func reject(jobId: String) async {
+        _ = await confirm(jobId: jobId, approved: false)
+    }
+
     /// Poll status fino a stato terminale o confirm.
     private func poll(jobId: String, timeoutSec: Int) async -> String {
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSec))

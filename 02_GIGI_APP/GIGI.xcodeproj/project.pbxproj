@@ -89,6 +89,8 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				GigiActivityAttributes.swift,
+				GigiPresenceAppGroup.swift,
+				GigiPresenceIntent.swift,
 			);
 			target = E0D953023C4404E8BCF0FFEC /* GIGIWidgetExtension */;
 		};

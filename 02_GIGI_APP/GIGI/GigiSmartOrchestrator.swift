@@ -34,6 +34,14 @@ class GigiSmartOrchestrator: ObservableObject {
     private var usingRealtimeMic   = false
     private var pendingCallContact = ""
 
+    // Turn finalization: completeWithDone is deferred until TTS reports finished so the
+    // pill stays in `.speaking` while the synthesizer plays. `pendingDoneMessage` carries
+    // the banner; `doneSafetyTask` fires it after 8s if TTS never reports back (cancel,
+    // crash, empty buffer, etc.).
+    private var pendingDoneMessage: String?
+    private var doneSafetyTask: Task<Void, Never>?
+    private var currentVoiceTurnId: String?
+
     // MARK: - Quick Talk callbacks (set by QuickTalkController)
     var onQuickTalkStateChange: ((QuickTalkController.Phase) -> Void)?
     var onQuickTalkTranscript:  ((String) -> Void)?
@@ -66,6 +74,10 @@ class GigiSmartOrchestrator: ObservableObject {
                 GigiAudioManager.shared.startWakeWordListening()
             }
         }
+        // TTS finished → complete the turn (close the pill) deferred from handleResult.
+        GigiAudioManager.shared.onSpeakingFinished = { [weak self] in
+            Task { @MainActor [weak self] in self?.fireDone() }
+        }
         GigiRealtimeEngine.shared.onStreamingUtteranceComplete = { [weak self] text in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -77,11 +89,7 @@ class GigiSmartOrchestrator: ObservableObject {
         // Barge-in: user spoke while realtime voice was playing audio → stop TTS, listen
         GigiRealtimeEngine.shared.onBargein = { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.speech.stopSpeaking()
-                SoundEngine.play(.wakeWord)
-                self.isListening = true
-                self.status = "GIGI: Listening..."
+                self?.interruptAndListen(source: "realtime")
             }
         }
 
@@ -145,9 +153,17 @@ class GigiSmartOrchestrator: ObservableObject {
         isThinking = true
         stopMicCapture()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { isThinking = false; return }
+        guard !trimmed.isEmpty else {
+            GigiDebugLogger.voiceEvent("orchestrator.emptyTranscript", currentVoiceTurnId)
+            isThinking = false
+            currentVoiceTurnId = nil
+            return
+        }
 
-        await GigiLiveActivityController.shared.transitionToThinking()
+        let turnId = ensureVoiceTurn(reason: "transcript")
+        GigiDebugLogger.voiceEvent("orchestrator.transcript", turnId, ["length": "\(trimmed.count)"])
+
+        await GigiLiveActivityController.shared.transitionToThinking(transcript: trimmed)
         status = "GIGI: Sto pensando..."
 
         if isQuickTalkSession {
@@ -188,13 +204,13 @@ class GigiSmartOrchestrator: ObservableObject {
         memory.resolveThinking(id: thinkingID, with: result.speech)
 
         if let confirm = result.requiresConfirm {
-            // Awaiting confirmation: speak summary, stay in "thinking" state until user replies
+            // Awaiting confirmation: speak summary, then let Presence open the follow-up mic window.
             SoundEngine.play(.confirmRequired)
-            speech.speak(confirm.summary)
             status = "GIGI: In attesa di conferma..."
             isThinking = false
-            GigiAudioManager.shared.startWakeWordListening()
-            Task { await GigiLiveActivityController.shared.completeWithDone(message: "Conferma?") }
+            Task { await GigiLiveActivityController.shared.transitionToSpeaking(message: "Conferma?") }
+            scheduleDoneAfterTTS(message: "Conferma?")
+            speech.speak(confirm.summary)
             return
         }
 
@@ -205,10 +221,71 @@ class GigiSmartOrchestrator: ObservableObject {
             onQuickTalkResponse?(result.speech)
         }
 
-        speech.speak(result.speech)
+        let trimmed = result.speech.trimmingCharacters(in: .whitespacesAndNewlines)
+        let banner = trimmed.isEmpty
+            ? "Fatto."
+            : (trimmed.count <= 100 ? trimmed : String(trimmed.prefix(97)) + "…")
 
-        let banner = result.speech.trimmingCharacters(in: .whitespacesAndNewlines)
-        finishTurn(message: banner.isEmpty ? "Fatto." : (banner.count <= 100 ? banner : String(banner.prefix(97)) + "…"))
+        // T5: empty speech path. Skip TTS (avoids `speak("")` → empty AVSpeech buffer
+        // → mDataByteSize=0 noise), close the pill straight away.
+        guard !trimmed.isEmpty else {
+            finalizeTurnNow(message: banner)
+            return
+        }
+
+        // T3: pill flips to .speaking with the response banner BEFORE TTS starts so the
+        // visual matches the audio. T4: completeWithDone is held back — fireDone() runs
+        // after AVSpeechSynthesizer reports didFinish/didCancel via onSpeakingFinished.
+        Task { await GigiLiveActivityController.shared.transitionToSpeaking(message: banner) }
+        scheduleDoneAfterTTS(message: banner)
+        speech.speak(trimmed)
+
+        // Status/thinking flip immediately — only the pill close is deferred.
+        status     = "GIGI: Ready"
+        isThinking = false
+    }
+
+    // MARK: - Deferred turn close (T4)
+
+    private func scheduleDoneAfterTTS(message: String) {
+        GigiDebugLogger.voiceEvent("orchestrator.scheduleDoneAfterTTS", currentVoiceTurnId)
+        pendingDoneMessage = message
+        doneSafetyTask?.cancel()
+        // Safety: if AVSpeechSynthesizer never reports finish (cancel storms, hardware
+        // interruption), close the pill anyway so it doesn't dangle in .speaking forever.
+        doneSafetyTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.fireDone() }
+        }
+    }
+
+    private func fireDone() {
+        guard let msg = pendingDoneMessage else { return }
+        GigiDebugLogger.voiceEvent("orchestrator.fireDone", currentVoiceTurnId)
+        pendingDoneMessage = nil
+        doneSafetyTask?.cancel()
+        doneSafetyTask = nil
+        finalizeTurnNow(message: msg)
+        currentVoiceTurnId = nil
+    }
+
+    private func finalizeTurnNow(message: String) {
+        GigiDebugLogger.voiceEvent("orchestrator.finalizeTurn", currentVoiceTurnId, ["presenceMode": "\(GigiAudioManager.shared.presenceMode)", "quickTalk": "\(isQuickTalkSession)"])
+        SoundEngine.releaseSession()
+
+        if isQuickTalkSession {
+            Task { await GigiLiveActivityController.shared.completeWithDone(message: message) }
+            isQuickTalkSession = false
+            onQuickTalkFinished?(true)
+        } else if GigiAudioManager.shared.presenceMode {
+            // Presence Mode must feel alive: after TTS, AudioManager opens the
+            // follow-up listening window. Do not schedule a delayed Done/Ready
+            // Live Activity update here, because it can race and overwrite
+            // Listening while the mic is open.
+        } else {
+            Task { await GigiLiveActivityController.shared.completeWithDone(message: message) }
+        }
     }
 
     // MARK: - Confirmation detection
@@ -268,6 +345,11 @@ class GigiSmartOrchestrator: ObservableObject {
     func startQuickTalk() {
         isQuickTalkSession = true
         onQuickTalkStateChange?(.listening)
+        if GigiAudioManager.shared.state == .speaking {
+            interruptAndListen(source: "quickTalk")
+            return
+        }
+        _ = ensureVoiceTurn(reason: "quickTalk")
         speech.stopSpeaking()
         isListening = true
         status = "GIGI: Listening..."
@@ -284,11 +366,40 @@ class GigiSmartOrchestrator: ObservableObject {
 
     func startListening() {
         GigiDebugLogger.log("startListening called")
+        if GigiAudioManager.shared.state == .speaking {
+            interruptAndListen(source: "wakeOrTap")
+            return
+        }
+        _ = ensureVoiceTurn(reason: "wakeOrTap")
         speech.stopSpeaking()
         isListening = true
         status      = "GIGI: Listening..."
         usingRealtimeMic = false
         GigiAudioManager.shared.startRecording()
+        Task { await GigiLiveActivityController.shared.beginListening() }
+    }
+
+
+    func interruptAndListen(source: String) {
+        let turnId = ensureVoiceTurn(reason: "interrupt.\(source)")
+        clearPendingDone(reason: "bargeIn.\(source)")
+        GigiDebugLogger.voiceEvent("orchestrator.interruptAndListen", turnId, ["source": source, "audioState": "\(GigiAudioManager.shared.state)"])
+
+        SoundEngine.play(.wakeWord)
+        if isQuickTalkSession { onQuickTalkStateChange?(.listening) }
+
+        isListening = true
+        isThinking = false
+        status = "GIGI: Listening..."
+        usingRealtimeMic = false
+
+        if GigiAudioManager.shared.state == .speaking {
+            GigiAudioManager.shared.startRecording()
+            speech.stopSpeaking()
+        } else {
+            speech.stopSpeaking()
+            GigiAudioManager.shared.startRecording()
+        }
         Task { await GigiLiveActivityController.shared.beginListening() }
     }
 
@@ -304,25 +415,6 @@ class GigiSmartOrchestrator: ObservableObject {
     }
 
     // MARK: - Helpers
-
-    private func finishTurn(message: String) {
-        status     = "GIGI: Ready"
-        isThinking = false
-        SoundEngine.releaseSession()   // un-duck Spotify / other apps
-        Task { await GigiLiveActivityController.shared.completeWithDone(message: message) }
-
-        if isQuickTalkSession {
-            // Quick Talk is discrete — do NOT resume wake word after TTS
-            let wasSuccess = true
-            isQuickTalkSession = false
-            onQuickTalkFinished?(wasSuccess)
-        } else if isPresenceActive {
-            // Presence: resume wake word immediately (shorter delay handled by GigiAudioManager)
-            GigiAudioManager.shared.startWakeWordListening()
-        } else {
-            GigiAudioManager.shared.startWakeWordListening()
-        }
-    }
 
     /// Splits a text containing multiple sequential commands into individual parts.
     /// Returns nil if only one command is detected (avoids false splits like "call mom and dad").

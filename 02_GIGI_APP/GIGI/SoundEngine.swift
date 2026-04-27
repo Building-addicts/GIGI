@@ -45,6 +45,9 @@ final class SoundEngine {
     /// The wake word session uses .mixWithOthers so other apps aren't ducked during passive listening.
     static func releaseSession() {
         guard !GigiWakeWordEngine.shared.isMonitoring else { return }
+        // Don't deactivate in background — iOS starts 30s kill timer if audio session goes inactive
+        // while app is backgrounded. Wake word needs the session to stay alive between turns.
+        guard UIApplication.shared.applicationState == .active else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
@@ -112,6 +115,10 @@ final class SoundEngine {
     private func didFinishPlaying() {
         engine.pause()
         engineRunning = false
+        // Skip deactivation when GigiAudioSequestrator already owns the session (TTS playing,
+        // mic active). Calling setActive(false) here would kill the concurrent session.
+        // Example race: confirmRequired earcon (~380ms) overlaps TTS didStart (~100ms).
+        guard !GigiAudioSequestrator.shared.isSessionActive else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 

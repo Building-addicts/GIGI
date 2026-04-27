@@ -35,8 +35,10 @@ class GigiVADEngine {
 
     private var isCapturing          = false   // true durante la registrazione audio
     private var isWaitingForFinal    = false   // true dopo silence, aspetta isFinal
+    private var hasSpeechStarted     = false   // true dopo prima burst di parlato confermata (≥100ms)
 
-    private let speechRecognizer: SFSpeechRecognizer? = SFSpeechRecognizer(locale: Locale.current)
+    // en-US fixed: market is US/English; Locale.current causes acoustic model mismatch
+    private let speechRecognizer: SFSpeechRecognizer? = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest:  SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask:     SFSpeechRecognitionTask?
     private var latestTranscription  = ""
@@ -81,6 +83,7 @@ class GigiVADEngine {
             return 
         }
         isCapturing                 = true
+        hasSpeechStarted            = false
         latestTranscription         = ""
         silenceDuration             = 0
         consecutiveSpeechDuration   = 0
@@ -137,6 +140,7 @@ class GigiVADEngine {
             inputNode.removeTap(onBus: 0)
             cleanupSTT()
             GigiAudioSequestrator.shared.releaseControl()
+            onListeningFailed?()
         }
     }
 
@@ -155,6 +159,8 @@ class GigiVADEngine {
                 cleanupSTT()
                 if !text.isEmpty {
                     onTranscription?(text)
+                } else {
+                    onListeningFailed?()
                 }
             }
         } else if let error {
@@ -198,6 +204,7 @@ class GigiVADEngine {
         let shouldRelease = isCapturing
         isCapturing       = false
         isWaitingForFinal = false
+        hasSpeechStarted  = false
         if audioEngine.isRunning { audioEngine.stop() }
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.reset()  // clear stale format for next session
@@ -236,19 +243,24 @@ class GigiVADEngine {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCapturing else { return }
 
-            if db < self.silenceThreshold {
-                // Loud audio ended — only reset silence timer once speech has been
-                // confirmed for at least noiseSpikeGate (100 ms). Short spikes are ignored.
-                if self.consecutiveSpeechDuration >= self.noiseSpikeGate {
-                    self.silenceDuration = 0
-                }
-                self.consecutiveSpeechDuration = 0
-            } else {
+            if db >= self.silenceThreshold {
+                // SPEECH: accumulate consecutive speech; once ≥ noise gate, confirm real speech
+                // and reset silence timer. Short spikes (door, cough < 100ms) don't reset.
                 self.consecutiveSpeechDuration += frameDuration
-                self.silenceDuration           += frameDuration
+                if self.consecutiveSpeechDuration >= self.noiseSpikeGate {
+                    self.hasSpeechStarted = true
+                    self.silenceDuration  = 0
+                }
+            } else {
+                // SILENCE: accumulate only after real speech has been confirmed.
+                // Without hasSpeechStarted, a quiet room fires VAD immediately at launch.
+                self.consecutiveSpeechDuration = 0
+                if self.hasSpeechStarted {
+                    self.silenceDuration += frameDuration
+                }
             }
 
-            if self.silenceDuration >= self.requiredSilence {
+            if self.hasSpeechStarted, self.silenceDuration >= self.requiredSilence {
                 print("GIGI VAD: silence (\(String(format: "%.1f", db)) dB, req \(String(format: "%.1f", self.requiredSilence))s) — '\(self.latestTranscription)'")
                 self.isWaitingForFinal = true
                 self.stopAudioCapture()
@@ -261,7 +273,11 @@ class GigiVADEngine {
                     print("GIGI VAD: STT timeout — using snapshot: '\(snapshot)'")
                     self.isWaitingForFinal = false
                     self.cleanupSTT()
-                    if !snapshot.isEmpty { self.onTranscription?(snapshot) }
+                    if !snapshot.isEmpty {
+                        self.onTranscription?(snapshot)
+                    } else {
+                        self.onListeningFailed?()
+                    }
                 }
             }
         }

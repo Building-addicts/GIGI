@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GIGI — Universal Browser Passport</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0a0a10; --card:#15151e; --line:#26263a; --muted:#8e8ea8; --text:#e6e6ec; --violet:#8b6eff; --ok:#3fba70; --warn:#f0b45a; --bad:#e05454; }
+    html, body { margin:0; padding:0; min-height:100%; background:var(--bg); color:var(--text); font:15px/1.55 -apple-system,'SF Pro Text',system-ui,sans-serif; }
+    main { max-width:980px; margin:0 auto; padding:36px 22px 80px; }
+    a { color:var(--violet); text-decoration:none; } h1 { margin:0 0 6px; font-size:26px; letter-spacing:-.03em; } .sub { margin:0 0 24px; color:var(--muted); }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin:14px 0; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; } .grow { flex:1; min-width:260px; }
+    input, select, textarea { background:#101018; border:1px solid var(--line); color:var(--text); border-radius:10px; padding:10px 12px; font:14px system-ui; }
+    input { width:100%; box-sizing:border-box; } textarea { width:100%; min-height:76px; box-sizing:border-box; resize:vertical; }
+    button { border:0; border-radius:10px; padding:10px 14px; cursor:pointer; font-weight:650; background:#242439; color:#d9d3ff; } button.primary { background:var(--violet); color:white; } button.warn { background:#3a2b16; color:#ffd99b; border:1px solid #6b4a1d; } button:disabled { opacity:.5; cursor:default; }
+    .dot { width:9px; height:9px; border-radius:50%; display:inline-block; } .green{background:var(--ok)} .red{background:var(--bad)} .gray{background:#66677e} .yellow{background:var(--warn)}
+    .muted { color:var(--muted); font-size:13px; } .mono { font-family:'SF Mono',ui-monospace,monospace; font-size:12px; }
+    .badge { display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:999px; font-size:12px; font-weight:650; }
+    .b-logged_in { color:#9ef2bd; background:rgba(63,186,112,.12); } .b-needs_login,.b-expired { color:#ffd99b; background:rgba(240,180,90,.13); } .b-unknown { color:#b9b9cf; background:rgba(150,150,180,.1); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(245px,1fr)); gap:12px; }
+    .domain { background:#111119; border:1px solid var(--line); border-radius:14px; padding:13px; } .domain h3 { margin:0 0 8px; font-size:15px; }
+    .guard { border-color:#5d3d1f; background:rgba(240,180,90,.08); } .guard strong { color:#ffd99b; }
+    .tiny { font-size:12px; color:#6f7088; } ul { margin:8px 0 0 20px; padding:0; }
+  </style>
+</head>
+<body>
+<main>
+  <div style="margin-bottom:18px"><a href="/">← Control Panel</a></div>
+  <h1>🌐 Universal Browser Passport</h1>
+  <p class="sub">Profilo Chrome persistente dedicato, domini imparati automaticamente, login/sessione euristici e takeover manuale per CAPTCHA/2FA/login.</p>
+
+  <section class="panel">
+    <div class="row">
+      <span class="dot gray" id="chrome-dot"></span>
+      <div class="grow">
+        <strong id="chrome-label">Verifica Chrome Passport…</strong><br>
+        <span class="muted" id="chrome-sub"></span>
+      </div>
+      <label class="muted">Istanza <select id="instance-sel" onchange="switchInstance()"></select></label>
+      <button id="chrome-action-btn" class="primary" onclick="chromeAction()">…</button>
+      <button onclick="refreshAll()">↻ Aggiorna</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin:0 0 10px;font-size:18px">Vai a qualsiasi URL</h2>
+    <div class="row">
+      <div class="grow"><input id="url-input" placeholder="https://example.com/login o example.com" onkeydown="if(event.key==='Enter') navigateUrl()"></div>
+      <button class="primary" onclick="navigateUrl()">Apri nel Passport →</button>
+      <button onclick="checkUrlStatus()">Solo status</button>
+      <button class="warn" onclick="takeover()">Takeover manuale</button>
+    </div>
+    <p class="muted" id="nav-result">Il Passport non conserva password e non tenta bypass di CAPTCHA/MFA.</p>
+  </section>
+
+  <section class="panel guard">
+    <h2 style="margin:0 0 8px;font-size:18px">Credential / Passkey Policy</h2>
+    <div id="credential-policy" class="muted">Caricamento policy…</div>
+  </section>
+
+  <section class="panel" id="current-panel">
+    <h2 style="margin:0 0 10px;font-size:18px">Status corrente</h2>
+    <div id="current-status" class="muted">In attesa…</div>
+  </section>
+
+  <section class="panel guard">
+    <h2 style="margin:0 0 8px;font-size:18px">Guardrail obbligatori</h2>
+    <div class="muted">Serve conferma esplicita prima di: <strong>pagare/comprare/inviare ordini/confermare pagamenti/usare carta-PayPal-Apple Pay</strong>; accettare <strong>abbonamenti/prove gratuite/rinnovi</strong>; modificare/cancellare <strong>file/account/dati importanti/prenotazioni/servizi</strong>.</div>
+    <div class="row" style="margin-top:12px;align-items:flex-start">
+      <div class="grow"><textarea id="guard-text" placeholder="Incolla descrizione azione/API da controllare…"></textarea></div>
+      <button onclick="checkGuardrail()">Verifica guardrail</button>
+    </div>
+    <div id="guard-result" class="muted"></div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:18px">Domini imparati</h2><span class="muted" id="last-check"></span></div>
+    <div class="grid" id="domains-grid" style="margin-top:12px"></div>
+  </section>
+</main>
+
+<script>
+let instance = 'passport';
+let chromeAlive = false;
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function badge(state) { return `<span class="badge b-${esc(state || 'unknown')}">${esc(state || 'unknown')}</span>`; }
+function fmtUptime(s) { if (!s) return '0s'; if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s/60)+'m'; return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m'; }
+function normalizeUrl(raw) { raw = (raw || '').trim(); return raw && !raw.includes('://') ? 'https://' + raw : raw; }
+
+async function loadInstances() {
+  const r = await fetch('/api/browser/instances');
+  const list = r.ok ? await r.json() : [];
+  const sel = document.getElementById('instance-sel');
+  sel.innerHTML = list.map(i => `<option value="${esc(i.name)}" ${i.name === instance ? 'selected' : ''}>${esc(i.name)}</option>`).join('');
+  if (!list.some(i => i.name === instance) && list[0]) instance = list[0].name;
+}
+function switchInstance() { instance = document.getElementById('instance-sel').value; refreshAll(); }
+
+async function fetchChromeStatus() {
+  const r = await fetch(`/api/browser/status?instance=${encodeURIComponent(instance)}`);
+  const d = r.ok ? await r.json() : { alive:false };
+  chromeAlive = !!d.alive;
+  document.getElementById('chrome-dot').className = 'dot ' + (d.alive ? 'green' : 'red');
+  document.getElementById('chrome-label').textContent = d.alive ? 'Chrome Passport in esecuzione' : 'Chrome Passport non attivo';
+  document.getElementById('chrome-sub').textContent = d.alive ? `PID ${d.pid || '?'} · CDP ${d.cdp_port} · su da ${fmtUptime(d.uptime_s)}` : 'Avvia per navigare e fare login manuale';
+  document.getElementById('chrome-action-btn').textContent = d.alive ? 'Riavvia' : 'Avvia';
+}
+async function chromeAction() {
+  const btn = document.getElementById('chrome-action-btn'); btn.disabled = true;
+  await fetch(`/api/browser/${chromeAlive ? 'restart' : 'start'}?instance=${encodeURIComponent(instance)}`, { method:'POST' });
+  await new Promise(r => setTimeout(r, 1800));
+  await refreshAll(); btn.disabled = false;
+}
+
+function renderStatus(d) {
+  if (!d || !d.ok) return `<span class="muted">Errore: ${esc(d?.error || 'status non disponibile')}</span>`;
+  const takeover = d.user_takeover ? '<span class="badge b-needs_login">takeover manuale</span>' : '';
+  const ev = d.evidence || {};
+  return `<div class="row">${badge(d.state)} ${takeover}<span class="mono">${esc(d.domain || 'dominio sconosciuto')}</span></div>
+    <div class="muted" style="margin-top:8px">URL corrente: <span class="mono">${esc(d.current_url || d.url)}</span></div>
+    <div class="tiny">confidence=${esc(d.confidence)} · cookies=${ev.domain_cookies ?? 0} · authCookies=${(ev.auth_cookie_names || []).map(esc).join(', ') || '—'} · loginPrompt=${!!ev.login_prompt} · expired=${!!ev.expired}</div>`;
+}
+async function fetchCurrentStatus() {
+  const r = await fetch(`/api/browser/passport/status?instance=${encodeURIComponent(instance)}`);
+  const d = r.ok ? await r.json() : { ok:false, error: await r.text().catch(()=>'?') };
+  document.getElementById('current-status').innerHTML = renderStatus(d);
+}
+async function navigateUrl() {
+  const url = normalizeUrl(document.getElementById('url-input').value);
+  const out = document.getElementById('nav-result');
+  if (!url) { out.textContent = 'Inserisci un URL.'; return; }
+  out.textContent = 'Apertura…';
+  const r = await fetch('/api/browser/passport/navigate', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ instance, url }) });
+  const d = await r.json().catch(() => ({ ok:false, error:'risposta non JSON' }));
+  out.innerHTML = d.ok ? `Aperto: <span class="mono">${esc(d.url)}</span>` : `Errore: ${esc(d.error)}`;
+  if (d.guardrail?.requires_confirmation) out.innerHTML += `<br><strong style="color:#ffd99b">Guardrail: conferma richiesta (${d.guardrail.reasons.map(x => esc(x.description)).join('; ')})</strong>`;
+  await refreshAll();
+}
+async function checkUrlStatus() {
+  const url = normalizeUrl(document.getElementById('url-input').value);
+  const q = url ? `&url=${encodeURIComponent(url)}` : '';
+  const r = await fetch(`/api/browser/passport/status?instance=${encodeURIComponent(instance)}${q}`);
+  const d = await r.json().catch(() => ({ ok:false, error:'risposta non JSON' }));
+  document.getElementById('current-status').innerHTML = renderStatus(d);
+  await loadDomains();
+}
+async function takeover() {
+  const url = normalizeUrl(document.getElementById('url-input').value);
+  const r = await fetch('/api/browser/passport/takeover', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ instance, url, note:'requested from UI' }) });
+  const d = await r.json().catch(() => ({ ok:false, error:'risposta non JSON' }));
+  document.getElementById('nav-result').innerHTML = d.takeover?.message ? esc(d.takeover.message) : `Errore: ${esc(d.error)}`;
+  await refreshAll();
+}
+async function checkGuardrail() {
+  const text = document.getElementById('guard-text').value;
+  const r = await fetch('/api/browser/passport/guardrail/check', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text }) });
+  const d = await r.json();
+  document.getElementById('guard-result').innerHTML = d.requires_confirmation
+    ? `<strong>Conferma obbligatoria.</strong><ul>${d.reasons.map(x => `<li>${esc(x.description)}</li>`).join('')}</ul>`
+    : 'Nessuna conferma speciale rilevata dalle regole testuali.';
+}
+async function loadCredentialPolicy() {
+  const r = await fetch('/api/browser/passport/credential-policy');
+  const d = r.ok ? await r.json() : null;
+  const el = document.getElementById('credential-policy');
+  if (!d) {
+    el.textContent = 'Policy non disponibile.';
+    return;
+  }
+  el.innerHTML = `<p>${esc(d.summary)}</p>
+    <strong>Consentito</strong>
+    <ul>${(d.allowed || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <strong>Mai eseguito da GIGI</strong>
+    <ul>${(d.never_do || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <p><strong>Azione utente:</strong> ${esc(d.user_action)}</p>`;
+}
+async function loadDomains() {
+  const r = await fetch('/api/browser/passport/domains');
+  const d = r.ok ? await r.json() : { domains:[] };
+  const grid = document.getElementById('domains-grid');
+  if (!d.domains.length) { grid.innerHTML = '<div class="muted">Nessun dominio ancora imparato. Apri un URL per iniziare.</div>'; return; }
+  grid.innerHTML = d.domains.map(x => `<div class="domain"><h3>${esc(x.domain)} ${badge(x.state)}</h3>
+    <div class="tiny">visite=${x.visits || 0} · confidence=${esc(x.confidence || 'n/a')} · cookies=${x.cookie_count ?? 'n/a'} · takeover=${!!x.takeover_required}</div>
+    <div class="tiny">ultimo check: ${esc(x.last_checked_at || x.last_seen_at || '—')}</div>
+    <div class="mono" style="margin-top:8px;overflow:hidden;text-overflow:ellipsis">${esc((x.urls || [])[0] || '')}</div>
+  </div>`).join('');
+  document.getElementById('last-check').textContent = 'Aggiornato: ' + new Date().toLocaleTimeString('it-IT');
+}
+async function refreshAll() { await loadInstances(); await fetchChromeStatus(); await fetchCurrentStatus(); await loadDomains(); await loadCredentialPolicy(); }
+
+refreshAll();
+setInterval(refreshAll, 20000);
+</script>
+</body>
+</html>

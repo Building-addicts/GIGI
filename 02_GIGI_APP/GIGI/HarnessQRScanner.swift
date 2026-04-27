@@ -3,12 +3,20 @@ import SwiftUI
 import UIKit
 import AudioToolbox
 
-// Parses: gigi://harness?url=http://10.0.0.5:7779&secret=xxxxx
 struct HarnessPairingPayload {
     let url: String
     let secret: String
 
     init?(from string: String) {
+        // JSON format (current): {"url":"...","secret":"...","deviceName":"..."}
+        if let data = string.data(using: .utf8),
+           let json = try? JSONDecoder().decode(JSONPayload.self, from: data),
+           !json.url.isEmpty, !json.secret.isEmpty {
+            self.url = json.url
+            self.secret = json.secret
+            return
+        }
+        // Legacy URL scheme: gigi://harness?url=...&secret=...
         guard let comps = URLComponents(string: string),
               comps.scheme == "gigi",
               comps.host == "harness",
@@ -18,6 +26,11 @@ struct HarnessPairingPayload {
         else { return nil }
         self.url = url
         self.secret = secret
+    }
+
+    private struct JSONPayload: Decodable {
+        let url: String
+        let secret: String
     }
 }
 

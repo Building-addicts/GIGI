@@ -98,10 +98,18 @@
   <p class="footer">The <code>/api/pair</code> endpoint is reachable only from localhost to protect the secret.</p>
 </main>
 <script>
-  // The panel runs on :7777 but the pair endpoint lives on the iOS HTTP
-  // server :7779. Both are local — the fetch is same-host, the endpoint
-  // serves CORS headers that allow localhost:7777 specifically.
-  const API_BASE = 'http://' + location.hostname + ':7779';
+  // The pair endpoint lives on the iOS HTTP server. Resolve its port from
+  // panel config so custom setup ports keep /pair working.
+  let API_BASE = 'http://' + location.hostname + ':7779';
+
+  async function configureApiBase() {
+    try {
+      const r = await fetch('/api/config', { cache: 'no-store' });
+      if (!r.ok) return;
+      const cfg = await r.json();
+      API_BASE = 'http://' + location.hostname + ':' + (cfg.server?.port || cfg.server?.ios_port || 7779);
+    } catch {}
+  }
 
   async function loadPair() {
     try {
@@ -135,7 +143,7 @@
   });
 
   window.addEventListener('focus', loadPair);
-  loadPair();
+  configureApiBase().then(loadPair);
 </script>
 </body>
 </html>

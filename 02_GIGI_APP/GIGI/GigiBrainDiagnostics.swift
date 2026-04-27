@@ -15,7 +15,7 @@ enum GigiBrainDiagnostics {
         if #available(iOS 18.1, *) {
             foundationStatus = GigiFoundationAgent.isSupported
                 ? "✓ Apple Intelligence ready"
-                : "⚠ Apple Intelligence not enabled/downloaded"
+                : "optional off — Groq/local fallback active"
         }
 
         print("""

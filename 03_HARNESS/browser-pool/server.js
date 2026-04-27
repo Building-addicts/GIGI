@@ -9,6 +9,18 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = process.env.HARNESS_CONFIG || path.join(__dirname, '..', 'server', 'config.json');
+const PASSPORT_INSTANCE = 'passport';
+
+function addPassportInstance(result, br, list) {
+  if (result.has(PASSPORT_INSTANCE)) return;
+  const usedPorts = new Set((list || []).map(i => Number(i.cdp_port)).filter(Boolean));
+  let passportPort = Number(br.passport_cdp_port || 9234);
+  while (usedPorts.has(passportPort)) passportPort += 1;
+  result.set(PASSPORT_INSTANCE, {
+    name: PASSPORT_INSTANCE,
+    cdp_url: `http://127.0.0.1:${passportPort}`
+  });
+}
 
 function loadInstances() {
   // Ritorna mappa name -> { name, cdp_url }
@@ -22,6 +34,7 @@ function loadInstances() {
     for (const inst of list) {
       result.set(inst.name, { name: inst.name, cdp_url: `http://127.0.0.1:${inst.cdp_port}` });
     }
+    addPassportInstance(result, br, list);
   } catch {
     // Fallback all'env legacy
     const port = process.env.HARNESS_CDP_URL?.match(/:(\d+)/)?.[1] || 9224;

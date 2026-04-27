@@ -61,7 +61,7 @@ struct GigiPairScannerView: View {
 
             VStack {
                 Spacer()
-                Text("Point your camera at the QR shown on localhost:7777/pair")
+                Text("Point your camera at the QR in Terminal or at localhost:7777/pair")
                     .font(.footnote)
                     .foregroundColor(.white.opacity(0.9))
                     .padding(.horizontal, 14)

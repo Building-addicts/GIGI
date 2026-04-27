@@ -177,12 +177,26 @@ extension GigiActionDispatcher {
 
     private func handleComputerUse(_ args: [String: Any]) async -> ToolResult {
         let task = webStr(args, "task")
+
+        if let existingJobId = args["computerUseJobId"] as? String, !existingJobId.isEmpty {
+            let resumed = await GigiComputerUse.shared.approveAndWait(jobId: existingJobId)
+            return resumed.hasPrefix("ERROR:")
+                ? .failure(resumed)
+                : .success(resumed, tokenEstimate: 40)
+        }
+
         guard !task.isEmpty else { return .failure("task parameter required for computer_use") }
 
         let result = await GigiComputerUse.shared.execute(task: task)
         if result.hasPrefix("CONFIRM_REQUIRED:") {
-            let summary = result.replacingOccurrences(of: "CONFIRM_REQUIRED: ", with: "")
-            return .confirm(ConfirmRequest(type: .payment, summary: summary, action: "computer_use", args: args))
+            let raw = String(result.dropFirst("CONFIRM_REQUIRED:".count))
+            let parts = raw.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            let jobId = parts.first.map(String.init) ?? ""
+            let reason = parts.count > 1 ? String(parts[1]) : raw
+            var confirmArgs = args
+            confirmArgs["computerUseJobId"] = jobId
+            let summary = reason.isEmpty ? "GIGI richiede conferma prima di procedere." : reason
+            return .confirm(ConfirmRequest(type: .payment, summary: summary, action: "computer_use", args: confirmArgs))
         }
         return .success(result, tokenEstimate: 60)
     }

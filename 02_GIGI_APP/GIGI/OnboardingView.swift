@@ -32,7 +32,7 @@ struct OnboardingView: View {
     @State private var harnessSecret = ""
     @State private var harnessStatus = ""   // "", "testing", "ok:<pid>", "fail:<err>"
     @State private var isTestingHarness = false
-    @State private var showQRScanner = false
+    @State private var showPairingSheet = false
 
     // Profile step
     @State private var profileName = ""
@@ -107,16 +107,13 @@ struct OnboardingView: View {
         }
         .preferredColorScheme(.dark)
         .task { loadExistingKey() }
-        .fullScreenCover(isPresented: $showQRScanner) {
-            HarnessQRScannerView(
-                onScanned: { payload in
-                    harnessURL = payload.url
-                    harnessSecret = payload.secret
-                    showQRScanner = false
-                    Task { await testAndSaveHarness() }
-                },
-                onCancel: { showQRScanner = false }
-            )
+        .fullScreenCover(isPresented: $showPairingSheet) {
+            GigiPairingSheet(onPaired: { deviceName in
+                showPairingSheet = false
+                if let u = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) { harnessURL = u }
+                if let s = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) { harnessSecret = s }
+                harnessStatus = "ok:\(deviceName)"
+            })
         }
     }
 
@@ -132,7 +129,7 @@ struct OnboardingView: View {
                 .font(.system(size: 48, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
-            Text("Your autonomous AI on iPhone.\nZero taps. Zero interruptions.")
+            Text("Your autonomous AI on iPhone.\nVoice-first in the app, with Presence when you enable it.")
                 .font(.title3)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.white.opacity(0.7))
@@ -264,7 +261,7 @@ struct OnboardingView: View {
 
                 // QR scan shortcut
                 Button {
-                    showQRScanner = true
+                    showPairingSheet = true
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "qrcode.viewfinder")
@@ -401,19 +398,19 @@ struct OnboardingView: View {
                 .font(.system(size: 56))
                 .foregroundStyle(.purple)
 
-            Text("Wake Word")
+            Text("Presence")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
-            Text("Say **\"Jarvis\"** to wake GIGI without touching your phone.\n\nFor a custom \"Hey GIGI\" wake word, add `HeyGIGI.ppn` from Picovoice Console + your `PICOVOICE_ACCESS_KEY` in Config.xcconfig.")
+            Text("Enable Presence to keep GIGI Ready through a Live Activity. Say **\"Hey GIGI\"** or **\"GIGI\"** while iOS keeps the app eligible; if iOS pauses it, tap the Live Activity or app shortcut to resume.\n\nReady is standby. Listening appears only during active capture.")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.white.opacity(0.7))
                 .padding(.horizontal, 28)
 
-            Toggle("Enable wake word", isOn: Binding(
+            Toggle("Enable Presence", isOn: Binding(
                 get: { UserDefaults.standard.bool(forKey: GigiWakeWordEngine.userDefaultsEnabledKey) },
-                set: { GigiWakeWordEngine.shared.setUserEnabled($0) }
+                set: { PresenceSessionController.shared.setAlwaysAvailable($0) }
             ))
             .tint(.purple)
             .padding(.horizontal, 40)
@@ -430,7 +427,7 @@ struct OnboardingView: View {
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
-            Text("Say **\"Jarvis\"** or tap the mic button to command GIGI.\n\nTry: \"Call Marco\", \"Buonanotte\", \"What's the weather?\"")
+            Text("Tap the mic for one-shot voice or enable Presence for wake-word standby.\n\nTry: \"Call Marco\", \"What's the weather?\", \"Set a timer for 10 minutes\"")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.white.opacity(0.7))

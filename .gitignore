@@ -13,5 +13,29 @@
 /CLAUDE.local.md
 bug/
 *.gigi-secret.txt
+
+# Hooks runtime / Claude Code
 .playwright-mcp/
 .claude/settings.local.json
+
+# Codex agents config — committed selectively (agents/skills/prompts only)
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**
+
+# .omx is the deep-interview workspace; only interviews/ + specs/ are committed
+.omx/context/
+.omx/scratch/
+
+# Xcode build artifacts
+02_GIGI_APP/build/
+02_GIGI_APP/buildServer.json
+
+# Scratch / debug local notes
+debug console xcode.md
+voice.md

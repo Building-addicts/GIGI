@@ -13,6 +13,7 @@ export async function handleRequest(req, res, deps) {
     chromeProcs, getInstances, findInstance,
     chromeAliveByPort, chromeStatusAll,
     startChrome, stopChrome, captureInstanceScreenshot,
+    navigateInstance, getLoginStatus, getPassportStatus, navigatePassport, loadPassport, checkPassportGuardrails, getPassportCredentialPolicy, rememberPassportDomain,
     startTerminal, stopTerminal,
     autostartEnabled, enableAutostart, disableAutostart,
     LOG_FILE, PUBLIC_DIR, dirname,
@@ -272,6 +273,110 @@ export async function handleRequest(req, res, deps) {
     catch (e) { return sendJson(res, 500, { error: e.message }); }
   }
   // /api/test-message rimosso in fase 17 (era Telegram-only). Per testare iOS usa /api/ios/agent/run (fase 12).
+
+  // Browser login setup page
+  if (p === '/browser-login') {
+    fs.readFile(path.join(PUBLIC_DIR, 'browser-login.html'), (err, data) => {
+      if (err) { res.writeHead(404); return res.end('browser-login.html missing'); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(data);
+    });
+    return;
+  }
+  if (p === '/api/browser/login-status' && req.method === 'GET') {
+    const name = url.searchParams.get('instance') || 'main';
+    const status = await getLoginStatus(name);
+    return sendJson(res, 200, status);
+  }
+
+  // Universal Browser Passport: dynamic dedicated browser profile + learned-domain registry.
+  if (p === '/api/browser/passport' && req.method === 'GET') {
+    const state = loadPassport();
+    const instances = await chromeStatusAll();
+    return sendJson(res, 200, {
+      ok: true,
+      default_instance: 'passport',
+      passport_instance: instances.find(i => i.name === 'passport') || null,
+      domains: state.domains || {},
+      events: (state.events || []).slice(-50),
+      guardrails: state.guardrails
+    });
+  }
+  if (p === '/api/browser/passport/domains' && req.method === 'GET') {
+    const state = loadPassport();
+    const domains = Object.values(state.domains || {}).sort((a, b) => String(b.last_seen_at || '').localeCompare(String(a.last_seen_at || '')));
+    return sendJson(res, 200, { ok: true, domains });
+  }
+  if (p === '/api/browser/passport/credential-policy' && req.method === 'GET') {
+    return sendJson(res, 200, getPassportCredentialPolicy());
+  }
+  if (p === '/api/browser/passport/status' && req.method === 'GET') {
+    const name = url.searchParams.get('instance') || 'passport';
+    const targetUrl = url.searchParams.get('url');
+    const status = await getPassportStatus(name, targetUrl);
+    return sendJson(res, status.ok ? 200 : 500, status);
+  }
+  if (p === '/api/browser/passport/navigate' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const { instance = 'passport', url: navUrl } = body;
+      if (!navUrl) return sendJson(res, 400, { ok: false, error: 'url required' });
+      const guard = checkPassportGuardrails(navUrl);
+      const result = await navigatePassport(instance, navUrl);
+      return sendJson(res, result.ok ? 200 : 500, { ...result, guardrail: guard });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: e.message }); }
+  }
+  if (p === '/api/browser/passport/guardrail/check' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      return sendJson(res, 200, checkPassportGuardrails(body.text || body.action || body));
+    } catch (e) { return sendJson(res, 400, { ok: false, error: e.message }); }
+  }
+  if (p === '/api/browser/passport/takeover' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const instance = body.instance || 'passport';
+      let result = { ok: true };
+      if (body.url) result = await navigatePassport(instance, body.url);
+      const status = await getPassportStatus(instance, body.url || null);
+      if (status.domain) rememberPassportDomain(status.domain, {
+        state: status.state === 'logged_in' ? 'logged_in' : 'needs_login',
+        takeover_required: true,
+        takeover_note: body.note || 'manual user takeover requested',
+        url: status.current_url || body.url,
+        countVisit: false
+      });
+      return sendJson(res, result.ok ? 200 : 500, {
+        ...result,
+        takeover: {
+          required: true,
+          message: 'Intervento manuale richiesto: completa login/CAPTCHA/2FA nella finestra Chrome Passport. Nessun bypass o password storage viene eseguito.'
+        },
+        status
+      });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: e.message }); }
+  }
+
+  if (p === '/api/browser/navigate' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req));
+      const { instance = 'main', url: navUrl } = body;
+      if (!navUrl) return sendJson(res, 400, { ok: false, error: 'url required' });
+      const result = await navigateInstance(instance, navUrl);
+      return sendJson(res, result.ok ? 200 : 500, result);
+    } catch (e) { return sendJson(res, 400, { ok: false, error: e.message }); }
+  }
+
+  // Getting Started page: serves public/start.html — first-time setup guide
+  // with terminal commands + live health check.
+  if (p === '/start') {
+    fs.readFile(path.join(PUBLIC_DIR, 'start.html'), (err, data) => {
+      if (err) { res.writeHead(404); return res.end('start.html missing'); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(data);
+    });
+    return;
+  }
 
   // Pairing page: serves public/pair.html, client-side fetches /api/pair?format=svg
   // on the iOS HTTP port (7779) to render the QR.

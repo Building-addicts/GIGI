@@ -7,6 +7,7 @@ import SwiftUI
 
 struct PresenceView: View {
     @ObservedObject private var controller = PresenceSessionController.shared
+    @ObservedObject private var audioManager = GigiAudioManager.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -79,7 +80,7 @@ struct PresenceView: View {
         case .sleeping:
             Image(systemName: "moon.stars.fill")
         case .listening:
-            Image(systemName: "waveform.circle.fill")
+            Image(systemName: isFollowUpWindow ? "arrowshape.turn.up.left.circle.fill" : "waveform.circle.fill")
         case .thinking:
             Image(systemName: "brain")
         case .speaking:
@@ -111,12 +112,18 @@ struct PresenceView: View {
         switch controller.state {
         case .inactive: return ""
         case .sleeping: return "Ready"
-        case .listening: return "Listening..."
-        case .thinking: return "Thinking..."
-        case .speaking: return "Speaking..."
+        case .listening: return isFollowUpWindow ? "Follow-up" : "Listening"
+        case .thinking: return "Thinking"
+        case .speaking: return "Speaking"
         case .muted: return "Muted"
-        case .error(let msg): return "Error: \(msg)"
+        case .error: return "Needs Attention"
         }
+    }
+
+    private var isFollowUpWindow: Bool {
+        controller.state == .listening &&
+        audioManager.state == .recording &&
+        !controller.lastTranscript.isEmpty
     }
 
     private var durationString: String {

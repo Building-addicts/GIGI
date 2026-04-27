@@ -54,10 +54,16 @@ function isLoopback(req) {
       || remote === '::ffff:127.0.0.1';
 }
 
+function allowedCorsOrigin(req) {
+  const origin = req.headers.origin || '';
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return origin;
+  return 'http://localhost:7777';
+}
+
 function buildPayload(cfg) {
   const port = cfg?.server?.port || 7779;
   const mode = cfg?.tunnel?.mode || 'manual';
-  const secret = cfg?.ios?.shared_secret || '';
+  const secret = process.env.HARNESS_SHARED_SECRET || cfg?.ios?.shared_secret || '';
 
   // Mode-aware URL selection:
   //   named → https://<hostname>   (stable forever, survives reboot)
@@ -85,7 +91,7 @@ function sendJson(res, code, obj) {
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
     // Panel on 7777 fetches us via client-side JS — allow.
-    'Access-Control-Allow-Origin': 'http://localhost:7777',
+    'Access-Control-Allow-Origin': res._corsOrigin || 'http://localhost:7777',
     'Access-Control-Allow-Methods': 'GET',
     'Cache-Control': 'no-store'
   });
@@ -99,6 +105,7 @@ function sendJson(res, code, obj) {
 export async function handlePair(req, res, { cfg }) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname !== '/api/pair') return false;
+  res._corsOrigin = allowedCorsOrigin(req);
   if (req.method !== 'GET') {
     sendJson(res, 405, { ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Only GET is supported' } });
     return true;
@@ -122,7 +129,7 @@ export async function handlePair(req, res, { cfg }) {
       });
       res.writeHead(200, {
         'Content-Type': 'image/svg+xml; charset=utf-8',
-        'Access-Control-Allow-Origin': 'http://localhost:7777',
+        'Access-Control-Allow-Origin': res._corsOrigin || 'http://localhost:7777',
         'Cache-Control': 'no-store'
       });
       res.end(svg);

@@ -48,6 +48,7 @@ async function loadConfig() {
   // Nuovo schema iOS-centric: cfg.ios.shared_secret, cfg.ios.allowed_device_ids, cfg.server.port
   cfg.ios = cfg.ios || {};
   cfg.server = cfg.server || {};
+  BRIDGE_BASE = `http://${location.hostname}:${cfg.server?.port || cfg.server?.ios_port || 7779}`;
   $('#cfg-token').value = cfg.ios.shared_secret || '';
   $('#cfg-chats').value = (cfg.ios.allowed_device_ids || []).join('\n');
   $('#cfg-bin').value = cfg.claude.bin || '';
@@ -103,9 +104,9 @@ $$('.tab').forEach(b => {
 
 // MARK: - Connections tab (Phase 6B)
 // The bridge process owns the in-memory state (cloudflared, WS rooms,
-// request log). Panel HTTP runs on :7777, bridge on :7779 — same loopback,
-// different port. We fetch directly with explicit port.
-const BRIDGE_BASE = `http://${location.hostname}:7779`;
+// request log). Panel and bridge can use custom ports; loadConfig() rewrites
+// this from cfg.server.port so Connections stays aligned with /setup and /pair.
+let BRIDGE_BASE = `http://${location.hostname}:7779`;
 let connectionsTimer = null;
 
 async function bridgeFetch(path, init) {
