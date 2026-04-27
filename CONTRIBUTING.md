@@ -110,6 +110,60 @@ Niente memorie per-agente nel repo. La memoria progetto vive in `docs/memory/PRO
 - ❌ Aggiungere file Markdown duplicati (es. README inglese parallelo a un doc italiano esistente)
 - ❌ Mantenere PROGRESS.md / CHANGELOG.md / CODE_MAP.md fatti a mano — il tracker + git + IDE coprono già
 
+## Template `CLAUDE.local.md` (gitignored, personale)
+
+Crea il tuo `CLAUDE.local.md` alla root del repo (è già in `.gitignore`). Ti serve per dire al **tuo** Claude Code dove buildare e come deployare nel tuo specifico setup.
+
+```markdown
+# CLAUDE.local.md — workflow personale di <NOME>
+
+> Questo file è gitignored. Contiene host SSH, drop folder e scorciatoie
+> personali. Non condividerlo.
+
+## Build iOS
+
+Sostituisci coi tuoi parametri.
+
+- **Host SSH Mac**: `<USER>@<HOST>` (es. `user297422@FF125.macincloud.com`)
+- **Path repo sul Mac**: `~/GIGI/`
+- **Drop folder IPA per Sideloadly**: `C:/Users/<TUO_USER>/Desktop/GIGI/bug/GIGI.ipa`
+
+### Comando build verify (per Claude del dev)
+
+```bash
+ssh <USER>@<HOST> "cd ~/GIGI/02_GIGI_APP && /usr/bin/xcodebuild \
+  -project GIGI.xcodeproj -scheme GIGI -configuration Debug \
+  -destination 'generic/platform=iOS' \
+  CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+  build 2>&1 | grep -E 'error:|BUILD SUCCEEDED|BUILD FAILED' | head -40"
+```
+
+### Comando packaging IPA
+
+```bash
+ssh <USER>@<HOST> '
+  APP=$(find ~/Library/Developer/Xcode/DerivedData -name "GIGI.app" -type d | head -1)
+  rm -rf /tmp/Payload && mkdir /tmp/Payload && cp -R "$APP" /tmp/Payload/
+  cd /tmp && zip -qr /tmp/GIGI.ipa Payload
+'
+scp <USER>@<HOST>:/tmp/GIGI.ipa "<DROP_FOLDER>/GIGI.ipa"
+```
+
+## Notes for Claude del dev
+
+Quando lavori su file `.swift` in questa repo:
+1. Push del file modificato sul Mac via `scp` (oppure `git push` + `ssh ... 'cd ~/GIGI && git pull'`)
+2. Esegui il comando build verify sopra
+3. Se BUILD SUCCEEDED, packaging IPA + scp al drop folder
+4. Avvisami: "IPA pronta per Sideloadly in <DROP_FOLDER>"
+
+⚠️ Il workflow MacInCloud è LENTO. Se hai opzioni più veloci (Mac locale, TestFlight), preferiscile.
+```
+
+Salvalo e prosegui. Il `CLAUDE.local.md` viene letto dal tuo Claude Code in aggiunta a `CLAUDE.md`. Loro insieme dicono al modello sia la regola comune di team sia la tua specifica configurazione.
+
+---
+
 ## Vedi anche
 
 - `CLAUDE.md` — context per agenti AI
