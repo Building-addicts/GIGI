@@ -73,3 +73,20 @@ fi
 
 # Append atomico
 printf '%s\n' "$LINE" >> "$LOG"
+
+# ─────────────────────────────────────────────────────────────────
+# AUTOCOMMIT — committa l'ACTIVITY_LOG con il summary di Haiku come messaggio.
+# Si committa SOLO se siamo in un branch != main (evita di sporcare main
+# direttamente, che è branch-protected). In worktree feature è ok.
+# ─────────────────────────────────────────────────────────────────
+CURRENT_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+
+if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
+  # Tronca summary a 100 char per il commit message
+  COMMIT_MSG="$(printf '%s' "$SUMMARY" | head -c 100)"
+  # Commit limitato al solo file ACTIVITY_LOG.md per non includere altre changes pending
+  git -C "$ROOT" add "$LOG" 2>/dev/null
+  git -C "$ROOT" commit \
+    -m "log: $COMMIT_MSG" \
+    -- "$LOG" >/dev/null 2>&1 || true
+fi

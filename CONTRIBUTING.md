@@ -98,7 +98,6 @@ Quando lavori con Claude Code (o altri agenti):
 - Apri il repo nella root → l'agente legge `CLAUDE.md` automaticamente
 - Per workflow personali (host SSH ecc.) il tuo `CLAUDE.local.md` (gitignored) si aggiunge
 - L'hook `Stop` appende riassunto turno a `docs/memory/ACTIVITY_LOG.md` via Haiku 4.5 (richiede `ANTHROPIC_API_KEY` nel tuo env)
-
 Niente memorie per-agente nel repo. La memoria progetto vive in `docs/memory/PROJECT.md` + `CONTEXT.md` + ADR + runbook.
 
 ## Cosa NON fare
