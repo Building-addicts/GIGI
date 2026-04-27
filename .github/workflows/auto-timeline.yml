@@ -1,0 +1,125 @@
+name: Auto Timeline on #19
+
+# Posta automaticamente eventi server-side su issue #19 LIVE FEED.
+# Da qui: il workflow Discord notify catch e propaga su #gigi-project.
+# Niente AI, niente intervento del dev.
+
+on:
+  pull_request:
+    types: [opened, closed, ready_for_review]
+  issues:
+    types: [opened, closed]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      # ─────────────────────────────────────────────────────
+      # PR opened / ready_for_review (skip drafts)
+      # ─────────────────────────────────────────────────────
+      - name: Post on PR opened
+        if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review') && !github.event.pull_request.draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          ADD: ${{ github.event.pull_request.additions }}
+          DEL: ${{ github.event.pull_request.deletions }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Estrai issue linkata (se presente)
+          REF=$(printf '%s' "$BODY" | grep -ioE '(close[sd]?|fixe[sd]?|resolve[sd]?|refs?)\s+#[0-9]+' | grep -oE '#[0-9]+' | head -1)
+          [ -z "$REF" ] && REF="(no link)"
+
+          STAMP=$(date '+%H:%M')
+          MSG=$(printf '[%s] @%s · %s\n📤 PR #%s aperto: "%s" su branch `%s` (+%s/-%s)' "$STAMP" "$AUTHOR" "$REF" "$NUM" "$TITLE" "$BRANCH" "$ADD" "$DEL")
+          gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+      # ─────────────────────────────────────────────────────
+      # PR merged
+      # ─────────────────────────────────────────────────────
+      - name: Post on PR merged
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          MERGER: ${{ github.event.pull_request.merged_by.login }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          REF=$(printf '%s' "$BODY" | grep -ioE '(close[sd]?|fixe[sd]?|resolve[sd]?|refs?)\s+#[0-9]+' | grep -oE '#[0-9]+' | head -1)
+          [ -z "$REF" ] && REF="(no link)"
+
+          STAMP=$(date '+%H:%M')
+          MSG=$(printf '[%s] @%s · %s\n🎉 PR #%s mergiato da @%s (`%s` → main)' "$STAMP" "$AUTHOR" "$REF" "$NUM" "$MERGER" "$BRANCH")
+          gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+      # ─────────────────────────────────────────────────────
+      # PR closed unmerged
+      # ─────────────────────────────────────────────────────
+      - name: Post on PR closed unmerged
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          REF=$(printf '%s' "$BODY" | grep -ioE '(close[sd]?|fixe[sd]?|resolve[sd]?|refs?)\s+#[0-9]+' | grep -oE '#[0-9]+' | head -1)
+          [ -z "$REF" ] && REF="(no link)"
+
+          STAMP=$(date '+%H:%M')
+          MSG=$(printf '[%s] @%s · %s\n⛔ PR #%s chiuso senza merge: "%s"' "$STAMP" "$AUTHOR" "$REF" "$NUM" "$TITLE")
+          gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+      # ─────────────────────────────────────────────────────
+      # Issue creata con label `bug` (sub-issue automatica)
+      # ─────────────────────────────────────────────────────
+      - name: Post on bug issue opened
+        if: github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'bug')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          AUTHOR: ${{ github.event.issue.user.login }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          # Estrai parent (Parent: #N nel body)
+          PARENT=$(printf '%s' "$BODY" | grep -oE 'Parent[*:[:space:]]*#[0-9]+' | grep -oE '#[0-9]+' | head -1)
+          [ -z "$PARENT" ] && PARENT="(no parent)"
+
+          STAMP=$(date '+%H:%M')
+          MSG=$(printf '[%s] @%s · %s\n🐛 Bug aperto come issue #%s: "%s"' "$STAMP" "$AUTHOR" "$PARENT" "$NUM" "$TITLE")
+          gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+      # ─────────────────────────────────────────────────────
+      # Issue chiusa (escludi #19 stesso per evitare loop)
+      # ─────────────────────────────────────────────────────
+      - name: Post on issue closed
+        if: github.event_name == 'issues' && github.event.action == 'closed' && github.event.issue.number != 19
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          CLOSER: ${{ github.event.sender.login }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+        run: |
+          # Skip se era un bug (il messaggio è già coperto dal Discord)
+          if printf '%s' "$LABELS" | grep -q 'bug'; then
+            EMOJI="🐛✅"
+          else
+            EMOJI="✅"
+          fi
+
+          STAMP=$(date '+%H:%M')
+          MSG=$(printf '[%s] @%s · #%s\n%s Issue chiusa: "%s"' "$STAMP" "$CLOSER" "$NUM" "$EMOJI" "$TITLE")
+          gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"

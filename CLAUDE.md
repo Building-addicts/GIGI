@@ -255,6 +255,32 @@ Agent({
 Solo dopo che il subagent torna successo, comunichi al dev:
 > "🐛 Tracciato come #X (parent: #N, label `bug`, P0). Vuoi fixare ora o lasciare in stand-by?"
 
+### Auto-clear context (regola anti-context-fill)
+
+Una sessione lunga (5+ issue chiuse, 30+ minuti, contesto saturo) confonde il modello.
+Per evitare allucinazioni e perdita di precisione, **proponi al dev di fare `/clear` quando**:
+
+| Trigger | Cosa proporre |
+|---|---|
+| Una sub-issue / issue è chiusa (PR mergiato) **E** la sessione dura da 20+ min | "Issue chiusa. Pulisco la sessione (`/clear`) e ripartiamo con la prossima? (sì/no)" |
+| Senti il context "lungo" (>50% capacity, soglia self-judged dal modello) | "Sento la sessione lunga. Suggerisco `/clear` per ripartire pulito." |
+| Hai già completato 3+ issue di fila | "3 issue chiuse di fila. Pulisco prima della prossima per evitare confusione?" |
+| Stai per aprire un worktree per una **nuova issue diversa** dopo un merge | "Cambio issue. `/clear` prima per partire pulito? (consigliato)" |
+
+**Soglie indicative**:
+- 50–70% context full → SUGGERISCI `/clear` proattivamente
+- 70–90% context full → INSISTI con `/clear` prima del prossimo task
+- 90%+ → BLOCCA il prossimo task finché non si fa `/clear`
+
+Self-check: se non sei sicuro del context utilization, considera che il transcript visibile in scope è probabilmente sopra 50% se hai già fatto >5 chiamate Edit/Write/Bash significative.
+
+Quando il dev approva il `/clear`:
+1. Esegui `/clear` (slash command nativo Claude Code)
+2. Al prossimo prompt del dev, il SessionStart hook gira di nuovo, mostra le issue rimanenti, e proponi la prossima.
+3. Tutto il workflow ricomincia "da zero" con context fresh.
+
+⚠️ **NON eseguire `/clear` senza approvazione esplicita** del dev — perde context, può sentirsi spaesato.
+
 ### Regole non-negoziabili (DO NOT BREAK)
 
 1. **Mai** lavorare su `main` direttamente. Sempre worktree dedicato.
