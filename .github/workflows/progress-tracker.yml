@@ -1,0 +1,142 @@
+name: Progress Tracker (Matrioska)
+
+# Quando una sub-issue si chiude, calcola il progress della parent e
+# posta un commento celebrativo sia sulla parent sia su #19 LIVE FEED
+# (poi propagato a Discord). Se la parent raggiunge il 100%, emoji 🏆.
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    if: github.event.issue.number != 19  # ignora il LIVE FEED stesso
+    steps:
+      - name: Compute parent progress
+        id: progress
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.issue.number }}
+        run: |
+          # Cerca parent_issue dell'issue chiusa
+          PARENT=$(gh api graphql -f query='
+            query($n: Int!) {
+              repository(owner: "Building-addicts", name: "GIGI") {
+                issue(number: $n) {
+                  parent { number title }
+                }
+              }
+            }' -F n=$NUM --jq '.data.repository.issue.parent.number // ""')
+
+          if [ -z "$PARENT" ] || [ "$PARENT" = "null" ]; then
+            echo "  no parent for #$NUM, skip"
+            echo "has_parent=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "  parent of #$NUM is #$PARENT"
+
+          # Calcola progress della parent
+          PROGRESS=$(gh api graphql -f query='
+            query($p: Int!) {
+              repository(owner: "Building-addicts", name: "GIGI") {
+                issue(number: $p) {
+                  title
+                  subIssues(first: 50) {
+                    nodes { state }
+                  }
+                }
+              }
+            }' -F p=$PARENT --jq '{
+              title: .data.repository.issue.title,
+              total: (.data.repository.issue.subIssues.nodes | length),
+              closed: ([.data.repository.issue.subIssues.nodes[] | select(.state == "CLOSED")] | length)
+            }')
+
+          TOTAL=$(echo "$PROGRESS" | jq -r '.total')
+          CLOSED=$(echo "$PROGRESS" | jq -r '.closed')
+          TITLE=$(echo "$PROGRESS" | jq -r '.title')
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "  parent has no sub-issues, skip"
+            echo "has_parent=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PERCENT=$(( CLOSED * 100 / TOTAL ))
+          echo "  progress: $CLOSED/$TOTAL ($PERCENT%)"
+
+          {
+            echo "has_parent=true"
+            echo "parent=$PARENT"
+            echo "parent_title=$TITLE"
+            echo "total=$TOTAL"
+            echo "closed=$CLOSED"
+            echo "percent=$PERCENT"
+            echo "is_complete=$( [ $CLOSED -eq $TOTAL ] && echo true || echo false )"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post comment on parent
+        if: steps.progress.outputs.has_parent == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          PARENT: ${{ steps.progress.outputs.parent }}
+          CLOSED: ${{ steps.progress.outputs.closed }}
+          TOTAL: ${{ steps.progress.outputs.total }}
+          PERCENT: ${{ steps.progress.outputs.percent }}
+          COMPLETE: ${{ steps.progress.outputs.is_complete }}
+        run: |
+          if [ "$COMPLETE" = "true" ]; then
+            EMOJI="🏆"
+            HEADER="EPIC COMPLETATA"
+            EXTRA="Tutte le ${TOTAL} sub-issue sono chiuse."
+          else
+            EMOJI="📈"
+            HEADER="Progress aggiornato"
+            EXTRA="Continuiamo con le ${TOTAL_REMAINING:-$((TOTAL-CLOSED))} sub rimanenti."
+            REMAINING=$((TOTAL - CLOSED))
+          fi
+
+          MSG=$(printf '%s **%s**\n\n✅ Sub-issue #%s chiusa: "%s"\n\n**Progress**: %s/%s sub completate (%s%%)\n\n%s' \
+            "$EMOJI" "$HEADER" "$NUM" "$TITLE" "$CLOSED" "$TOTAL" "$PERCENT" "$EXTRA")
+
+          gh issue comment "$PARENT" --repo "${{ github.repository }}" --body "$MSG"
+
+      - name: Post on LIVE FEED #19
+        if: steps.progress.outputs.has_parent == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUM: ${{ github.event.issue.number }}
+          PARENT: ${{ steps.progress.outputs.parent }}
+          PARENT_TITLE: ${{ steps.progress.outputs.parent_title }}
+          CLOSED: ${{ steps.progress.outputs.closed }}
+          TOTAL: ${{ steps.progress.outputs.total }}
+          PERCENT: ${{ steps.progress.outputs.percent }}
+          COMPLETE: ${{ steps.progress.outputs.is_complete }}
+          CLOSER: ${{ github.event.sender.login }}
+        run: |
+          STAMP=$(date '+%H:%M')
+          if [ "$COMPLETE" = "true" ]; then
+            MSG=$(printf '[%s] @%s · #%s\n🏆 EPIC COMPLETATA #%s "%s" — tutte le %s sub chiuse' \
+              "$STAMP" "$CLOSER" "$PARENT" "$PARENT" "$PARENT_TITLE" "$TOTAL")
+          else
+            MSG=$(printf '[%s] @%s · #%s\n📈 Progress #%s al %s%% (%s/%s) dopo chiusura sub #%s' \
+              "$STAMP" "$CLOSER" "$PARENT" "$PARENT" "$PERCENT" "$CLOSED" "$TOTAL" "$NUM")
+          fi
+          gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+      - name: If parent is complete, also auto-close it
+        if: steps.progress.outputs.is_complete == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PARENT: ${{ steps.progress.outputs.parent }}
+        run: |
+          gh issue close "$PARENT" --repo "${{ github.repository }}" \
+            --comment "🏆 Auto-chiusa: tutte le sub-issue sono completate. Epic done."
