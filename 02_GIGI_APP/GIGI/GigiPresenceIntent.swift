@@ -53,3 +53,29 @@ struct GigiUnmutePresenceIntent: AppIntent {
         return .result()
     }
 }
+
+// MARK: - GigiLockIslandIntent / GigiUnlockIslandIntent (Dynamic Island hold)
+
+@available(iOS 16.0, *)
+struct GigiLockIslandIntent: AppIntent {
+    static var title: LocalizedStringResource = "Lock GIGI Island"
+    static var description = IntentDescription("Keep the current GIGI Dynamic Island state visible until unlocked")
+    static var openAppWhenRun: Bool = false
+
+    func perform() async throws -> some IntentResult {
+        GigiPresenceAppGroup.postCommand(.lockIsland)
+        return .result()
+    }
+}
+
+@available(iOS 16.0, *)
+struct GigiUnlockIslandIntent: AppIntent {
+    static var title: LocalizedStringResource = "Unlock GIGI Island"
+    static var description = IntentDescription("Release the GIGI Dynamic Island back to automatic idle updates")
+    static var openAppWhenRun: Bool = false
+
+    func perform() async throws -> some IntentResult {
+        GigiPresenceAppGroup.postCommand(.unlockIsland)
+        return .result()
+    }
+}
