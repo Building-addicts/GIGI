@@ -80,6 +80,7 @@ final class GigiAgentEngine {
 
     /// Entry point: processes one user utterance end-to-end.
     func process(text: String) async -> AgentResult {
+        print("GIGI agentEngine.process ENTRY: text='\(text.prefix(60))'")
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
 
@@ -129,7 +130,12 @@ final class GigiAgentEngine {
         // via the harness streaming bridge. The harness streams Claude's thoughts
         // as `.thinking`/`.toolEvent` bubbles directly into conversation memory.
         // If autoFallback is ON and Force Claude fails, fall through to Gate 2 (planner).
-        if GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude) {
+        //
+        // GIGI issue #88: Force Claude is gated OFF here so the default routing is
+        // Groq agentLoop (with `ask_harness` available as a tool — Groq decides when
+        // to delegate to harness). The Settings toggle still saves to keychain so when
+        // we remove the `false &&` guard the user's preference is preserved.
+        if false /* Force Claude disabled — see issue #88 */ && GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude) {
             let autoFallback = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
             if GigiHarnessClient.shared.isConfigured {
                 let result = await GigiClaudeBridge.shared.run(task: text, context: nil)
