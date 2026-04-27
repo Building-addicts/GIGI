@@ -206,8 +206,17 @@ git pull origin main
 
 ### Timeline commenti su #19 (LIVE FEED) — visibilità PM real-time
 
-A ogni passo significativo del lavoro, **aggiungi un commento sulla issue #19** (Live Feed) usando questo formato:
+A ogni passo significativo del lavoro, **DELEGA al subagent `timeline-poster`** (Haiku, costo minimo). Non scrivere il commento direttamente col modello principale (spreco di token).
 
+Usa il tool Agent:
+```
+Agent({
+  subagent_type: "timeline-poster",
+  prompt: "dev=<handle>, issue=<N>, event=<start|build_ok|build_fail|ac_verified|bug|pr_opened|merge|standby>, details=<una riga>"
+})
+```
+
+Equivalente a:
 ```bash
 gh issue comment 19 --repo Building-addicts/GIGI --body "[$(date '+%H:%M')] @<git_user_handle> · #<issue_num>
 <emoji> <una riga di stato>"
@@ -230,17 +239,21 @@ Eventi da loggare (uno per uno, mai in bulk):
 
 ### Notifica forte PM su sub-issue bug (regola rinforzata)
 
-Quando crei una sub-issue `bug` (perché un AC è FALSO), DEVI fare TUTTE queste 3 cose insieme:
+Quando un AC è FALSO, **DELEGA al subagent `bug-tracker`** (Haiku, costo minimo). Lui esegue le 3 azioni atomiche:
+1. Sub-issue creata (assegnata a dev + Armando, `cc @ArmandoBattaglino` nel body)
+2. Comment sulla issue parent (cc Armando)
+3. Comment su #19 LIVE FEED
 
-1. **Sub-issue creata** con:
-   - Body che cita parent (`Parent: #N`), parole esatte del dev, file ipotizzati
-   - Body con riga finale: `cc @ArmandoBattaglino — bug urgente trovato in test E2E`
-   - Assignee: stesso del PR + Armando (`--assignee "<dev>,ArmandoBattaglino"`)
-2. **Comment sulla issue parent** con:
-   - `🐛 Sub-issue #X aperta per AC#<X> fallito. @ArmandoBattaglino visibility.`
-3. **Comment su #19 LIVE FEED** (vedi sezione sopra)
+Usa il tool Agent:
+```
+Agent({
+  subagent_type: "bug-tracker",
+  prompt: "parent_issue=<N>, ac_number=<X>, ac_description=<...>, dev_handle=<handle>, dev_words=\"<parole esatte del dev>\", suspected_files=[<lista>], pr_num=<num o vuoto>, area=<ios|harness|mdm|docs|infra>"
+})
+```
 
-Solo dopo le 3 azioni, comunichi al dev.
+Solo dopo che il subagent torna successo, comunichi al dev:
+> "🐛 Tracciato come #X (parent: #N, label `bug`, P0). Vuoi fixare ora o lasciare in stand-by?"
 
 ### Regole non-negoziabili (DO NOT BREAK)
 

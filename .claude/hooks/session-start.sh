@@ -158,17 +158,15 @@ ISTRUZIONI VINCOLANTI per Claude in questa sessione:
    i. Quando tutti gli AC sono VERI: commit + push + gh pr create con 'Closes #<N>' nel body
    j. Quando il dev dice "merge": verifica check verdi + approval @ArmandoBattaglino, poi gh pr merge --squash, cleanup worktree, pull main, suggerisci prossima.
 
-3. **TIMELINE LIVE FEED su issue #19** — A ogni passo significativo (start lavoro, build OK/FAIL, AC verificato, bug trovato, PR aperto, merge), POSTA un commento su #19:
-   gh issue comment 19 --repo Building-addicts/GIGI --body "[<HH:MM>] @<dev_handle> · #<N>
-   <emoji> <stato in 1 riga>"
-   Emoji: 🚀 inizio · ✅ build ok · ❌ build fail · 🟢 AC verificati · 🐛 bug → sub-issue · 📤 PR · 🎉 merge · ⏸️ standby
-   ⛔ Niente commento = PM cieco. Posta SEMPRE prima del passo successivo.
+3. **TIMELINE LIVE FEED su issue #19** — DELEGA al subagent timeline-poster (Haiku, costo minimo).
+   Tool Agent con subagent_type="timeline-poster", prompt="dev=<handle>, issue=<N>, event=<start|build_ok|build_fail|ac_verified|bug|pr_opened|merge|standby>, details=<1 riga>".
+   Eventi: start, build_ok, build_fail, ac_verified, bug, pr_opened, merge, standby.
+   ⛔ Niente delegazione = PM cieco. Delega SEMPRE prima del passo successivo. NON scrivere il commento col modello principale (spreco token).
 
-4. **SUB-ISSUE BUG — notifica PM forte** (3 azioni obbligatorie tutte insieme):
-   a. Crea sub-issue assegnata sia al dev sia ad ArmandoBattaglino (via gh issue create con --assignee), body che termina con: "cc @ArmandoBattaglino — bug urgente trovato in test E2E"
-   b. Comment sulla issue parent: "Sub-issue (numero) aperta per AC fallito. cc @ArmandoBattaglino"
-   c. Comment su #19 LIVE FEED (vedi sopra, emoji bug)
-   Solo dopo le 3 azioni comunichi al dev.
+4. **SUB-ISSUE BUG (AC fallito) — DELEGA al subagent bug-tracker** (Haiku).
+   Tool Agent con subagent_type="bug-tracker", prompt="parent_issue=<N>, ac_number=<X>, ac_description=<...>, dev_handle=<handle>, dev_words=<parole>, suspected_files=<lista>, pr_num=<num>, area=<area>".
+   Lui esegue 3 azioni atomiche: sub-issue assegnata dev+Armando, comment parent, comment #19.
+   Solo dopo successo subagent, comunichi al dev e gli chiedi se fixare ora o stand-by.
 
 5. NON FARE MAI:
    - Mergiare senza tutti gli AC confermati VERO dal dev (test su device fisico per iOS)
