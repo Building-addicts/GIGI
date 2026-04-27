@@ -32,19 +32,16 @@ final class GigiDayPlanReasoner {
     static let shared = GigiDayPlanReasoner()
     private init() {}
 
-    /// Modello Groq di default. Allineato a `GigiCloudService.agentModel`.
-    private static let plannerModel = "openai/gpt-oss-120b"
-
     func reason(input: DayPlanInput) async -> DayPlanOutput? {
         let prompt = Self.buildSystemPrompt(input: input)
         let t0 = Date()
 
         do {
+            // Usa il default `agentModel` di GigiCloudService (llama-3.3-70b-versatile).
             let resp = try await GigiCloudService.shared.callWithFunctions(
                 systemInstruction: prompt,
                 contents: [.user("Proponi un piano per oggi.")],
-                tools: [],
-                model: Self.plannerModel
+                tools: []
             )
             let elapsed = Int(Date().timeIntervalSince(t0) * 1000)
             guard let raw = resp.text, !raw.isEmpty else {
