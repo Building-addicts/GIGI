@@ -176,8 +176,12 @@ final class GigiUserProfile {
         // Wait for CloudKit bootstrap so the cache is hydrated before we read
         // the idempotency marker — otherwise launches before bootstrap finishes
         // see a stale empty cache and re-run the seed every time.
+        let t0 = Date()
         await m.awaitReady()
-        if await m.recall(MemKey.mvpSeeded) == "true" { return }
+        let waited = Int(Date().timeIntervalSince(t0) * 1000)
+        let markerValue = await m.recall(MemKey.mvpSeeded)
+        GigiDebugLogger.log("seed: awaitReady \(waited)ms · recall(\(MemKey.mvpSeeded)) = \(markerValue.map { "\"\($0)\"" } ?? "nil")")
+        if markerValue == "true" { return }
         guard let url = Bundle.main.url(forResource: "MVPPreferencesSeed", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let seed = try? JSONDecoder().decode(MVPPreferences.self, from: data)
