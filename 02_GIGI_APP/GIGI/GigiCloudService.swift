@@ -154,6 +154,8 @@ final class GigiCloudService {
             body["tool_choice"] = "auto"
         }
 
+        print("GIGI Groq request: model=\(model ?? agentModel) tools=\(toolsJSON.count) tool_choice=\(body["tool_choice"] ?? "n/a") msgs=\(messages.count)")
+
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         return try await withThrowingTaskGroup(of: GigiLLMResponse.self) { group in
@@ -456,6 +458,8 @@ final class GigiCloudService {
                 functionCalls.append(FunctionCallBlock(name: name, args: args))
             }
         }
+
+        print("GIGI Groq response: finish_reason=\(finishReason) content_len=\(text?.count ?? 0) tool_calls=\(functionCalls.count)")
 
         return GigiLLMResponse(
             text:          (text?.isEmpty ?? true) ? nil : text,
