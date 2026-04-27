@@ -202,14 +202,53 @@ git pull origin main
 
 > "Mergiato e pulito. Vuoi prossima issue (#<altra>)? Rispondi 'sì'."
 
+### Timeline commenti su #19 (LIVE FEED) — visibilità PM real-time
+
+A ogni passo significativo del lavoro, **aggiungi un commento sulla issue #19** (Live Feed) usando questo formato:
+
+```bash
+gh issue comment 19 --repo Building-addicts/GIGI --body "[$(date '+%H:%M')] @<git_user_handle> · #<issue_num>
+<emoji> <una riga di stato>"
+```
+
+Eventi da loggare (uno per uno, mai in bulk):
+
+| Quando | Emoji | Esempio body |
+|---|---|---|
+| Inizio lavoro issue | 🚀 | `🚀 Inizio #9 (worktree feat/issue-9-di-descend)` |
+| Build OK | ✅ | `✅ Build SUCCEEDED su #9` |
+| Build fallito | ❌ | `❌ Build FAILED su #9 — error in <file:line>, indago` |
+| Test E2E AC passa | 🟢 | `🟢 #9 AC1+AC2 verificati dal dev su iPhone 15 Pro` |
+| **Bug trovato** (sub-issue creata) | 🐛 | `🐛 #9 AC#3 fallito → sub-issue #43 aperta. cc @ArmandoBattaglino` |
+| PR aperto | 📤 | `📤 PR #44 per #9 aperto, attesa review` |
+| Merge | 🎉 | `🎉 #9 mergiato. Worktree pulito.` |
+| Pausa / blocco | ⏸️ | `⏸️ #9 in stand-by per <motivo>` |
+
+**Niente commento → PM cieco. Sempre commento prima di passare al passo successivo.**
+
+### Notifica forte PM su sub-issue bug (regola rinforzata)
+
+Quando crei una sub-issue `bug` (perché un AC è FALSO), DEVI fare TUTTE queste 3 cose insieme:
+
+1. **Sub-issue creata** con:
+   - Body che cita parent (`Parent: #N`), parole esatte del dev, file ipotizzati
+   - Body con riga finale: `cc @ArmandoBattaglino — bug urgente trovato in test E2E`
+   - Assignee: stesso del PR + Armando (`--assignee "<dev>,ArmandoBattaglino"`)
+2. **Comment sulla issue parent** con:
+   - `🐛 Sub-issue #X aperta per AC#<X> fallito. @ArmandoBattaglino visibility.`
+3. **Comment su #19 LIVE FEED** (vedi sezione sopra)
+
+Solo dopo le 3 azioni, comunichi al dev.
+
 ### Regole non-negoziabili (DO NOT BREAK)
 
 1. **Mai** lavorare su `main` direttamente. Sempre worktree dedicato.
 2. **Mai** mergiare senza tutti gli AC confermati VERO esplicitamente dal dev su device fisico.
-3. **Mai** chiudere il loop AC-fail senza creare la sub-issue prima.
+3. **Mai** chiudere il loop AC-fail senza creare la sub-issue prima + 3 notifiche (vedi sopra).
 4. **Mai** skippare il build verify ("sembra ok dal codice" non basta).
 5. **Mai** modificare file fuori dallo scope della issue senza chiedere al dev.
 6. **Mai** fare commit/push/PR/merge senza spiegare al dev cosa stai per fare.
+7. **Mai** completare un passo senza commento timeline su #19.
 
 ### Test sicurezza autonomia
 
