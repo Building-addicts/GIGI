@@ -46,7 +46,7 @@ jobs:
       - name: Issue opened → add + Backlog
         if: github.event_name == 'issues' && github.event.action == 'opened'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUE_NODE: ${{ github.event.issue.node_id }}
           ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
@@ -73,7 +73,7 @@ jobs:
       - name: Issue assigned → Todo
         if: github.event_name == 'issues' && github.event.action == 'assigned'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUE_NUM: ${{ github.event.issue.number }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
@@ -100,7 +100,7 @@ jobs:
       - name: Issue closed → Done
         if: github.event_name == 'issues' && github.event.action == 'closed'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUE_NUM: ${{ github.event.issue.number }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
@@ -127,7 +127,7 @@ jobs:
       - name: Issue reopened → Backlog
         if: github.event_name == 'issues' && github.event.action == 'reopened'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUE_NUM: ${{ github.event.issue.number }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
@@ -167,7 +167,7 @@ jobs:
       - name: PR open/ready/reopened → linked issues → In review
         if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review' || github.event.action == 'reopened') && !github.event.pull_request.draft
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUES: ${{ steps.extract.outputs.issues }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
@@ -196,7 +196,7 @@ jobs:
       - name: PR draft → linked issues → In Progress
         if: github.event_name == 'pull_request' && github.event.action == 'converted_to_draft'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUES: ${{ steps.extract.outputs.issues }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
@@ -225,7 +225,7 @@ jobs:
       - name: PR merged → linked issues → Done
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUES: ${{ steps.extract.outputs.issues }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
@@ -254,7 +254,7 @@ jobs:
       - name: PR closed unmerged → linked issues → Todo
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == false
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           ISSUES: ${{ steps.extract.outputs.issues }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
@@ -283,7 +283,7 @@ jobs:
       - name: Branch created → issue → In Progress
         if: github.event_name == 'create' && github.event.ref_type == 'branch'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           REF: ${{ github.event.ref }}
           REPO_NODE: ${{ github.event.repository.node_id }}
         run: |

@@ -10,3 +10,4 @@
 - `2026-04-27 10:00` · auto · Retrofit 51/51 issue con header 🎯/🔧/✨. Aggiornato `CLAUDE.md`, creato `docs/SETUP_LEO_FEDE.md` (kickoff message). _(branch: `main` · files: CLAUDE.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-27 10:00` · auto · Creato `docs/KICKOFF_LEO_FEDE.md` — kickoff message Leo+Fede (workflow Claude Code, issue hierarchy, Test E2E obbligatorio, Discord tracking, setup). _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
 - `2026-04-27 10:07` · auto · Creato `docs/SETUP_LEO_FEDE.md` — setup pratico 11 messaggi per Leo (iOS/SSH) + Fede (harness Node), prerequisiti e comandi copia-incollabili. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 00:33` · auto · Chiuso spam PR #80 (bot fork-farming). Aggiornati `CLAUDE.md`, `docs/memory/ACTIVITY_LOG.md`. Creato `docs/SETUP_LEO_FEDE.md`. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
