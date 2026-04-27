@@ -9,14 +9,14 @@ Quando apri una sessione Claude Code in `03_HARNESS/`, leggi prima questo file.
 **Posizione nel monorepo GIGI:**
 ```
 GIGI-harness/                      ← root monorepo (remote: Leonardo-Corte/GIGI)
-├── 00_DOCS/                       ← architettura + task plan + piano integrazione harness
+├── docs/                          ← architettura + task plan + piano integrazione harness + memoria agenti
 ├── 01_SERVER_MDM/                 ← server Node per profili MDM iOS
 ├── 02_GIGI_APP/                   ← app iOS Swift (GIGI V3)
 └── 03_HARNESS/                    ← sei qui (backend GIGI)
 ```
 
 **Stato integrazione (2026-04-23)**: fasi 10-18 complete. Backend iOS operativo.
-Piano riferimento: `00_DOCS/PIANO_INTEGRAZIONE_HARNESS.md`.
+Piano riferimento: `docs/PIANO_INTEGRAZIONE_HARNESS.md`.
 Spec API: `docs/api/ios-integration.md`. Quick start: `README.md`.
 
 Porte: **7777** panel admin · **7778** RPC loopback · **7779** iOS HTTP+WS.

@@ -309,7 +309,7 @@ Decisione 3: drop completo. Niente `clients/telegram/`.
 
 - [ ] **18.1** Scrivi `03_HARNESS/docs/api/ios-integration.md` completo
 - [ ] **18.2** Aggiorna `ARCHITETTURA_V3.md` §9.BIS con architettura finale
-- [ ] **18.3** Aggiorna `INVENTARIO_COMPLETO.md` con nuovo layout
+- [ ] **18.3** Aggiorna `docs/COMPONENTS.md` con nuovo layout
 - [ ] **18.4** Scrivi `03_HARNESS/README.md` (quick start Mac + deploy)
 - [ ] **18.5** Test E2E scenario 1: iOS → "ricordati che Marco è allergico alle noci" → memoria persiste → query dopo riavvio app
 - [ ] **18.6** Test E2E scenario 2: iOS → "prenota Sakura alle 20" → CONFIRM_REQUIRED → utente OK → prenotato

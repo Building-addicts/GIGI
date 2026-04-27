@@ -1566,9 +1566,17 @@ struct AgentResult {
 
 ```
 GIGI/
-├── 00_DOCS/
+├── docs/
 │   ├── ARCHITETTURA_V3.md       ← questo documento (rev. 2)
-│   └── ARCHITETTURA.md          ← v2 (storico)
+│   ├── PIANO_INTEGRAZIONE_HARNESS.md
+│   ├── TEST_E2E.md
+│   ├── COMPONENTS.md            ← mappa "quale file fa cosa" per funzione
+│   ├── GETTING_STARTED.md
+│   ├── TASK_PLAN.md
+│   ├── memory/                  ← memoria progetto agenti
+│   ├── plans/                   ← piani per fase
+│   ├── research/                ← finding tecnici
+│   └── archive/                 ← doc storiche superate
 │
 ├── 01_SERVER_MDM/               ← Node.js backend
 │   ├── server.js                ← esistente + /api/computer-use
@@ -1785,7 +1793,7 @@ iOS → POST /api/ios/computer-use {task: "ordina pizza"}
 ```
 
 Spec endpoint completa: `03_HARNESS/docs/api/ios-integration.md`.
-Piano integrazione (fasi 10-18 eseguite): `00_DOCS/PIANO_INTEGRAZIONE_HARNESS.md`.
+Piano integrazione (fasi 10-18 eseguite): `docs/PIANO_INTEGRAZIONE_HARNESS.md`.
 
 ### Struttura
 
