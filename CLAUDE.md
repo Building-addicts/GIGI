@@ -255,6 +255,47 @@ Agent({
 Solo dopo che il subagent torna successo, comunichi al dev:
 > "🐛 Tracciato come #X (parent: #N, label `bug`, P0). Vuoi fixare ora o lasciare in stand-by?"
 
+### Step Report obbligatorio prima del merge (regola "matrioska")
+
+Ogni sub-issue chiusa è **un avanzamento esplicito** verso il completamento della parent, e ogni parent verso il lancio MVP. Il merge non è "ok finito" — è un **passo celebrato**.
+
+Prima di chiamare `gh pr merge`, il main Claude del dev DEVE:
+
+1. **Generare uno Step Report narrativo** (3-5 righe in italiano), con queste 3 sezioni esatte:
+   - **Cosa abbiamo implementato**: 1 paragrafo concreto, no jargon
+   - **Cosa è ora possibile** che prima non era: 1 frase
+   - **Prossimo passo logico**: nome della prossima sub-issue da prendere o "parent ora al X%, manca Y"
+   
+2. **Postare lo Step Report come comment sul PR** (non sostituire il body, AGGIUNGERE comment) prima del merge:
+   ```
+   gh pr comment <num> --body "## Step Report
+   
+   **Cosa abbiamo implementato**: ...
+   
+   **Cosa è ora possibile**: ...
+   
+   **Prossimo passo**: ...
+   "
+   ```
+
+3. **Dopo il merge** (auto via `Closes #N`):
+   - L'Action `progress-tracker.yml` posta automaticamente sulla parent issue il progress aggiornato (X/Y sub chiuse, %)
+   - Se parent al 100%: posta 🏆 EPIC COMPLETATA + auto-chiude la parent
+   - Tutto questo finisce su Discord via auto-timeline + Discord notify (zero lavoro extra del dev)
+
+4. **Comunica al dev** in chat l'incremento:
+   - "Sub-issue #X chiusa, parent #Y ora al Z%. Vuoi prendere la prossima sub (#W)?"
+
+### Esempio Step Report
+
+> ## Step Report
+>
+> **Cosa abbiamo implementato**: il metodo `descendForListening()` su `GigiLiveActivityController` che termina la pill standby e richiede una nuova activity in stato `.listening` con `AlertConfiguration`. È un building block puro — non lo chiama ancora nessuno.
+>
+> **Cosa è ora possibile**: la sub-issue 2/4 può ora wirearlo al wake event in `GigiWakeWordEngine`, sbloccando il primo pezzo visibile della Dynamic Island descent.
+>
+> **Prossimo passo**: aprire la sub #25 (2/4) — wire `descendForListening()` al callback wake. Parent #9 ora al 25% (1/4).
+
 ### Auto-clear context (regola anti-context-fill)
 
 Una sessione lunga (5+ issue chiuse, 30+ minuti, contesto saturo) confonde il modello.
