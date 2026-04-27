@@ -170,14 +170,14 @@ class GigiSmartOrchestrator: ObservableObject {
         stopMicCapture()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            GigiDebugLogger.voiceEvent("orchestrator.emptyTranscript", currentVoiceTurnId)
+            GigiDebugLogger.voiceEvent("orchestrator.emptyTranscript", turnId: currentVoiceTurnId)
             isThinking = false
             currentVoiceTurnId = nil
             return
         }
 
         let turnId = ensureVoiceTurn(reason: "transcript")
-        GigiDebugLogger.voiceEvent("orchestrator.transcript", turnId, ["length": "\(trimmed.count)"])
+        GigiDebugLogger.voiceEvent("orchestrator.transcript", turnId: turnId, ["length": "\(trimmed.count)"])
 
         await GigiLiveActivityController.shared.transitionToThinking(transcript: trimmed)
         status = "GIGI: Sto pensando..."
@@ -264,7 +264,7 @@ class GigiSmartOrchestrator: ObservableObject {
     // MARK: - Deferred turn close (T4)
 
     private func scheduleDoneAfterTTS(message: String) {
-        GigiDebugLogger.voiceEvent("orchestrator.scheduleDoneAfterTTS", currentVoiceTurnId)
+        GigiDebugLogger.voiceEvent("orchestrator.scheduleDoneAfterTTS", turnId: currentVoiceTurnId)
         pendingDoneMessage = message
         doneSafetyTask?.cancel()
         // Safety: if AVSpeechSynthesizer never reports finish (cancel storms, hardware
@@ -278,7 +278,7 @@ class GigiSmartOrchestrator: ObservableObject {
 
     private func fireDone() {
         guard let msg = pendingDoneMessage else { return }
-        GigiDebugLogger.voiceEvent("orchestrator.fireDone", currentVoiceTurnId)
+        GigiDebugLogger.voiceEvent("orchestrator.fireDone", turnId: currentVoiceTurnId)
         pendingDoneMessage = nil
         doneSafetyTask?.cancel()
         doneSafetyTask = nil
@@ -287,7 +287,7 @@ class GigiSmartOrchestrator: ObservableObject {
     }
 
     private func finalizeTurnNow(message: String) {
-        GigiDebugLogger.voiceEvent("orchestrator.finalizeTurn", currentVoiceTurnId, ["presenceMode": "\(GigiAudioManager.shared.presenceMode)", "quickTalk": "\(isQuickTalkSession)"])
+        GigiDebugLogger.voiceEvent("orchestrator.finalizeTurn", turnId: currentVoiceTurnId, ["presenceMode": "\(GigiAudioManager.shared.presenceMode)", "quickTalk": "\(isQuickTalkSession)"])
         SoundEngine.releaseSession()
 
         if isQuickTalkSession {
@@ -399,7 +399,7 @@ class GigiSmartOrchestrator: ObservableObject {
     func interruptAndListen(source: String) {
         let turnId = ensureVoiceTurn(reason: "interrupt.\(source)")
         clearPendingDone(reason: "bargeIn.\(source)")
-        GigiDebugLogger.voiceEvent("orchestrator.interruptAndListen", turnId, ["source": source, "audioState": "\(GigiAudioManager.shared.state)"])
+        GigiDebugLogger.voiceEvent("orchestrator.interruptAndListen", turnId: turnId, ["source": source, "audioState": "\(GigiAudioManager.shared.state)"])
 
         SoundEngine.play(.wakeWord)
         if isQuickTalkSession { onQuickTalkStateChange?(.listening) }
@@ -475,5 +475,35 @@ class GigiSmartOrchestrator: ObservableObject {
         }
 
         return validParts.count >= 2 ? validParts : nil
+    }
+
+    // MARK: - Voice turn lifecycle helpers
+    //
+    // Reconstructed from call-site contracts after #95 (ensureVoiceTurn /
+    // clearPendingDone were referenced by `df5a645` but their definitions
+    // were never committed). Behaviour kept conservative: log + minimal
+    // state mutation, no impact on existing turn flow.
+
+    /// Returns the current voice turn id, generating a new one if none is active.
+    /// `reason` is a short tag describing the trigger (transcript / wake / interrupt / quickTalk).
+    @discardableResult
+    fileprivate func ensureVoiceTurn(reason: String) -> String {
+        if let existing = currentVoiceTurnId {
+            GigiDebugLogger.voiceEvent("orchestrator.ensureVoiceTurn.reuse", turnId: existing, ["reason": reason])
+            return existing
+        }
+        let newId = String(UUID().uuidString.prefix(8))
+        currentVoiceTurnId = newId
+        GigiDebugLogger.voiceEvent("orchestrator.ensureVoiceTurn.new", turnId: newId, ["reason": reason])
+        return newId
+    }
+
+    /// Cancels any pending deferred-done state (used on barge-in / interrupt).
+    fileprivate func clearPendingDone(reason: String) {
+        guard pendingDoneMessage != nil || doneSafetyTask != nil else { return }
+        GigiDebugLogger.voiceEvent("orchestrator.clearPendingDone", turnId: currentVoiceTurnId, ["reason": reason])
+        pendingDoneMessage = nil
+        doneSafetyTask?.cancel()
+        doneSafetyTask = nil
     }
 }
