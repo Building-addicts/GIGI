@@ -63,6 +63,7 @@ struct GIGIApp: App {
                     await GigiVectorStore.shared.preload(namespaces: [.contacts, .preferences, .places])
                     #if DEBUG
                     await GigiDayPlanReasoner.debugRunWithMockData()
+                    await GigiDayPlanReasoner.debugRunWithRealCalendar()
                     #endif
                     GigiDebugLogger.log("MainTabView .task finished")
                 }
