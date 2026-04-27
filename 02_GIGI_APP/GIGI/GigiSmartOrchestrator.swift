@@ -88,7 +88,12 @@ class GigiSmartOrchestrator: ObservableObject {
                 self.pendingDoneMessage = nil
                 self.doneSafetyTask?.cancel()
                 self.doneSafetyTask = nil
-                await GigiLiveActivityController.shared.completeWithDone(message: "Done.")
+                // In presence / quickTalk the AudioManager follow-up window owns the pill —
+                // forcing completeWithDone here races and leaves the pill stuck (#99).
+                // Mirror finalizeTurnNow's policy: only close the pill outside those modes.
+                if !GigiAudioManager.shared.presenceMode && !self.isQuickTalkSession {
+                    await GigiLiveActivityController.shared.completeWithDone(message: "Done.")
+                }
                 self.status = "GIGI: Ready"
                 self.isThinking = false
                 self.currentVoiceTurnId = nil
