@@ -19,11 +19,15 @@ struct GigiLiveActivityWidget: Widget {
                     ExpandedLeadingView(phase: context.state.phase)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    ExpandedCenterView(
-                        phase: context.state.phase,
-                        message: displayMessage(state: context.state, isStale: context.isStale),
-                        transcript: displayTranscript(state: context.state)
-                    )
+                    if context.state.consentPending {
+                        ConsentPromptCenterView()
+                    } else {
+                        ExpandedCenterView(
+                            phase: context.state.phase,
+                            message: displayMessage(state: context.state, isStale: context.isStale),
+                            transcript: displayTranscript(state: context.state)
+                        )
+                    }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     ExpandedTrailingView(
@@ -32,10 +36,14 @@ struct GigiLiveActivityWidget: Widget {
                     )
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    ExpandedBottomView(
-                        phase: context.state.phase,
-                        isLocked: context.state.isIslandLocked
-                    )
+                    if context.state.consentPending {
+                        ConsentPromptBottomView()
+                    } else {
+                        ExpandedBottomView(
+                            phase: context.state.phase,
+                            isLocked: context.state.isIslandLocked
+                        )
+                    }
                 }
             } compactLeading: {
                 CompactLeadingView(phase: context.state.phase)
@@ -404,6 +412,54 @@ private struct ExpandedBottomView: View {
                 }
             }
             .foregroundStyle(.white.opacity(0.92))
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
+    }
+}
+
+// MARK: - Consent prompt views (first-wake Always Listening question)
+
+private struct ConsentPromptCenterView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Keep GIGI always listening?")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text("Allow lets GIGI keep listening across this session.")
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.72))
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct ConsentPromptBottomView: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(intent: GigiAllowAlwaysListeningIntent()) {
+                Label("Allow always listening", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(GigiBrand.purple)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Allow always listening")
+
+            Button(intent: GigiDeclineAlwaysListeningIntent()) {
+                Label("Just this time", systemImage: "xmark.circle")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.white.opacity(0.86))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Just this time")
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 10)

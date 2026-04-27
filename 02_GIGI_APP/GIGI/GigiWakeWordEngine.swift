@@ -32,6 +32,10 @@ import UserNotifications
 final class GigiWakeWordEngine {
     static let shared = GigiWakeWordEngine()
     static let userDefaultsEnabledKey = "gigi.wakeWord.enabled"
+    // Tri-state: nil = no decision yet (prompt at first wake), true = always-listening
+    // authorized for this app launch, false = declined for this app launch (skip prompt
+    // but still single-turn). Cleared at app launch from GIGIApp.init.
+    static let consentKey = "gigi.alwaysListeningConsent"
 
     private(set) var isMonitoring = false
 
@@ -569,6 +573,16 @@ final class GigiWakeWordEngine {
         consecutiveFailures = 0
         stopMonitoringHard()
         GigiAudioSequestrator.shared.prewarmBluetooth()
+
+        // First wake of this app launch: prompt the user before entering any turn.
+        // Tri-state on UserDefaults — `object(forKey:)` distinguishes "no decision"
+        // from `false` (Decline collapses with missing if we used `bool(forKey:)`).
+        if UserDefaults.standard.object(forKey: Self.consentKey) == nil {
+            print("GIGI WakeWord: first wake — surfacing always-listening consent prompt")
+            Task { await GigiLiveActivityController.shared.presentConsentRequest() }
+            return
+        }
+
         let isForeground = UIApplication.shared.applicationState == .active
         if isForeground {
             SoundEngine.play(.wakeWord)

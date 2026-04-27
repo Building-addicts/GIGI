@@ -10,6 +10,10 @@ struct GIGIApp: App {
 
     init() {
         GigiDebugLogger.log("GIGIApp init STARTED — bundle=\(Bundle.main.bundleIdentifier ?? "nil")")
+        // Always-listening consent is per-app-launch: clear any value carried over
+        // from a previous run so the first wake re-prompts the user. Must run before
+        // any Task or scenePhase observer reads the key.
+        UserDefaults.standard.removeObject(forKey: GigiWakeWordEngine.consentKey)
         // Synchronous flush attempt for prior crash logs (so they reach the wire
         // before THIS run potentially crashes too).
         let prior = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
