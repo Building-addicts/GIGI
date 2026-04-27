@@ -61,6 +61,9 @@ struct GIGIApp: App {
                     // Realtime engine connects lazily on first use to save battery at startup
                     // Pre-load semantic memory for top-priority namespaces (non-blocking)
                     await GigiVectorStore.shared.preload(namespaces: [.contacts, .preferences, .places])
+                    #if DEBUG
+                    await GigiDayPlanReasoner.debugRunWithMockData()
+                    #endif
                     GigiDebugLogger.log("MainTabView .task finished")
                 }
                 .onAppear {
