@@ -16,8 +16,8 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Issue comment on LIVE FEED #19
-        if: ${{ github.event_name == 'issue_comment' && github.event.issue.number == 19 }}
+      - name: Issue comment on LIVE FEED 19
+        if: github.event_name == 'issue_comment' && github.event.issue.number == 19
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           AUTHOR: ${{ github.event.comment.user.login }}
@@ -26,14 +26,12 @@ jobs:
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
           SHORT=$(printf '%s' "$BODY" | head -c 1500)
-          PAYLOAD=$(jq -n --arg c "📊 **LIVE FEED** — @$AUTHOR
-$SHORT
-
-[apri commento]($URL)" '{content: $c}')
-          curl -sS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+          CONTENT=$(printf '📊 **LIVE FEED** — @%s\n%s\n\n[apri commento](%s)' "$AUTHOR" "$SHORT" "$URL")
+          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
       - name: Bug issue opened
-        if: ${{ github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'bug') }}
+        if: github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'bug')
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           NUM: ${{ github.event.issue.number }}
@@ -42,14 +40,12 @@ $SHORT
           AUTHOR: ${{ github.event.issue.user.login }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          PAYLOAD=$(jq -n --arg c "🐛 **BUG APERTO** — #$NUM
-**$TITLE**
-by @$AUTHOR
-$URL" '{content: $c}')
-          curl -sS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+          CONTENT=$(printf '🐛 **BUG APERTO** — #%s\n**%s**\nby @%s\n%s' "$NUM" "$TITLE" "$AUTHOR" "$URL")
+          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
       - name: Release blocker labeled
-        if: ${{ github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'release-blocker' }}
+        if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'release-blocker'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           NUM: ${{ github.event.issue.number }}
@@ -57,13 +53,12 @@ $URL" '{content: $c}')
           URL: ${{ github.event.issue.html_url }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          PAYLOAD=$(jq -n --arg c "🚨 **RELEASE-BLOCKER** — #$NUM
-**$TITLE**
-$URL" '{content: $c}')
-          curl -sS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+          CONTENT=$(printf '🚨 **RELEASE-BLOCKER** — #%s\n**%s**\n%s' "$NUM" "$TITLE" "$URL")
+          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
       - name: PR opened
-        if: ${{ github.event_name == 'pull_request' && github.event.action == 'opened' }}
+        if: github.event_name == 'pull_request' && github.event.action == 'opened'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           NUM: ${{ github.event.pull_request.number }}
@@ -72,14 +67,12 @@ $URL" '{content: $c}')
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          PAYLOAD=$(jq -n --arg c "📤 **PR APERTO** — #$NUM
-**$TITLE**
-by @$AUTHOR
-$URL" '{content: $c}')
-          curl -sS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+          CONTENT=$(printf '📤 **PR APERTO** — #%s\n**%s**\nby @%s\n%s' "$NUM" "$TITLE" "$AUTHOR" "$URL")
+          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
       - name: PR merged
-        if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true }}
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           NUM: ${{ github.event.pull_request.number }}
@@ -87,13 +80,12 @@ $URL" '{content: $c}')
           URL: ${{ github.event.pull_request.html_url }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          PAYLOAD=$(jq -n --arg c "🎉 **PR MERGIATO** — #$NUM
-**$TITLE**
-$URL" '{content: $c}')
-          curl -sS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+          CONTENT=$(printf '🎉 **PR MERGIATO** — #%s\n**%s**\n%s' "$NUM" "$TITLE" "$URL")
+          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
 
       - name: Issue closed
-        if: ${{ github.event_name == 'issues' && github.event.action == 'closed' }}
+        if: github.event_name == 'issues' && github.event.action == 'closed'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           NUM: ${{ github.event.issue.number }}
@@ -101,7 +93,6 @@ $URL" '{content: $c}')
           URL: ${{ github.event.issue.html_url }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "no webhook, skip"; exit 0; fi
-          PAYLOAD=$(jq -n --arg c "✅ **Issue chiusa** — #$NUM
-$TITLE
-$URL" '{content: $c}')
-          curl -sS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+          CONTENT=$(printf '✅ **Issue chiusa** — #%s\n%s\n%s' "$NUM" "$TITLE" "$URL")
+          PAYLOAD=$(jq -n --arg c "$CONTENT" '{content: $c}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK"
