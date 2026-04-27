@@ -1,0 +1,12 @@
+{
+  "_comment": "Mappa name git → handle GitHub. Usato dal SessionStart hook per identificare il dev e mostrare le sue issue assegnate.",
+  "_match": "case-insensitive substring on `git config user.name`",
+  "mapping": [
+    { "match": "armando",    "handle": "ArmandoBattaglino", "role": "PM",      "fullName": "Armando Battaglino" },
+    { "match": "leonardo",   "handle": "Leonardo-Corte",    "role": "iOS lead", "fullName": "Leonardo Corte" },
+    { "match": "leo",        "handle": "Leonardo-Corte",    "role": "iOS lead", "fullName": "Leonardo Corte" },
+    { "match": "federico",   "handle": "fc200490-sketch",   "role": "Harness lead", "fullName": "Federico" },
+    { "match": "fede",       "handle": "fc200490-sketch",   "role": "Harness lead", "fullName": "Federico" },
+    { "match": "fc200490",   "handle": "fc200490-sketch",   "role": "Harness lead", "fullName": "Federico" }
+  ]
+}
