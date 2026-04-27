@@ -79,3 +79,32 @@ struct GigiUnlockIslandIntent: AppIntent {
         return .result()
     }
 }
+
+// MARK: - GigiAllowAlwaysListeningIntent / GigiDeclineAlwaysListeningIntent
+// First-wake consent prompt buttons. Allow = enter Always Listening (locks the
+// island into a persistent compact pill, keeps wake word + mic alive across turns).
+// Decline = single-turn flow, no lock; user is not re-prompted in this app launch.
+
+@available(iOS 16.0, *)
+struct GigiAllowAlwaysListeningIntent: AppIntent {
+    static var title: LocalizedStringResource = "Allow always listening"
+    static var description = IntentDescription("Keep GIGI listening across this session until you stop it")
+    static var openAppWhenRun: Bool = false
+
+    func perform() async throws -> some IntentResult {
+        GigiPresenceAppGroup.postCommand(.allowAlwaysListening)
+        return .result()
+    }
+}
+
+@available(iOS 16.0, *)
+struct GigiDeclineAlwaysListeningIntent: AppIntent {
+    static var title: LocalizedStringResource = "Just this time"
+    static var description = IntentDescription("Continue with a single turn; do not keep listening after the response")
+    static var openAppWhenRun: Bool = false
+
+    func perform() async throws -> some IntentResult {
+        GigiPresenceAppGroup.postCommand(.declineAlwaysListening)
+        return .result()
+    }
+}

@@ -204,6 +204,10 @@ final class PresenceSessionController: ObservableObject {
                 self.lockIslandFromIsland()
             case .unlockIsland:
                 self.unlockIslandFromIsland()
+            case .allowAlwaysListening:
+                self.allowAlwaysListeningFromIsland()
+            case .declineAlwaysListening:
+                self.declineAlwaysListeningFromIsland()
             }
         }
     }
@@ -223,6 +227,61 @@ final class PresenceSessionController: ObservableObject {
         Task {
             await GigiLiveActivityController.shared.setIslandLocked(false)
             await reconcileIslandAfterUnlock()
+        }
+        // Stepping out of always-listening means the user has explicitly released.
+        // Persist `false` so the wake engine does not re-prompt during this app launch.
+        UserDefaults.standard.set(false, forKey: GigiWakeWordEngine.consentKey)
+    }
+
+    private func allowAlwaysListeningFromIsland() {
+        // Idempotent: if the user double-taps Allow, the second invocation is a no-op
+        // because consent is already set and the island is already locked. Without this
+        // guard, the second tap would race the lock snapshot and could pin the prompt.
+        if UserDefaults.standard.object(forKey: GigiWakeWordEngine.consentKey) is Bool,
+           UserDefaults.standard.bool(forKey: GigiWakeWordEngine.consentKey) {
+            return
+        }
+        UserDefaults.standard.set(true, forKey: GigiWakeWordEngine.consentKey)
+        inactivityTask?.cancel()
+
+        Task {
+            // Order matters: clear the prompt FIRST so the snapshot captured by
+            // setIslandLocked(true) below does not pin `consentPending` forever.
+            await GigiLiveActivityController.shared.clearConsentPending()
+            await GigiLiveActivityController.shared.setIslandLocked(true)
+        }
+
+        if !isActive {
+            // No Presence session yet — start one. Always-listening implies a Presence
+            // mode session so the audio plumbing has a single owner.
+            startSession()
+        }
+        if state != .muted {
+            GigiAudioManager.shared.presenceMode = true
+            GigiAudioManager.shared.startWakeWordListening()
+        }
+    }
+
+    private func declineAlwaysListeningFromIsland() {
+        // Decline = single-turn flow. Persist `false` so we do not re-prompt during
+        // this app launch, then run the same handoff the wake engine would have run
+        // (mirrors `GigiWakeWordEngine.handleWakeDetection` post-consent path).
+        if UserDefaults.standard.object(forKey: GigiWakeWordEngine.consentKey) is Bool {
+            return
+        }
+        UserDefaults.standard.set(false, forKey: GigiWakeWordEngine.consentKey)
+
+        Task { @MainActor in
+            await GigiLiveActivityController.shared.clearConsentPending()
+            let isForeground = UIApplication.shared.applicationState == .active
+            if isForeground {
+                SoundEngine.play(.wakeWord)
+                await GigiLiveActivityController.shared.beginListening()
+            } else {
+                await GigiLiveActivityController.shared.descendForListening()
+            }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            GigiSmartOrchestrator.shared.startListening()
         }
     }
 

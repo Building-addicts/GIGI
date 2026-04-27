@@ -21,6 +21,7 @@ final class GigiPresenceAppGroup {
 
     enum Command: String {
         case start, mute, unmute, stop, lockIsland, unlockIsland
+        case allowAlwaysListening, declineAlwaysListening
     }
 
     // Called by the widget intent process. nonisolated so AppIntent.perform()
@@ -34,7 +35,10 @@ final class GigiPresenceAppGroup {
         case .start:         notifName = darwinStart
         case .mute, .unmute: notifName = darwinMute
         case .stop:          notifName = darwinStop
-        case .lockIsland, .unlockIsland:
+        case .lockIsland, .unlockIsland,
+             .allowAlwaysListening, .declineAlwaysListening:
+            // Reuse the islandLock channel: the observer re-reads commandKey from
+            // UserDefaults so the new commands surface as the typed enum value.
             notifName = darwinLock
         }
         CFNotificationCenterPostNotification(

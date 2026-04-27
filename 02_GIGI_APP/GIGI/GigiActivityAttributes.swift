@@ -24,6 +24,7 @@ struct GigiActivityAttributes: ActivityAttributes {
         var sessionId: String? = nil
         var wakePulseId: String? = nil
         var isIslandLocked: Bool = false
+        var consentPending: Bool = false
     }
 }
 
