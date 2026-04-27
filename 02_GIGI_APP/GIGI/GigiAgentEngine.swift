@@ -83,6 +83,47 @@ final class GigiAgentEngine {
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
 
+        // === Gate 0: NLU fast-path (deterministic intents, sub-100ms) ===
+        // Runs BEFORE Force Claude / planner: device actions like "what time is it",
+        // "turn on the flashlight", "open spotlight" must execute locally even when
+        // the user has paired the harness with Force Claude on. Cloud LLMs hallucinate
+        // refusals or time out for trivial native intents.
+        let fpStart = Date()
+        let nluIntent = GigiNLUEngine.shared.classify(text)
+        print("GIGI fast-path probe: \(nluIntent.label) (conf=\(nluIntent.confidence)) text='\(text.prefix(60))'")
+        if nluIntent.confidence >= 0.90,
+           Self.fastPathIntents.contains(nluIntent.label) {
+
+            print("GIGI fast-path: \(nluIntent.label) (conf=\(nluIntent.confidence))")
+            let dispatcher = GigiActionDispatcher.shared
+            let bridgeResult = await dispatcher.bridge.execute(nluIntent)
+
+            let speech: String
+            if !bridgeResult.isEmpty {
+                speech = bridgeResult
+            } else {
+                speech = GigiBrainPipeline.localSpeech(for: nluIntent)
+            }
+
+            if nluIntent.label == "make_call", bridgeResult.hasPrefix("Calling ") {
+                let c = nluIntent.params["contact"] ?? ""
+                if !c.isEmpty { await GigiMemory.shared.touchContactIfKnown(c) }
+            }
+
+            mem.addModelSpeech(speech)
+            let elapsed = Int(Date().timeIntervalSince(fpStart) * 1000)
+            print("GIGI fast-path completed: \(elapsed)ms")
+
+            return AgentResult(
+                speech:          speech,
+                executedTools:   [nluIntent.label],
+                isFollowUp:      false,
+                costEstimate:    0,
+                requiresConfirm: nil,
+                isError:         false
+            )
+        }
+
         // === Gate 1: Force Claude (Phase 2 — D4.a = YES, takes precedence over planner) ===
         // When Brain Mode → Force Claude is on, route the entire request to Claude
         // via the harness streaming bridge. The harness streams Claude's thoughts
@@ -126,49 +167,6 @@ final class GigiAgentEngine {
             }
             // else: fall through to Gate 2 (planner) — D4.b = A
         }
-
-        // === Gate 1.5: NLU fast-path (deterministic intents, sub-100ms) ===
-        // GigiNLUEngine classifies the utterance with rule-based + ML pipelines.
-        // High-confidence hits on whitelisted labels skip Groq entirely and
-        // dispatch straight through GigiActionBridge — same speech, same memory,
-        // same side-effects as the Groq tool-call path, minus the round-trip.
-        let fpStart = Date()
-        let nluIntent = GigiNLUEngine.shared.classify(text)
-        if nluIntent.confidence >= 0.95,
-           Self.fastPathIntents.contains(nluIntent.label) {
-
-            print("GIGI fast-path: \(nluIntent.label) (conf=\(nluIntent.confidence))")
-            let dispatcher = GigiActionDispatcher.shared
-            let bridgeResult = await dispatcher.bridge.execute(nluIntent)
-
-            let speech: String
-            if !bridgeResult.isEmpty {
-                speech = bridgeResult
-            } else {
-                speech = GigiBrainPipeline.localSpeech(for: nluIntent)
-            }
-
-            // Side-effect parity with GigiActionDispatcher.execute default branch:
-            // touch contact memory for successful calls so frequency ranking stays current.
-            if nluIntent.label == "make_call", bridgeResult.hasPrefix("Calling ") {
-                let c = nluIntent.params["contact"] ?? ""
-                if !c.isEmpty { await GigiMemory.shared.touchContactIfKnown(c) }
-            }
-
-            mem.addModelSpeech(speech)
-            let elapsed = Int(Date().timeIntervalSince(fpStart) * 1000)
-            print("GIGI fast-path completed: \(elapsed)ms")
-
-            return AgentResult(
-                speech:          speech,
-                executedTools:   [nluIntent.label],
-                isFollowUp:      false,
-                costEstimate:    0,
-                requiresConfirm: nil,
-                isError:         false
-            )
-        }
-        // fall-through to Gate 2 (planner / agentLoop)
 
         // === Gate 2: Multi-agent planner (Leo lane, identical to harness-pre-armando-integration) ===
         // Build initial contents from pruned history (user turn already appended above)
