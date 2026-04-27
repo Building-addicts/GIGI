@@ -32,6 +32,56 @@ final class GigiDayPlanReasoner {
     static let shared = GigiDayPlanReasoner()
     private init() {}
 
+    // MARK: - Public entry point (sub #57: real calendar)
+
+    /// Compone un piano per OGGI usando il calendario utente reale via tool
+    /// `read_week_calendar` (preferito) o `read_calendar` (fallback). Il
+    /// caller passa pref + task — la sub 3/4 (#58) li raccoglierà davvero.
+    func reasonForToday(preferences: [String], tasks: [String]) async -> DayPlanOutput? {
+        let events = await loadCalendarEvents()
+        let nowISO = ISO8601DateFormatter().string(from: Date())
+        let input = DayPlanInput(events: events, preferences: preferences, tasks: tasks, nowISO: nowISO)
+        return await reason(input: input)
+    }
+
+    private func loadCalendarEvents() async -> [String] {
+        // 1. Prova read_week_calendar (output già compatto sul payload del tool)
+        let weekResult = await ReadWeekCalendarTool().execute(args: [:])
+        if weekResult.error == nil, !weekResult.value.isEmpty {
+            let normalized = Self.normalizeCalendarLines(weekResult.value)
+            GigiDebugLogger.log("DayPlanReasoner: loaded \(normalized.count) events via read_week_calendar")
+            return normalized
+        }
+        // 2. Fallback su read_calendar (solo oggi)
+        let dayResult = await ReadCalendarTool().execute(args: [:])
+        if dayResult.error == nil, !dayResult.value.isEmpty {
+            let normalized = Self.normalizeCalendarLines(dayResult.value)
+            GigiDebugLogger.log("DayPlanReasoner: loaded \(normalized.count) events via read_calendar (fallback)")
+            return normalized
+        }
+        let firstErr = weekResult.error ?? dayResult.error ?? "empty"
+        GigiDebugLogger.log("DayPlanReasoner: no calendar events (week err=\(firstErr))")
+        return []
+    }
+
+    /// Normalizza il payload testuale dei tool calendar in righe singole.
+    /// Max 12 eventi per non far esplodere il prompt; tronca >80 char.
+    static func normalizeCalendarLines(_ raw: String) -> [String] {
+        let lines = raw
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .map { line -> String in
+                if line.count > 80 {
+                    return String(line.prefix(77)) + "..."
+                }
+                return line
+            }
+        return Array(lines.prefix(12))
+    }
+
+    // MARK: - Engine (sub #56)
+
     func reason(input: DayPlanInput) async -> DayPlanOutput? {
         let prompt = Self.buildSystemPrompt(input: input)
         let t0 = Date()
@@ -148,6 +198,31 @@ extension GigiDayPlanReasoner {
             GigiDebugLogger.log("DayPlanReasoner mock spokenText: \(o.spokenText)")
         } else {
             GigiDebugLogger.log("DayPlanReasoner mock: nil output (LLM empty or error)")
+        }
+        return output
+    }
+
+    /// Sub #57: piano basato sul calendario REALE dell'utente. Permission
+    /// gate è gestito dal tool sottostante; se denied o vuoto, events=[]
+    /// e il prompt fa il best-effort senza eventi.
+    @discardableResult
+    static func debugRunWithRealCalendar() async -> DayPlanOutput? {
+        let output = await GigiDayPlanReasoner.shared.reasonForToday(
+            preferences: [
+                "Preferisce deep-work la mattina",
+                "Buffer di 20 minuti tra spostamenti",
+                "Pausa pranzo alle 13:00"
+            ],
+            tasks: [
+                "Finire il pitch deck",
+                "Rispondere a email cliente"
+            ]
+        )
+        if let o = output {
+            GigiDebugLogger.log("DayPlanReasoner real-cal: latency=\(o.latencyMs)ms · citedPrefs=\(o.citedPreferences.count) · citedTasks=\(o.citedTasks.count)")
+            GigiDebugLogger.log("DayPlanReasoner real-cal spokenText: \(o.spokenText)")
+        } else {
+            GigiDebugLogger.log("DayPlanReasoner real-cal: nil output (LLM empty/error or no calendar permission)")
         }
         return output
     }
