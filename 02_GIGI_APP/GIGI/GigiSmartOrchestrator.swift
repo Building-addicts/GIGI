@@ -84,7 +84,7 @@ class GigiSmartOrchestrator: ObservableObject {
         GigiSpeechService.shared.onEmptyText = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                GigiDebugLogger.voiceEvent("orchestrator.onEmptyText", self.currentVoiceTurnId)
+                GigiDebugLogger.voiceEvent("orchestrator.onEmptyText", turnId: self.currentVoiceTurnId)
                 self.pendingDoneMessage = nil
                 self.doneSafetyTask?.cancel()
                 self.doneSafetyTask = nil
