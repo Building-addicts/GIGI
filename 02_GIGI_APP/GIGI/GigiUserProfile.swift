@@ -173,6 +173,10 @@ final class GigiUserProfile {
     // i lanci successivi sono no-op. Fail-soft su seed mancante o JSON corrotto.
     func seedMVPPreferencesIfNeeded() async {
         let m = GigiMemory.shared
+        // Wait for CloudKit bootstrap so the cache is hydrated before we read
+        // the idempotency marker — otherwise launches before bootstrap finishes
+        // see a stale empty cache and re-run the seed every time.
+        await m.awaitReady()
         if await m.recall(MemKey.mvpSeeded) == "true" { return }
         guard let url = Bundle.main.url(forResource: "MVPPreferencesSeed", withExtension: "json"),
               let data = try? Data(contentsOf: url),
