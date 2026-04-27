@@ -2,11 +2,25 @@ name: Project Status Auto-Move
 
 # Sposta automaticamente le card del Project v2 in base agli eventi del repo.
 # Niente AI, niente intervento del dev — server-side via gh CLI.
+#
+# Transizioni gestite:
+#   issues:opened        → add to project + Status=Backlog
+#   issues:assigned      → Status=Todo (marca come pronta)
+#   issues:closed        → Status=Done
+#   issues:reopened      → Status=Backlog
+#   pull_request:opened/ready_for_review (not draft) → linked issue → Status=In review
+#   pull_request:converted_to_draft → linked issue → Status=In Progress
+#   pull_request:closed && merged    → linked issue → Status=Done   (FIX bug pre-2026-04-28)
+#   pull_request:closed && !merged   → linked issue → Status=Todo   (rollback)
+#   pull_request:reopened            → linked issue → Status=In review
+#   create branch feat/issue-N-*     → issue N → Status=In Progress
 
 on:
   pull_request:
     types: [opened, ready_for_review, converted_to_draft, closed, reopened]
-  create:  # branch o tag created
+  create:
+  issues:
+    types: [opened, closed, reopened, assigned]
 
 permissions:
   contents: read
@@ -27,7 +41,115 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # ─────────────────────────────────────────────────────
-      # Helper: extract issue numbers from PR body (Closes/Fixes/Refs #N)
+      # ISSUE: opened → add to project (idempotent) + Status=Backlog
+      # ─────────────────────────────────────────────────────
+      - name: Issue opened → add + Backlog
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NODE: ${{ github.event.issue.node_id }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+        run: |
+          # Add to project (idempotent — returns existing item if already there)
+          ITEM_ID=$(gh api graphql -f query='
+            mutation($p: ID!, $c: ID!) {
+              addProjectV2ItemById(input: { projectId: $p, contentId: $c }) {
+                item { id }
+              }
+            }' -F p="$PROJECT_ID" -F c="$ISSUE_NODE" --jq '.data.addProjectV2ItemById.item.id')
+          if [ -z "$ITEM_ID" ]; then echo "failed to add #$ISSUE_NUM"; exit 0; fi
+          gh api graphql -f query='
+            mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $p, itemId: $i, fieldId: $f,
+                value: { singleSelectOptionId: $v }
+              }) { clientMutationId }
+            }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_BACKLOG" >/dev/null
+          echo "✓ Issue #$ISSUE_NUM → Backlog"
+
+      # ─────────────────────────────────────────────────────
+      # ISSUE: assigned → Status=Todo (issue ready to work on)
+      # ─────────────────────────────────────────────────────
+      - name: Issue assigned → Todo
+        if: github.event_name == 'issues' && github.event.action == 'assigned'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
+        run: |
+          ITEM_ID=$(gh api graphql -f query='
+            query($repo: ID!, $num: Int!) {
+              node(id: $repo) {
+                ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
+              }
+            }' -F repo="$REPO_NODE" -F num=$ISSUE_NUM \
+            --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" | head -1)
+          if [ -z "$ITEM_ID" ]; then echo "issue #$ISSUE_NUM not in project, skip"; exit 0; fi
+          gh api graphql -f query='
+            mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $p, itemId: $i, fieldId: $f,
+                value: { singleSelectOptionId: $v }
+              }) { clientMutationId }
+            }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_TODO" >/dev/null
+          echo "✓ Issue #$ISSUE_NUM → Todo"
+
+      # ─────────────────────────────────────────────────────
+      # ISSUE: closed → Status=Done
+      # ─────────────────────────────────────────────────────
+      - name: Issue closed → Done
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
+        run: |
+          ITEM_ID=$(gh api graphql -f query='
+            query($repo: ID!, $num: Int!) {
+              node(id: $repo) {
+                ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
+              }
+            }' -F repo="$REPO_NODE" -F num=$ISSUE_NUM \
+            --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" | head -1)
+          if [ -z "$ITEM_ID" ]; then echo "issue #$ISSUE_NUM not in project, skip"; exit 0; fi
+          gh api graphql -f query='
+            mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $p, itemId: $i, fieldId: $f,
+                value: { singleSelectOptionId: $v }
+              }) { clientMutationId }
+            }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_DONE" >/dev/null
+          echo "✓ Issue #$ISSUE_NUM → Done"
+
+      # ─────────────────────────────────────────────────────
+      # ISSUE: reopened → Status=Backlog
+      # ─────────────────────────────────────────────────────
+      - name: Issue reopened → Backlog
+        if: github.event_name == 'issues' && github.event.action == 'reopened'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
+        run: |
+          ITEM_ID=$(gh api graphql -f query='
+            query($repo: ID!, $num: Int!) {
+              node(id: $repo) {
+                ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
+              }
+            }' -F repo="$REPO_NODE" -F num=$ISSUE_NUM \
+            --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" | head -1)
+          if [ -z "$ITEM_ID" ]; then echo "issue #$ISSUE_NUM not in project, skip"; exit 0; fi
+          gh api graphql -f query='
+            mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $p, itemId: $i, fieldId: $f,
+                value: { singleSelectOptionId: $v }
+              }) { clientMutationId }
+            }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_BACKLOG" >/dev/null
+          echo "✓ Issue #$ISSUE_NUM → Backlog (reopened)"
+
+      # ─────────────────────────────────────────────────────
+      # PR Helper: extract issue numbers from PR body (Closes/Fixes/Refs #N)
       # ─────────────────────────────────────────────────────
       - name: Extract linked issues from PR
         id: extract
@@ -40,48 +162,43 @@ jobs:
           echo "Found linked issues: $NUMS"
 
       # ─────────────────────────────────────────────────────
-      # PR opened / ready_for_review → linked issue → "In review"
+      # PR opened / ready_for_review (not draft) / reopened → linked issue → "In review"
       # ─────────────────────────────────────────────────────
-      - name: Move linked issues to "In review"
-        if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review') && !github.event.pull_request.draft
+      - name: PR open/ready/reopened → linked issues → In review
+        if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review' || github.event.action == 'reopened') && !github.event.pull_request.draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUES: ${{ steps.extract.outputs.issues }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
           for N in $ISSUES; do
-            echo "→ Issue #$N → In review"
             ITEM_ID=$(gh api graphql -f query='
               query($repo: ID!, $num: Int!) {
                 node(id: $repo) {
                   ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
                 }
-              }' \
-              -F repo="${{ github.event.repository.node_id }}" -F num=$N \
+              }' -F repo="$REPO_NODE" -F num=$N \
               --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" 2>/dev/null | head -1)
-
-            if [ -n "$ITEM_ID" ]; then
-              gh api graphql -f query='
-                mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
-                  updateProjectV2ItemFieldValue(input: {
-                    projectId: $p, itemId: $i, fieldId: $f,
-                    value: { singleSelectOptionId: $v }
-                  }) { clientMutationId }
-                }' \
-                -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_IN_REVIEW" >/dev/null
-              echo "  ✓ moved"
-            else
-              echo "  · issue not in project, skip"
-            fi
+            if [ -z "$ITEM_ID" ]; then echo "issue #$N not in project, skip"; continue; fi
+            gh api graphql -f query='
+              mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $p, itemId: $i, fieldId: $f,
+                  value: { singleSelectOptionId: $v }
+                }) { clientMutationId }
+              }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_IN_REVIEW" >/dev/null
+            echo "✓ Issue #$N → In review"
           done
 
       # ─────────────────────────────────────────────────────
       # PR converted to draft → linked issue → "In Progress"
       # ─────────────────────────────────────────────────────
-      - name: Move linked issues back to "In Progress" (draft)
+      - name: PR draft → linked issues → In Progress
         if: github.event_name == 'pull_request' && github.event.action == 'converted_to_draft'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUES: ${{ steps.extract.outputs.issues }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
           for N in $ISSUES; do
             ITEM_ID=$(gh api graphql -f query='
@@ -89,8 +206,7 @@ jobs:
                 node(id: $repo) {
                   ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
                 }
-              }' \
-              -F repo="${{ github.event.repository.node_id }}" -F num=$N \
+              }' -F repo="$REPO_NODE" -F num=$N \
               --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" 2>/dev/null | head -1)
             [ -z "$ITEM_ID" ] && continue
             gh api graphql -f query='
@@ -99,18 +215,48 @@ jobs:
                   projectId: $p, itemId: $i, fieldId: $f,
                   value: { singleSelectOptionId: $v }
                 }) { clientMutationId }
-              }' \
-              -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_IN_PROGRESS" >/dev/null
+              }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_IN_PROGRESS" >/dev/null
+            echo "✓ Issue #$N → In Progress (draft)"
           done
 
       # ─────────────────────────────────────────────────────
-      # PR closed (NOT merged) → linked issue → "Todo"
+      # PR closed && MERGED → linked issue → "Done"   (FIX bug pre-2026-04-28)
       # ─────────────────────────────────────────────────────
-      - name: Move linked issues to "Todo" (PR closed unmerged)
+      - name: PR merged → linked issues → Done
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUES: ${{ steps.extract.outputs.issues }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
+        run: |
+          for N in $ISSUES; do
+            ITEM_ID=$(gh api graphql -f query='
+              query($repo: ID!, $num: Int!) {
+                node(id: $repo) {
+                  ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
+                }
+              }' -F repo="$REPO_NODE" -F num=$N \
+              --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" 2>/dev/null | head -1)
+            [ -z "$ITEM_ID" ] && continue
+            gh api graphql -f query='
+              mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $p, itemId: $i, fieldId: $f,
+                  value: { singleSelectOptionId: $v }
+                }) { clientMutationId }
+              }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_DONE" >/dev/null
+            echo "✓ Issue #$N → Done (PR merged)"
+          done
+
+      # ─────────────────────────────────────────────────────
+      # PR closed && NOT merged → linked issue → "Todo" (rollback)
+      # ─────────────────────────────────────────────────────
+      - name: PR closed unmerged → linked issues → Todo
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUES: ${{ steps.extract.outputs.issues }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
           for N in $ISSUES; do
             ITEM_ID=$(gh api graphql -f query='
@@ -118,8 +264,7 @@ jobs:
                 node(id: $repo) {
                   ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
                 }
-              }' \
-              -F repo="${{ github.event.repository.node_id }}" -F num=$N \
+              }' -F repo="$REPO_NODE" -F num=$N \
               --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" 2>/dev/null | head -1)
             [ -z "$ITEM_ID" ] && continue
             gh api graphql -f query='
@@ -128,39 +273,35 @@ jobs:
                   projectId: $p, itemId: $i, fieldId: $f,
                   value: { singleSelectOptionId: $v }
                 }) { clientMutationId }
-              }' \
-              -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_TODO" >/dev/null
+              }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_TODO" >/dev/null
+            echo "✓ Issue #$N → Todo (PR closed unmerged)"
           done
 
       # ─────────────────────────────────────────────────────
       # Branch creato `feat/issue-N-*` → issue N → "In Progress"
       # ─────────────────────────────────────────────────────
-      - name: Branch created — move issue to "In Progress"
+      - name: Branch created → issue → In Progress
         if: github.event_name == 'create' && github.event.ref_type == 'branch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ github.event.ref }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
         run: |
-          # Estrai N da feat/issue-N-slug o feat/issue-N
           N=$(echo "$REF" | grep -oE 'issue-[0-9]+' | grep -oE '[0-9]+' | head -1)
           if [ -z "$N" ]; then echo "branch $REF not pattern feat/issue-N-*, skip"; exit 0; fi
-
           ITEM_ID=$(gh api graphql -f query='
             query($repo: ID!, $num: Int!) {
               node(id: $repo) {
                 ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
               }
-            }' \
-            -F repo="${{ github.event.repository.node_id }}" -F num=$N \
+            }' -F repo="$REPO_NODE" -F num=$N \
             --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" 2>/dev/null | head -1)
           [ -z "$ITEM_ID" ] && { echo "issue #$N not in project"; exit 0; }
-
           gh api graphql -f query='
             mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $p, itemId: $i, fieldId: $f,
                 value: { singleSelectOptionId: $v }
               }) { clientMutationId }
-            }' \
-            -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_IN_PROGRESS" >/dev/null
-          echo "✓ Issue #$N → In Progress"
+            }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_IN_PROGRESS" >/dev/null
+          echo "✓ Issue #$N → In Progress (branch $REF)"
