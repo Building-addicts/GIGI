@@ -14,3 +14,4 @@
 bug/
 *.gigi-secret.txt
 .playwright-mcp/
+.claude/settings.local.json

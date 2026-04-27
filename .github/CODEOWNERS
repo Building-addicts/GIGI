@@ -1,0 +1,29 @@
+# CODEOWNERS — review automatica per path
+# Vedi: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+#
+# I path più specifici vincono sui più generici (ultima riga matching = winner).
+# Sostituisci gli handle con quelli reali del team prima di committare.
+
+# Default — chiunque tocca qualcosa senza match esplicito sotto
+*                              @armando
+
+# Backend Node — harness
+/03_HARNESS/                   @armando
+/03_HARNESS/server/api/        @armando
+/03_HARNESS/browser-pool/      @armando
+
+# App iOS Swift
+/02_GIGI_APP/                  @leonardo-corte
+/02_GIGI_APP/GIGI/Gigi*.swift  @leonardo-corte
+
+# Server MDM
+/01_SERVER_MDM/                @armando
+
+# Documentazione architetturale
+/docs/adr/                     @armando @leonardo-corte
+/docs/ARCHITETTURA_V3.md       @armando @leonardo-corte
+/docs/PIANO_INTEGRAZIONE_HARNESS.md  @armando
+
+# Hook Claude Code (toccare con cautela)
+/.claude/                      @armando
+/CLAUDE.md                     @armando @leonardo-corte
