@@ -30,6 +30,8 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | Review automatica per path | `.github/CODEOWNERS` |
 | Quale file fa cosa (per funzione) | `docs/COMPONENTS.md` |
 | Indice cartella docs | `docs/README.md` |
+| **PM dashboard (Armando)** | `docs/PM_DASHBOARD.md` |
+| **Live feed lavoro real-time** | issue [#19](https://github.com/Building-addicts/GIGI/issues/19) |
 
 ## Layout monorepo
 
