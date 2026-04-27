@@ -5,25 +5,27 @@
 # Sostituisci gli handle con quelli reali del team prima di committare.
 
 # Default — chiunque tocca qualcosa senza match esplicito sotto
-*                              @armando
+*                              @ArmandoBattaglino
 
-# Backend Node — harness
-/03_HARNESS/                   @armando
-/03_HARNESS/server/api/        @armando
-/03_HARNESS/browser-pool/      @armando
+# Backend Node — harness (Fede + Armando review)
+/03_HARNESS/                   @fc200490-sketch @ArmandoBattaglino
+/03_HARNESS/server/api/        @fc200490-sketch @ArmandoBattaglino
+/03_HARNESS/browser-pool/      @fc200490-sketch @ArmandoBattaglino
 
-# App iOS Swift
-/02_GIGI_APP/                  @leonardo-corte
-/02_GIGI_APP/GIGI/Gigi*.swift  @leonardo-corte
+# App iOS Swift (Leo lead, Armando review)
+/02_GIGI_APP/                  @Leonardo-Corte @ArmandoBattaglino
+/02_GIGI_APP/GIGI/Gigi*.swift  @Leonardo-Corte
 
 # Server MDM
-/01_SERVER_MDM/                @armando
+/01_SERVER_MDM/                @ArmandoBattaglino
 
 # Documentazione architetturale
-/docs/adr/                     @armando @leonardo-corte
-/docs/ARCHITETTURA_V3.md       @armando @leonardo-corte
-/docs/PIANO_INTEGRAZIONE_HARNESS.md  @armando
+/docs/adr/                     @ArmandoBattaglino @Leonardo-Corte
+/docs/ARCHITETTURA_V3.md       @ArmandoBattaglino @Leonardo-Corte
+/docs/PIANO_INTEGRAZIONE_HARNESS.md  @ArmandoBattaglino
+/docs/MVP_SCOPE.md             @ArmandoBattaglino
 
-# Hook Claude Code (toccare con cautela)
-/.claude/                      @armando
-/CLAUDE.md                     @armando @leonardo-corte
+# Hook Claude Code + GitHub Actions (toccare con cautela)
+/.claude/                      @ArmandoBattaglino
+/.github/                      @ArmandoBattaglino
+/CLAUDE.md                     @ArmandoBattaglino @Leonardo-Corte
