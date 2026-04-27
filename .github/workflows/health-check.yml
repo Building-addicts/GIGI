@@ -54,21 +54,9 @@ jobs:
           PR_OPEN=$(gh pr list --repo "$REPO" --state open --json number --jq '. | length')
           PR_DRAFT=$(gh pr list --repo "$REPO" --state open --draft --json number --jq '. | length')
 
-          # ── Project status counts ──
-          PROJECT_DATA=$(gh api graphql -f query='
-            query {
-              organization(login: "Building-addicts") {
-                projectV2(number: 1) {
-                  items(first: 100) {
-                    nodes {
-                      fieldValueByName(name: "Status") {
-                        ... on ProjectV2ItemFieldSingleSelectValue { name }
-                      }
-                    }
-                  }
-                }
-              }
-            }' --jq '[.data.organization.projectV2.items.nodes[].fieldValueByName.name] | group_by(.) | map({key: .[0], value: length}) | from_entries')
+          # NB: Project v2 query skipped — GITHUB_TOKEN non ha scope read:project.
+          # Per abilitare: aggiungere PAT con scope read:project come secret PROJECT_TOKEN.
+          PROJECT_DATA="—"
 
           echo "ok_count=$OK_COUNT" >> "$GITHUB_OUTPUT"
           echo "failures=$FAILURES" >> "$GITHUB_OUTPUT"
@@ -106,8 +94,7 @@ jobs:
             TAG="⚠️ ALERT"
           fi
 
-          # Project breakdown
-          PROJECT_TXT=$(echo "$PROJECT" | jq -r 'to_entries | map("\(.key): \(.value)") | join(" · ")')
+          PROJECT_TXT="$PROJECT"
           [ -z "$PROJECT_TXT" ] && PROJECT_TXT="—"
           [ -z "$FAILURES" ] && FAIL_TXT="—" || FAIL_TXT="$FAILURES"
 
@@ -138,7 +125,7 @@ jobs:
                   { name: "Bug aperti",       value: $bugs,     inline: true },
                   { name: "PR aperti",        value: $pr_open,  inline: true },
                   { name: "PR in draft",      value: $pr_draft, inline: true },
-                  { name: "Project board",    value: $project,  inline: false }
+                  { name: "Project",          value: $project,  inline: false }
                 ],
                 footer: { text: "GIGI Lancio v1 · Health check giornaliero (8:00 CET)" },
                 timestamp: now | todate
