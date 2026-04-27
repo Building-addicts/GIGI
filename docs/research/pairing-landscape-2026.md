@@ -143,7 +143,7 @@ Costo utente: €0. Il dolore è Cloudflare account setup (~2 minuti).
 ### Priorità 2 — Fallback/Alternative documentata
 **Tailscale** come "modalità avanzata" per utenti che vogliono full-P2P / massima privacy / latenza minima.
 
-Documentare in `00_DOCS/`: "Se non vuoi dipendere da Cloudflare, installa Tailscale su entrambi i device e configura GIGI con modalità tailnet". È 10 righe di doc — il codice harness non cambia (bind su tutte le interfacce, l'utente mette l'IP Tailscale nel QR).
+Documentare in `docs/`: "Se non vuoi dipendere da Cloudflare, installa Tailscale su entrambi i device e configura GIGI con modalità tailnet". È 10 righe di doc — il codice harness non cambia (bind su tutte le interfacce, l'utente mette l'IP Tailscale nel QR).
 
 ### Priorità 3 — Futuro / Upgrade path (post-1.0 ship, fase v2)
 **Iroh embedded** quando 1.0 esce con FFI ufficiale supportato.
