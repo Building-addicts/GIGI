@@ -64,6 +64,7 @@ struct GIGIApp: App {
                     #if DEBUG
                     await GigiDayPlanReasoner.debugRunWithMockData()
                     await GigiDayPlanReasoner.debugRunWithRealCalendar()
+                    await GigiDayPlanReasoner.debugRunWithLiveSources()
                     #endif
                     GigiDebugLogger.log("MainTabView .task finished")
                 }
