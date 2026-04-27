@@ -32,6 +32,8 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | Indice cartella docs | `docs/README.md` |
 | **PM dashboard (Armando)** | `docs/PM_DASHBOARD.md` |
 | **Live feed lavoro real-time** | issue [#19](https://github.com/Building-addicts/GIGI/issues/19) |
+| **Kickoff message Leo+Fede** | `docs/KICKOFF_LEO_FEDE.md` (per Armando, da copiare in chat) |
+| **Template issue (header 🎯/🔧/✨)** | `.github/ISSUE_TEMPLATE/{feature,sub-issue,parent-epic,bug}.md` |
 
 ## Layout monorepo
 
@@ -76,6 +78,25 @@ Niente memorie per-agente: l'utente è solo, agenti paralleli rari, `ACTIVITY_LO
 ### Principio di design — frizione zero
 
 Il dev (Leo, Fede) **non interagisce direttamente con git, GitHub UI, branch, PR**. Apre Claude Code, dice "sì/vai/ok" alle proposte, e Claude fa tutto sotto. PM (Armando) interviene **solo** per review PR + decidere casi ambigui.
+
+### Format issue obbligatorio — header 🎯/🔧/✨
+
+**Tutte** le issue (parent epic + sub-issue + feature standalone) iniziano con 3 sezioni human-first:
+
+```markdown
+## 🎯 Cosa stiamo facendo (context)
+1-2 frasi italiano, no jargon. Dove siamo nel progetto e PERCHÉ questa issue esiste.
+
+## 🔧 Cosa implementerà il dev
+3-5 bullet concreti, NO file path, NO codice. Cosa cambia funzionalmente.
+
+## ✨ Risultato atteso (cosa cambia per l'utente / per la pipeline)
+1 frase concreta lato utente finale (per UI-facing) o cosa SBLOCCA (per infra).
+```
+
+Sotto questo blocco, i dettagli tecnici (Target files, Changes, Build verify, AC, Test E2E, Merge conditions). Quando crei una nuova issue **usa SEMPRE** uno dei template in `.github/ISSUE_TEMPLATE/`. Mai issue vuote.
+
+Il **Test E2E utente** deve rispecchiare letteralmente il "Risultato atteso" come AC#1 — dev e PM verificano la stessa promessa.
 
 ### Flusso completo per ogni issue (da seguire alla lettera)
 
@@ -322,10 +343,30 @@ Se il dev ti dice qualcosa di rischioso/ambiguo (es. "fai tu", "decidi tu"), il 
 
 ### Mappa file rilevanti per questo workflow
 
-- `.claude/hooks/session-start.sh` — onboarding sessione
-- `.claude/hooks/activity-log.sh` + `activity-log-summarize.sh` — log automatico turno
+**Hooks Claude Code:**
+- `.claude/hooks/session-start.sh` — onboarding sessione (riconosce dev, mostra issue)
+- `.claude/hooks/activity-log.sh` + `activity-log-summarize.sh` — log automatico turno via Haiku
 - `.claude/dev-mapping.json` — name git → GitHub handle
 - `.claude/settings.json` — registrazione hook
+
+**Script fire-and-forget (Haiku, no token main):**
+- `.claude/scripts/post-timeline.sh` — comment su #19 LIVE FEED (8 eventi)
+- `.claude/scripts/track-bug.sh` — 3 azioni atomiche su AC fallito (sub-issue + comment parent + comment #19)
+
+**GitHub Actions (`.github/workflows/`):**
+- `pr-lint.yml` — verifica conventional commits + AC checklist nel PR body
+- `discord-notify.yml` — webhook Discord rich embed (issue/PR/bug/progress)
+- `auto-timeline.yml` — cross-post eventi GitHub su #19
+- `project-status.yml` — muove card su Project board (Backlog→In Progress→Done)
+- `progress-tracker.yml` — % matrioska parent + 🏆 auto-close al 100%
+- `health-check.yml` — cron 8:00 CET, posta su Discord stato sistema
+
+**Template GitHub:**
+- `.github/ISSUE_TEMPLATE/feature.md` — feature singola
+- `.github/ISSUE_TEMPLATE/parent-epic.md` — epic con sub-issue
+- `.github/ISSUE_TEMPLATE/sub-issue.md` — granularità X/Y di parent #N
+- `.github/ISSUE_TEMPLATE/bug.md` — bug report
+- `.github/ISSUE_TEMPLATE/config.yml` — disabilita blank issue
 - `.github/PULL_REQUEST_TEMPLATE.md` — template PR
 - `.github/CODEOWNERS` — review automatica per path
 
@@ -333,4 +374,15 @@ Se il dev ti dice qualcosa di rischioso/ambiguo (es. "fai tu", "decidi tu"), il 
 
 ## Stato corrente (2026-04-27)
 
-Phase 1 (Claude bridge MVP) → P1.1–P1.6 ✅ verificati 2026-04-25. Phase 4 (QR pairing) ✅ commit `ca8a599`. Blocker U0: sideload nuovo IPA + Tailscale per test on-device. Granulare → `docs/TASK_PLAN.md`, focus → `docs/memory/CONTEXT.md`.
+**Settimana lancio MVP** — deadline **venerdì 1 maggio 2026**. Code freeze mercoledì 30 ore 16:00 (QA gate #17), demo venerdì.
+
+Board GitHub: 51 issue strutturate + linkate native:
+- **13 PARENT epic** (#10-#18 + #76-#79) con header 🎯/🔧/✨
+- **38 SUB-ISSUE** granulari (#38-#75) linkate ai rispettivi parent
+- **#17** = QA gate (7 sub) · **#18** = demo script + storyboard (5 sub)
+
+Distribuzione: Leo 19 issue (iOS app + Dynamic Island + WhatsApp + NLU + Active Help), Fede 20 (Preferences + Day Plan + Resilience + Permission UI + Memory), condivise #17/#18.
+
+Foundation pre-lancio: Phase 1 Claude bridge ✅ (2026-04-25), Phase 4 QR pairing ✅ (`ca8a599`). Blocker U0 storico (sideload + Tailscale on-device) risolto.
+
+Per dettaglio sub-issue: `gh issue list --repo Building-addicts/GIGI`. Per PM dashboard: `docs/PM_DASHBOARD.md` + LIVE FEED [#19](https://github.com/Building-addicts/GIGI/issues/19).
