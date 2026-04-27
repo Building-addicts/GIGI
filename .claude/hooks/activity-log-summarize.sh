@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Background worker. Chiama Haiku 4.5 via API Anthropic (no tools, solo completion)
-# e appende UNA riga a docs/memory/ACTIVITY_LOG.md.
+# Background worker. Usa il `claude` CLI (Claude Code, autenticato dalla subscription
+# del dev) per generare un riassunto di una riga del turno e appenderlo a
+# docs/memory/ACTIVITY_LOG.md.
 #
-# Vincoli:
-#  - Haiku NON ha tool access — riceve solo testo (slice transcript), produce solo testo.
-#  - Token spesi minimi: ~3K input + ~50 output → ~$0.005/chiamata.
-#  - Niente lock file: collisioni multi-sessione sono accettabili (append atomico
-#    riga-per-riga su filesystem locale è safe in pratica).
+# Vincoli di design:
+#  - Nessuna ANTHROPIC_API_KEY richiesta — usa la sessione Claude Code locale
+#  - `claude -p` esegue una completion one-shot, output su stdout
+#  - --model haiku per costo minimo (non drena la quota Sonnet/Opus)
+#  - Niente lock file: collisioni multi-sessione accettabili (append atomico riga)
 
 set -u
 
@@ -17,78 +18,49 @@ LOG="$ROOT/docs/memory/ACTIVITY_LOG.md"
 [ -f "$TRANSCRIPT" ] || exit 0
 [ -d "$(dirname "$LOG")" ] || exit 0
 
-# Bail silenzioso se manca la API key
-if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+# Bail silenzioso se il `claude` CLI non è in PATH (dev senza Claude Code installato)
+if ! command -v claude >/dev/null 2>&1; then
   exit 0
 fi
 
-# Slice ultimo turno: ultime ~200 righe del transcript JSONL.
-# Tronchiamo a 8000 char per evitare prompt enormi (Haiku 4.5 input cap ridicolo
-# ma noi vogliamo budget basso).
+# Slice ultime 200 righe del transcript JSONL, capped a 8KB
 SLICE="$(tail -n 200 "$TRANSCRIPT" 2>/dev/null | head -c 8000)"
 [ -n "$SLICE" ] || exit 0
 
-# Contesto debug: branch git + file con modifiche pending
+# Contesto debug: branch + file con modifiche pending
 BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 TOUCHED="$(git -C "$ROOT" status --porcelain 2>/dev/null | awk '{print $2}' | grep -v '^$' | head -8 | paste -sd ', ' -)"
 
-# Costruisci prompt per Haiku (italiano, stile ACTIVITY_LOG esistente).
-PROMPT_HEADER='Hai questo slice JSONL di un turno Claude Code. Scrivi UNA riga in italiano (max 180 char) che descriva l azione concreta svolta. Stile come queste entry esistenti:
-- "Audited docs after P1.1/P1.2/P1.3. Updated docs/ARCHITETTURA_V3.md (Role cases note + Bridge/ folder in file tree). Annotated 03_HARNESS/docs/api/ios-integration.md..."
-- "Marked Phase 4 code COMPLETE in docs/TASK_PLAN.md: P4.1-P4.8 -> COMPLETED..."
-- "Bootstrapped docs/memory/CODE_MAP.md (first creation). Mapped Phase 4 surface..."
+# Prompt per Haiku (italiano, stile ACTIVITY_LOG esistente).
+PROMPT="Hai questo slice JSONL di un turno Claude Code. Scrivi UNA riga in italiano (max 180 char) che descriva l'azione concreta svolta. Stile come queste entry esistenti:
+- \"Audited docs after P1.1/P1.2/P1.3. Updated docs/ARCHITETTURA_V3.md (Role cases note + Bridge/ folder in file tree). Annotated 03_HARNESS/docs/api/ios-integration.md...\"
+- \"Marked Phase 4 code COMPLETE in docs/TASK_PLAN.md: P4.1-P4.8 -> COMPLETED...\"
+- \"Bootstrapped docs/memory/CODE_MAP.md (first creation). Mapped Phase 4 surface...\"
 
 REGOLE:
 1. Una sola riga, niente markdown, niente preambolo, niente quotes esterne.
-2. Cita i file modificati con backtick (es. `docs/CLAUDE.md`).
+2. Cita i file modificati con backtick (es. \`docs/CLAUDE.md\`).
 3. Se il turno e una pura esplorazione/lettura senza modifiche, rispondi esattamente: SKIP
-4. Niente "Ho fatto", "Sto facendo" — usa forma sintetica al passato/participio (es. "Aggiornato", "Creato", "Riorganizzato").
+4. Niente \"Ho fatto\", \"Sto facendo\" — usa forma sintetica al passato/participio (es. \"Aggiornato\", \"Creato\", \"Riorganizzato\").
+
+CONTESTO GIT: branch=$BRANCH; files modificati=$TOUCHED
 
 SLICE TRANSCRIPT:
-'
+$SLICE"
 
-PROMPT_FULL="$PROMPT_HEADER
+# Chiamata Claude CLI. --model haiku per costo basso (non consuma quota Sonnet/Opus).
+# Timeout 30s di safety net (claude -p è solitamente <5s).
+# GIGI_LOG_HOOK_SUPPRESS=1 evita che la `claude -p` qua dentro triggeri un altro
+# Stop hook (anti-ricorsione, vedi activity-log.sh).
+SUMMARY="$(printf '%s' "$PROMPT" | GIGI_LOG_HOOK_SUPPRESS=1 timeout 30 claude -p --model haiku --output-format text 2>/dev/null)"
 
-$SLICE
-
-CONTESTO GIT: branch=$BRANCH; files modificati=$TOUCHED"
-
-# Costruzione payload JSON. jq se disponibile, altrimenti escape manuale.
-if command -v jq >/dev/null 2>&1; then
-  PAYLOAD="$(jq -n --arg p "$PROMPT_FULL" '{
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 250,
-    messages: [{role:"user", content:$p}]
-  }')"
-else
-  # Fallback: escape minimo (rimuovi backslash, doppi apici, newline → \n).
-  ESC="$(printf '%s' "$PROMPT_FULL" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{printf "%s\\n", $0}')"
-  PAYLOAD="{\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":250,\"messages\":[{\"role\":\"user\",\"content\":\"${ESC}\"}]}"
-fi
-
-# Chiamata API (timeout 30s per evitare zombi).
-RESP="$(curl -sS --max-time 30 \
-  -X POST https://api.anthropic.com/v1/messages \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  --data "$PAYLOAD" 2>/dev/null)"
-
-[ -n "$RESP" ] || exit 0
-
-# Estrai testo
-if command -v jq >/dev/null 2>&1; then
-  SUMMARY="$(echo "$RESP" | jq -r '.content[0].text // empty' 2>/dev/null)"
-else
-  SUMMARY="$(echo "$RESP" | sed -n 's/.*"text"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' | head -c 250)"
-fi
-
-# Sanitize: una sola riga, max 200 char
+# Sanitize: una sola riga, max 220 char
 SUMMARY="$(printf '%s' "$SUMMARY" | tr '\n\r' '  ' | sed 's/[[:space:]]\{2,\}/ /g' | head -c 220)"
 
-# Skip esplicito da Haiku (turn esplorativo non rilevante)
+# Skip esplicito da Haiku oppure output vuoto
 [ -n "$SUMMARY" ] || exit 0
 [ "$SUMMARY" = "SKIP" ] && exit 0
+echo "$SUMMARY" | grep -q "^SKIP$" && exit 0
 
 # Componi riga di log nello stile ACTIVITY_LOG esistente.
 STAMP="$(date '+%Y-%m-%d %H:%M')"

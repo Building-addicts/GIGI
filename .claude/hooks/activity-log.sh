@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
-# Stop hook — pre-filter cheap, spawn Haiku worker async, return immediately.
+# Stop hook — pre-filter cheap, spawn Claude CLI worker async, return immediately.
 # Output ends up in docs/memory/ACTIVITY_LOG.md.
 #
 # Lo scopo:
 #  - non bloccare la chiusura del turno (return < 50ms)
-#  - non chiamare Haiku se nel turno non c'è stata vera attività operativa
-#  - se attività rilevata: spawn worker in background che chiama Haiku via API
-#    diretta (no tools, solo completion → garantisce token-budget minimo e
-#    impossibilità di letture extra)
+#  - non chiamare il summarizer se nel turno non c'è stata vera attività operativa
+#  - se attività rilevata: spawn worker in background che chiama il `claude` CLI
+#    locale (sessione Claude Code dell'utente, niente API key richiesta)
 
 set -u
+
+# Anti-ricorsione: se questo hook è triggerato da una `claude -p` invocata dal
+# worker stesso (caso limite), salta. La var GIGI_LOG_HOOK_SUPPRESS è settata
+# dal worker prima di chiamare claude.
+if [ -n "${GIGI_LOG_HOOK_SUPPRESS:-}" ]; then
+  exit 0
+fi
 
 # Leggi JSON da stdin (Claude Code passa { transcript_path, session_id, cwd, stop_hook_active })
 INPUT="$(cat)"
