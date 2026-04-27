@@ -72,6 +72,7 @@ final class GigiUserProfile {
         static let mvpBuffer       = "pref:mvp_travel_buffer_min"
         static let mvpFood         = "pref:mvp_food_preference"
         static let mvpRoutine      = "pref:mvp_routine_hints"
+        static let mvpSeeded       = "pref:mvp_seeded"
     }
 
     private enum KCKey {
@@ -165,6 +166,24 @@ final class GigiUserProfile {
         for (key, val) in pairs {
             await m.remember(key: key, value: val)
         }
+    }
+
+    // Sub-issue #51 (2/3 di #13). Carica `MVPPreferencesSeed.json` dal bundle al
+    // primo lancio dell'app, poi marca `pref:mvp_seeded=true`. Idempotente:
+    // i lanci successivi sono no-op. Fail-soft su seed mancante o JSON corrotto.
+    func seedMVPPreferencesIfNeeded() async {
+        let m = GigiMemory.shared
+        if await m.recall(MemKey.mvpSeeded) == "true" { return }
+        guard let url = Bundle.main.url(forResource: "MVPPreferencesSeed", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let seed = try? JSONDecoder().decode(MVPPreferences.self, from: data)
+        else {
+            GigiDebugLogger.log("MVPPreferences seed missing or invalid — first-launch defaults skipped")
+            return
+        }
+        await saveMVPPreferences(seed)
+        await m.remember(key: MemKey.mvpSeeded, value: "true")
+        GigiDebugLogger.log("MVPPreferences seeded ✓")
     }
 
     // CSV codec: GigiMemory è key-value String puro, niente JSON.
