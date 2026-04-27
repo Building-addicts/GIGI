@@ -171,3 +171,11 @@ Salvalo e prosegui. Il `CLAUDE.local.md` viene letto dal tuo Claude Code in aggi
 - `docs/ARCHITETTURA_V3.md` — architettura "True Agent" V3
 - `docs/adr/` — decisioni storiche
 - `docs/runbooks/` — procedure ripetitive
+
+## 💰 Bounty Contribution
+
+- **Task:** [Sub #10 · 2/4] Speaking-pill banner: smart truncation + emoji guard
+- **Reward:** $1
+- **Source:** GitHub-Paid
+- **Date:** 2026-04-27
+
