@@ -69,7 +69,13 @@ Niente memorie per-agente: l'utente è solo, agenti paralleli rari, `ACTIVITY_LO
 - **Loop / task ricorrente** → **NON** `ScheduleWakeup`. Crea watcher in `03_HARNESS/server/watchers.json` (chiedi sempre frequenza polling). Dettagli in `03_HARNESS/CLAUDE.md` §"Regola: loop → watcher".
 - **iOS build verify** → ogni task che modifica `.swift` DEVE essere seguito da xcodebuild filtrato per errori prima di dichiararsi completo. Workflow di build (host, comandi) personale → `CLAUDE.local.md` di ciascun dev.
 - **Mai dichiarare "fix iOS testato"** senza nuovo IPA installato sul device fisico. Simulatore non copre audio/VAD.
-- **Convenzioni:** Swift = SwiftUI-first, `@MainActor` su ViewModel, naming `Gigi*`. Node = v20+, ES modules, no TS, route `ios-*`. Lingua: italiano nei doc/commenti, inglese nelle spec API tecniche. Commit: Conventional Commits.
+- **Convenzioni:** Swift = SwiftUI-first, `@MainActor` su ViewModel, naming `Gigi*`. Node = v20+, ES modules, no TS, route `ios-*`. Commit: Conventional Commits.
+- **🌍 Lingua — regola dura:**
+  - **TUTTO ciò che è user-facing nell'app DEVE essere in INGLESE.** L'app è per mercato worldwide. Include: stringhe UI (Text, Label, Button, alert), TTS output di GIGI, copy onboarding, error message visibili all'utente, push notification, Dynamic Island label, accessibility hints, App Store metadata.
+  - **Italiano consentito solo nel "backstage":** doc interni (`docs/`), commenti codice, commit message, body issue/PR, log harness, ADR, `CLAUDE.md`, comunicazione team.
+  - **Inglese tecnico:** spec API (request/response field, error code), nomi variabili/funzioni/classi, log structured (`logger.info("user_speech_detected", ...)`).
+  - Se aggiungi una stringa user-facing in italiano per "fretta": va trattata come bug, sub-issue P1 immediata.
+  - LLM prompt (system + user templates) → **inglese** (l'utente parla inglese a GIGI nella demo internazionale; il fatto che noi 3 testiamo in italiano è secondario).
 
 ## Workflow per dev (vibe-coder mode) ⭐
 
