@@ -447,12 +447,12 @@ class GigiSmartOrchestrator: ObservableObject {
         if let existing = currentVoiceTurnId { return existing }
         let id = UUID().uuidString.prefix(8).description
         currentVoiceTurnId = id
-        GigiDebugLogger.voiceEvent("orchestrator.turnStart", id, ["reason": reason])
+        GigiDebugLogger.voiceEvent("orchestrator.turnStart", turnId: id, ["reason": reason])
         return id
     }
 
     private func clearPendingDone(reason: String) {
-        GigiDebugLogger.voiceEvent("orchestrator.clearPendingDone", currentVoiceTurnId, ["reason": reason])
+        GigiDebugLogger.voiceEvent("orchestrator.clearPendingDone", turnId: currentVoiceTurnId, ["reason": reason])
         pendingDoneMessage = nil
         doneSafetyTask?.cancel()
         doneSafetyTask = nil
@@ -505,33 +505,4 @@ class GigiSmartOrchestrator: ObservableObject {
         return validParts.count >= 2 ? validParts : nil
     }
 
-    // MARK: - Voice turn lifecycle helpers
-    //
-    // Reconstructed from call-site contracts after #95 (ensureVoiceTurn /
-    // clearPendingDone were referenced by `df5a645` but their definitions
-    // were never committed). Behaviour kept conservative: log + minimal
-    // state mutation, no impact on existing turn flow.
-
-    /// Returns the current voice turn id, generating a new one if none is active.
-    /// `reason` is a short tag describing the trigger (transcript / wake / interrupt / quickTalk).
-    @discardableResult
-    fileprivate func ensureVoiceTurn(reason: String) -> String {
-        if let existing = currentVoiceTurnId {
-            GigiDebugLogger.voiceEvent("orchestrator.ensureVoiceTurn.reuse", turnId: existing, ["reason": reason])
-            return existing
-        }
-        let newId = String(UUID().uuidString.prefix(8))
-        currentVoiceTurnId = newId
-        GigiDebugLogger.voiceEvent("orchestrator.ensureVoiceTurn.new", turnId: newId, ["reason": reason])
-        return newId
-    }
-
-    /// Cancels any pending deferred-done state (used on barge-in / interrupt).
-    fileprivate func clearPendingDone(reason: String) {
-        guard pendingDoneMessage != nil || doneSafetyTask != nil else { return }
-        GigiDebugLogger.voiceEvent("orchestrator.clearPendingDone", turnId: currentVoiceTurnId, ["reason": reason])
-        pendingDoneMessage = nil
-        doneSafetyTask?.cancel()
-        doneSafetyTask = nil
-    }
 }
