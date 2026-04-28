@@ -3,17 +3,24 @@ import UIKit
 
 // MARK: - MarkerDispatcher
 //
-// Executes a `LocalActionRouter` marker by handing the corresponding
-// native action to iOS. Used by the foreground orchestrator and by the
-// Control Center quick-listen path; the background AppIntent does not
-// dispatch here because the user's Shortcut owns the privileged action
-// surface in that path.
+// Hands a `LocalActionRouter` marker to the user-installed iOS Shortcut
+// "GIGI Action Dispatcher", which owns the privileged native action
+// surface (Call, Send Message, Open URL). The Shortcut receives the
+// marker as `Shortcut Input` and routes it through its own CALL/SMS/
+// OPEN branches.
 //
-// Strategy is direct iOS URL schemes — `tel:`, `sms:`, `<scheme>://` —
-// rather than re-routing through a Shortcut. The user-perceived outcome
-// is identical (Apple confirmation UI for calls, native composer for
-// SMS, target app for OPEN) and we don't depend on the user having
-// installed a particular Shortcut to make in-app voice work.
+// Why through a Shortcut and not direct iOS URL schemes:
+//   • Single source of truth for native actions — same Shortcut runs from
+//     the Action Button path, the Control Center quick-listen path, and
+//     the in-app voice path. Behaviour stays consistent across triggers.
+//   • Apple compliance — `Call`, `Send Message`, and `Open URL` actions
+//     inside Shortcuts present Apple's stock confirmation sheets. Direct
+//     `tel:` / `sms:` URL schemes work too but the Shortcut layer also
+//     gives us future flexibility (contact picker fallback, body prompt,
+//     telemetry hooks) without touching app code.
+//
+// If the Shortcut is not installed, dispatch falls back to the direct
+// iOS URL schemes so the in-app flow keeps working during onboarding.
 
 @MainActor
 enum MarkerDispatcher {
@@ -45,72 +52,97 @@ enum MarkerDispatcher {
             return .unknownMarker
         }
 
+        // Pre-validate the marker so we don't hand the Shortcut a
+        // malformed input (e.g. `CALL:Mom` when contact resolution failed).
+        // The Shortcut's Call action would silently no-op or fail; we'd
+        // rather speak a useful error.
+        if let prevalidated = preValidate(kind) {
+            return prevalidated
+        }
+
+        // Primary path: hand the marker to the user's GIGI Action
+        // Dispatcher Shortcut. Falls back to a direct iOS URL scheme if
+        // the user hasn't installed the Shortcut yet (first-run window
+        // before onboarding completes).
+        if await runDispatcherShortcut(marker: marker) {
+            return .launched(spoken: "")
+        }
+        return await dispatchDirectURL(kind: kind)
+    }
+
+    // MARK: - Pre-validation
+
+    private static func preValidate(_ kind: LocalActionRouter.MarkerKind) -> DispatchResult? {
         switch kind {
         case .call(let phone):
-            return await dispatchCall(phone: phone)
-        case .sms(let phone, let body):
-            return await dispatchSMS(phone: phone, body: body)
-        case .open(let url):
-            return await dispatchOpen(url: url)
+            // Router emits `CALL:<NameOnly>` when contact resolution
+            // failed. Don't bother launching the Shortcut for that — the
+            // user gets a clearer message from us.
+            if phone.first != "+" && !(phone.first?.isNumber ?? false) {
+                return .rejected(spoken: "I couldn't find a phone number for \(phone).")
+            }
+            return nil
+        case .sms, .open:
+            return nil
         }
     }
 
-    // MARK: - Call
+    // MARK: - Shortcut dispatch (primary)
 
-    private static func dispatchCall(phone: String) async -> DispatchResult {
-        // The router emits `CALL:<NameOnly>` when contact resolution
-        // failed. Refusing to launch a tel:// URL with an alphabetic
-        // string keeps us from dialing into garbage.
-        guard phone.first == "+" || phone.first?.isNumber == true else {
-            return .rejected(spoken: "I couldn't find a phone number for \(phone).")
-        }
-
-        // tel:// uses the canonical scheme that triggers Apple's native
-        // call confirmation sheet. tel: alone (single colon) opens the
-        // dialer without confirmation on some carriers — not desired.
-        guard let url = URL(string: "tel://\(phone)") else {
-            return .rejected(spoken: "That number doesn't look dialable.")
-        }
-        guard UIApplication.shared.canOpenURL(url) else {
-            return .rejected(spoken: "This device can't place phone calls.")
-        }
-        await UIApplication.shared.open(url)
-        return .launched(spoken: "")
-    }
-
-    // MARK: - SMS
-
-    private static func dispatchSMS(phone: String, body: String) async -> DispatchResult {
-        // Apple supports both `sms:<number>` and `sms:<number>&body=<text>`.
-        // The `&body=` form pre-fills the composer; user still has to tap
-        // Send, which is the Apple-compliant flow.
+    /// Opens the user-installed `GIGI Action Dispatcher` Shortcut and
+    /// hands it the marker as `Shortcut Input` via the standard Shortcuts
+    /// URL scheme. Returns `true` if the launch succeeded.
+    private static func runDispatcherShortcut(marker: String) async -> Bool {
         var components = URLComponents()
-        components.scheme = "sms"
-        components.path = phone
-        if !body.isEmpty {
-            components.queryItems = [URLQueryItem(name: "body", value: body)]
-        }
-        guard let url = components.url else {
-            return .rejected(spoken: "I couldn't build the message.")
-        }
-        guard UIApplication.shared.canOpenURL(url) else {
-            return .rejected(spoken: "This device can't send messages.")
-        }
+        components.scheme = "shortcuts"
+        components.host = "run-shortcut"
+        components.queryItems = [
+            URLQueryItem(name: "name", value: GigiDispatcherShortcut.shortcutName),
+            URLQueryItem(name: "input", value: "text"),
+            URLQueryItem(name: "text", value: marker)
+        ]
+        guard let url = components.url else { return false }
+        guard UIApplication.shared.canOpenURL(url) else { return false }
         await UIApplication.shared.open(url)
-        return .launched(spoken: "")
+        return true
     }
 
-    // MARK: - Open
+    // MARK: - Direct URL fallback
 
-    private static func dispatchOpen(url: URL) async -> DispatchResult {
-        // canOpenURL only returns true for schemes whitelisted in
-        // LSApplicationQueriesSchemes. The router's scheme list mirrors
-        // that whitelist; if a new scheme is added to the router without
-        // updating Info.plist, this returns false silently.
-        guard UIApplication.shared.canOpenURL(url) else {
-            return .rejected(spoken: "I can't open that app from here.")
+    private static func dispatchDirectURL(kind: LocalActionRouter.MarkerKind) async -> DispatchResult {
+        switch kind {
+        case .call(let phone):
+            guard let url = URL(string: "tel://\(phone)") else {
+                return .rejected(spoken: "That number doesn't look dialable.")
+            }
+            guard UIApplication.shared.canOpenURL(url) else {
+                return .rejected(spoken: "This device can't place phone calls.")
+            }
+            await UIApplication.shared.open(url)
+            return .launched(spoken: "")
+
+        case .sms(let phone, let body):
+            var components = URLComponents()
+            components.scheme = "sms"
+            components.path = phone
+            if !body.isEmpty {
+                components.queryItems = [URLQueryItem(name: "body", value: body)]
+            }
+            guard let url = components.url else {
+                return .rejected(spoken: "I couldn't build the message.")
+            }
+            guard UIApplication.shared.canOpenURL(url) else {
+                return .rejected(spoken: "This device can't send messages.")
+            }
+            await UIApplication.shared.open(url)
+            return .launched(spoken: "")
+
+        case .open(let url):
+            guard UIApplication.shared.canOpenURL(url) else {
+                return .rejected(spoken: "I can't open that app from here.")
+            }
+            await UIApplication.shared.open(url)
+            return .launched(spoken: "")
         }
-        await UIApplication.shared.open(url)
-        return .launched(spoken: "")
     }
 }
