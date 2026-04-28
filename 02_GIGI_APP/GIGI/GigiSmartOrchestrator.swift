@@ -435,6 +435,29 @@ class GigiSmartOrchestrator: ObservableObject {
         Task { await GigiLiveActivityController.shared.endImmediately() }
     }
 
+    // MARK: - Voice turn lifecycle
+
+    // Idempotent: callers (transcript, quickTalk, wakeOrTap, interrupt) just want a
+    // non-nil turnId without caring whether one is already in flight. A barge-in keeps
+    // the existing turn so structured logs (`orchestrator.interruptAndListen`) continue
+    // the same trace; first call after `fireDone` clears `currentVoiceTurnId` allocates
+    // a fresh one.
+    @discardableResult
+    private func ensureVoiceTurn(reason: String) -> String {
+        if let existing = currentVoiceTurnId { return existing }
+        let id = UUID().uuidString.prefix(8).description
+        currentVoiceTurnId = id
+        GigiDebugLogger.voiceEvent("orchestrator.turnStart", id, ["reason": reason])
+        return id
+    }
+
+    private func clearPendingDone(reason: String) {
+        GigiDebugLogger.voiceEvent("orchestrator.clearPendingDone", currentVoiceTurnId, ["reason": reason])
+        pendingDoneMessage = nil
+        doneSafetyTask?.cancel()
+        doneSafetyTask = nil
+    }
+
     // MARK: - Helpers
 
     /// Splits a text containing multiple sequential commands into individual parts.

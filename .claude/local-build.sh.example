@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# .claude/local-build.sh.example
+#
+# TEMPLATE per `.claude/local-build.sh` (gitignored, una copia per dev/PM).
+#
+# Lo script `test-pr.sh` source-a questo file e chiama le 4 funzioni qui sotto.
+# Implementa ognuna in base al tuo ambiente (Mac locale / SSH MacInCloud / CI).
+# Se non implementi una funzione, restituisci 0 (skip) o exit 1 (fail esplicito).
+#
+# Setup:
+#   cp .claude/local-build.sh.example .claude/local-build.sh
+#   editor .claude/local-build.sh   # adatta i 4 hook al tuo setup
+#
+# Le 4 funzioni richieste:
+#   1. lb_sync_branch <pr_num>        — sync il branch della PR sul build host
+#   2. lb_build_ios <pr_num>          — esegue xcodebuild, stampa output filtrato
+#   3. lb_package_ipa <pr_num>        — packaging IPA + porta al drop folder locale
+#   4. lb_cleanup <pr_num>            — cleanup branch dopo test (opzionale)
+#
+# Convenzioni:
+#   - Tutte le funzioni stampano log su stdout
+#   - Exit code 0 = success, ≠ 0 = fail (test-pr.sh interrompe)
+#   - Variabili esposte: $PR_NUM, $REPO, $ROOT (Claude project dir)
+
+# ────────────────────────────────────────────────────────────────
+# ESEMPIO 1 — Windows + Mac via SSH (tipo Armando con MacInCloud)
+# ────────────────────────────────────────────────────────────────
+
+SSH_HOST="user297422@FF125.macincloud.com"
+MAC_REPO_PATH="~/GIGI"
+DROP_FOLDER="C:/Users/arman/Desktop/GIGI/bug"
+
+lb_sync_branch() {
+  local pr_num=$1
+  echo "→ Sync branch pr-$pr_num su $SSH_HOST..."
+  ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
+    "cd $MAC_REPO_PATH && git fetch origin pull/$pr_num/head:pr-$pr_num && git checkout pr-$pr_num"
+}
+
+lb_build_ios() {
+  local pr_num=$1
+  echo "→ xcodebuild su $SSH_HOST..."
+  ssh "$SSH_HOST" \
+    "cd $MAC_REPO_PATH/02_GIGI_APP && /usr/bin/xcodebuild -project GIGI.xcodeproj \
+     -scheme GIGI -configuration Debug -destination 'generic/platform=iOS' \
+     CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build 2>&1 \
+     | grep -E 'error:|BUILD SUCCEEDED|BUILD FAILED' | head -40"
+}
+
+lb_package_ipa() {
+  local pr_num=$1
+  echo "→ Packaging IPA su Mac + scp..."
+  ssh "$SSH_HOST" '
+    APP=$(find ~/Library/Developer/Xcode/DerivedData -name "GIGI.app" -type d -path "*Debug-iphoneos*" | head -1)
+    [ -z "$APP" ] && APP=$(find ~/Library/Developer/Xcode/DerivedData -name "GIGI.app" -type d | head -1)
+    rm -rf /tmp/Payload && mkdir /tmp/Payload && cp -R "$APP" /tmp/Payload/
+    cd /tmp && zip -qr /tmp/GIGI-pr'"$pr_num"'.ipa Payload
+  '
+  mkdir -p "$DROP_FOLDER"
+  scp "$SSH_HOST:/tmp/GIGI-pr$pr_num.ipa" "$DROP_FOLDER/GIGI-pr$pr_num.ipa"
+  echo "✓ IPA: $DROP_FOLDER/GIGI-pr$pr_num.ipa"
+}
+
+lb_cleanup() {
+  local pr_num=$1
+  ssh "$SSH_HOST" "cd $MAC_REPO_PATH && git checkout main 2>/dev/null && git branch -D pr-$pr_num 2>/dev/null" || true
+}
+
+
+# ────────────────────────────────────────────────────────────────
+# ESEMPIO 2 — Mac locale (per Leo iOS lead, decommenta se serve)
+# ────────────────────────────────────────────────────────────────
+
+# DROP_FOLDER="$HOME/Desktop/GIGI-IPA"
+#
+# lb_sync_branch() {
+#   local pr_num=$1
+#   git fetch origin pull/$pr_num/head:pr-$pr_num
+#   git checkout pr-$pr_num
+# }
+#
+# lb_build_ios() {
+#   cd 02_GIGI_APP && /usr/bin/xcodebuild -project GIGI.xcodeproj \
+#     -scheme GIGI -configuration Debug -destination 'generic/platform=iOS' \
+#     CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build 2>&1 \
+#     | grep -E 'error:|BUILD SUCCEEDED|BUILD FAILED'
+# }
+#
+# lb_package_ipa() {
+#   local pr_num=$1
+#   APP=$(find ~/Library/Developer/Xcode/DerivedData -name "GIGI.app" -type d | head -1)
+#   rm -rf /tmp/Payload && mkdir /tmp/Payload && cp -R "$APP" /tmp/Payload/
+#   cd /tmp && zip -qr "$DROP_FOLDER/GIGI-pr$pr_num.ipa" Payload
+# }
+#
+# lb_cleanup() {
+#   local pr_num=$1
+#   git checkout main && git branch -D pr-$pr_num 2>/dev/null || true
+# }
+
+
+# ────────────────────────────────────────────────────────────────
+# ESEMPIO 3 — Solo harness Node (per Fede, no iOS build)
+# ────────────────────────────────────────────────────────────────
+
+# lb_sync_branch() {
+#   git fetch origin pull/$1/head:pr-$1 && git checkout pr-$1
+# }
+#
+# lb_build_ios() {
+#   echo "BUILD SUCCEEDED (skip iOS — sono harness dev)"
+# }
+#
+# lb_package_ipa() {
+#   echo "(skip IPA packaging — sono harness dev, testo via curl/integration test)"
+# }
+#
+# lb_cleanup() {
+#   git checkout main && git branch -D pr-$1 2>/dev/null || true
+# }

@@ -1,23 +1,36 @@
-name: Auto Timeline on #19
+name: Auto Timeline on #19 + ACTIVITY_LOG
 
 # Posta automaticamente eventi server-side su issue #19 LIVE FEED.
+# Inoltre appende una riga strutturata su docs/memory/ACTIVITY_LOG.md
+# (committa su main usando PROJECT_TOKEN). Niente AI, niente intervento del dev.
+#
 # Da qui: il workflow Discord notify catch e propaga su #gigi-project.
-# Niente AI, niente intervento del dev.
 
 on:
   pull_request:
-    types: [opened, closed, ready_for_review]
+    types: [opened, closed, ready_for_review, synchronize]
   issues:
     types: [opened, closed]
 
 permissions:
   issues: write
   pull-requests: read
+  contents: write
 
 jobs:
   post:
     runs-on: ubuntu-latest
     steps:
+      # ─────────────────────────────────────────────────────
+      # Checkout main per poter appendere a ACTIVITY_LOG.md
+      # ─────────────────────────────────────────────────────
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.PROJECT_TOKEN }}
+          fetch-depth: 1
+
       # ─────────────────────────────────────────────────────
       # PR opened / ready_for_review (skip drafts)
       # ─────────────────────────────────────────────────────
@@ -31,15 +44,39 @@ jobs:
           BRANCH: ${{ github.event.pull_request.head.ref }}
           ADD: ${{ github.event.pull_request.additions }}
           DEL: ${{ github.event.pull_request.deletions }}
+          FILES: ${{ github.event.pull_request.changed_files }}
+          COMMITS: ${{ github.event.pull_request.commits }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
-          # Estrai issue linkata (se presente)
           REF=$(printf '%s' "$BODY" | grep -ioE '(close[sd]?|fixe[sd]?|resolve[sd]?|refs?)\s+#[0-9]+' | grep -oE '#[0-9]+' | head -1)
           [ -z "$REF" ] && REF="(no link)"
 
-          STAMP=$(date '+%H:%M')
-          MSG=$(printf '[%s] @%s · %s\n📤 PR #%s aperto: "%s" su branch `%s` (+%s/-%s)' "$STAMP" "$AUTHOR" "$REF" "$NUM" "$TITLE" "$BRANCH" "$ADD" "$DEL")
+          STAMP_HM=$(date '+%H:%M')
+          STAMP_FULL=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+          # 1. Comment su #19
+          MSG=$(printf '[%s] @%s · %s\n📤 PR #%s aperto: "%s" su branch `%s` (+%s/-%s)' "$STAMP_HM" "$AUTHOR" "$REF" "$NUM" "$TITLE" "$BRANCH" "$ADD" "$DEL")
           gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+          # 2. Append a ACTIVITY_LOG.md
+          LINE="- \`$STAMP_FULL\` · pr-opened · 📤 @${AUTHOR} ha aperto PR #${NUM}: \"${TITLE}\" _(branch: \`${BRANCH}\` · ${COMMITS} commit · +${ADD}/-${DEL} · ${FILES} file · ${REF})_"
+          echo "$LINE" >> docs/memory/ACTIVITY_LOG.md
+
+      # ─────────────────────────────────────────────────────
+      # PR synchronize (push nuovi commit dopo opening)
+      # ─────────────────────────────────────────────────────
+      - name: Append PR synchronize to ACTIVITY_LOG
+        if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
+        env:
+          NUM: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.sender.login }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          ADD: ${{ github.event.pull_request.additions }}
+          DEL: ${{ github.event.pull_request.deletions }}
+        run: |
+          STAMP_FULL=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          LINE="- \`$STAMP_FULL\` · pr-synchronize · 🔄 @${AUTHOR} ha aggiornato PR #${NUM} _(branch: \`${BRANCH}\` · totale +${ADD}/-${DEL})_"
+          echo "$LINE" >> docs/memory/ACTIVITY_LOG.md
 
       # ─────────────────────────────────────────────────────
       # PR merged
@@ -53,14 +90,23 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
           MERGER: ${{ github.event.pull_request.merged_by.login }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
+          ADD: ${{ github.event.pull_request.additions }}
+          DEL: ${{ github.event.pull_request.deletions }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
           REF=$(printf '%s' "$BODY" | grep -ioE '(close[sd]?|fixe[sd]?|resolve[sd]?|refs?)\s+#[0-9]+' | grep -oE '#[0-9]+' | head -1)
           [ -z "$REF" ] && REF="(no link)"
 
-          STAMP=$(date '+%H:%M')
-          MSG=$(printf '[%s] @%s · %s\n🎉 PR #%s mergiato da @%s (`%s` → main)' "$STAMP" "$AUTHOR" "$REF" "$NUM" "$MERGER" "$BRANCH")
+          STAMP_HM=$(date '+%H:%M')
+          STAMP_FULL=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+          # 1. Comment su #19
+          MSG=$(printf '[%s] @%s · %s\n🎉 PR #%s mergiato da @%s (`%s` → main)' "$STAMP_HM" "$AUTHOR" "$REF" "$NUM" "$MERGER" "$BRANCH")
           gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+          # 2. Append a ACTIVITY_LOG.md
+          LINE="- \`$STAMP_FULL\` · pr-merged · 🎉 @${MERGER} ha mergiato PR #${NUM} \"${TITLE}\" di @${AUTHOR} _(branch: \`${BRANCH}\` · +${ADD}/-${DEL} · ${REF})_"
+          echo "$LINE" >> docs/memory/ACTIVITY_LOG.md
 
       # ─────────────────────────────────────────────────────
       # PR closed unmerged
@@ -72,14 +118,20 @@ jobs:
           NUM: ${{ github.event.pull_request.number }}
           TITLE: ${{ github.event.pull_request.title }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
           REF=$(printf '%s' "$BODY" | grep -ioE '(close[sd]?|fixe[sd]?|resolve[sd]?|refs?)\s+#[0-9]+' | grep -oE '#[0-9]+' | head -1)
           [ -z "$REF" ] && REF="(no link)"
 
-          STAMP=$(date '+%H:%M')
-          MSG=$(printf '[%s] @%s · %s\n⛔ PR #%s chiuso senza merge: "%s"' "$STAMP" "$AUTHOR" "$REF" "$NUM" "$TITLE")
+          STAMP_HM=$(date '+%H:%M')
+          STAMP_FULL=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+          MSG=$(printf '[%s] @%s · %s\n⛔ PR #%s chiuso senza merge: "%s"' "$STAMP_HM" "$AUTHOR" "$REF" "$NUM" "$TITLE")
           gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+          LINE="- \`$STAMP_FULL\` · pr-closed · ⛔ @${AUTHOR} ha chiuso senza merge PR #${NUM}: \"${TITLE}\" _(branch: \`${BRANCH}\` · ${REF})_"
+          echo "$LINE" >> docs/memory/ACTIVITY_LOG.md
 
       # ─────────────────────────────────────────────────────
       # Issue creata con label `bug` (sub-issue automatica)
@@ -93,13 +145,17 @@ jobs:
           AUTHOR: ${{ github.event.issue.user.login }}
           BODY: ${{ github.event.issue.body }}
         run: |
-          # Estrai parent (Parent: #N nel body)
           PARENT=$(printf '%s' "$BODY" | grep -oE 'Parent[*:[:space:]]*#[0-9]+' | grep -oE '#[0-9]+' | head -1)
           [ -z "$PARENT" ] && PARENT="(no parent)"
 
-          STAMP=$(date '+%H:%M')
-          MSG=$(printf '[%s] @%s · %s\n🐛 Bug aperto come issue #%s: "%s"' "$STAMP" "$AUTHOR" "$PARENT" "$NUM" "$TITLE")
+          STAMP_HM=$(date '+%H:%M')
+          STAMP_FULL=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+          MSG=$(printf '[%s] @%s · %s\n🐛 Bug aperto come issue #%s: "%s"' "$STAMP_HM" "$AUTHOR" "$PARENT" "$NUM" "$TITLE")
           gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+          LINE="- \`$STAMP_FULL\` · bug-opened · 🐛 @${AUTHOR} ha aperto issue bug #${NUM}: \"${TITLE}\" _(parent: ${PARENT})_"
+          echo "$LINE" >> docs/memory/ACTIVITY_LOG.md
 
       # ─────────────────────────────────────────────────────
       # Issue chiusa (escludi #19 stesso per evitare loop)
@@ -113,13 +169,50 @@ jobs:
           CLOSER: ${{ github.event.sender.login }}
           LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
         run: |
-          # Skip se era un bug (il messaggio è già coperto dal Discord)
           if printf '%s' "$LABELS" | grep -q 'bug'; then
             EMOJI="🐛✅"
+            EVENT="bug-closed"
           else
             EMOJI="✅"
+            EVENT="issue-closed"
           fi
 
-          STAMP=$(date '+%H:%M')
-          MSG=$(printf '[%s] @%s · #%s\n%s Issue chiusa: "%s"' "$STAMP" "$CLOSER" "$NUM" "$EMOJI" "$TITLE")
+          STAMP_HM=$(date '+%H:%M')
+          STAMP_FULL=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+          MSG=$(printf '[%s] @%s · #%s\n%s Issue chiusa: "%s"' "$STAMP_HM" "$CLOSER" "$NUM" "$EMOJI" "$TITLE")
           gh issue comment 19 --repo "${{ github.repository }}" --body "$MSG"
+
+          LINE="- \`$STAMP_FULL\` · ${EVENT} · ${EMOJI} @${CLOSER} ha chiuso issue #${NUM}: \"${TITLE}\""
+          echo "$LINE" >> docs/memory/ACTIVITY_LOG.md
+
+      # ─────────────────────────────────────────────────────
+      # Commit + push ACTIVITY_LOG.md (con retry per race condition)
+      # ─────────────────────────────────────────────────────
+      - name: Commit ACTIVITY_LOG to main
+        run: |
+          # Skip se nessuna entry è stata aggiunta (workflow run è no-op)
+          if git diff --quiet docs/memory/ACTIVITY_LOG.md; then
+            echo "no changes to ACTIVITY_LOG, skip commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/memory/ACTIVITY_LOG.md
+
+          # Estrai prima riga aggiunta come commit message (max 70 char)
+          LAST_LINE=$(git diff --cached docs/memory/ACTIVITY_LOG.md | grep '^+' | tail -1 | sed 's/^+//' | head -c 70)
+          git commit -m "log(auto): ${LAST_LINE}" --quiet
+
+          # Retry push con rebase per race condition (multi-PR concurrent)
+          for i in 1 2 3; do
+            if git pull --rebase origin main --quiet && git push origin main --quiet; then
+              echo "✓ pushed on attempt $i"
+              exit 0
+            fi
+            echo "push attempt $i failed, retrying in 2s..."
+            sleep 2
+          done
+          echo "⚠️ push failed after 3 retries (skip — entry locale non persistita)"
+          exit 0
