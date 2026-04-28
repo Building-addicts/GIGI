@@ -56,3 +56,4 @@
 - `2026-04-28T13:00:01Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +883/-78)_
 - `2026-04-28T13:05:22Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
 - `2026-04-28T15:38:56Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #109: "feat(harness): preflight script auto-detect config (Win + Mac + Linux)" _(branch: `feat/issue-108-harness-preflight` · 1 commit · +278/-0 · 3 file · #108)_
+- `2026-04-28T17:13:42Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #109 "feat(harness): preflight script auto-detect config (Win + Mac + Linux)" di @ArmandoBattaglino _(branch: `feat/issue-108-harness-preflight` · +278/-0 · #108)_
