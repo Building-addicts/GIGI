@@ -28,21 +28,14 @@ final class GigiAgentEngine {
     static let shared = GigiAgentEngine()
 
     // Whitelist of NLU labels eligible for the deterministic fast-path.
-    // High-confidence (>=0.95) classifications for these intents skip the
-    // Groq round-trip entirely and dispatch straight to GigiActionBridge.
+    // High-confidence (>=0.95) classifications skip the Groq round-trip and
+    // dispatch straight to GigiActionBridge after the Force Claude gate.
     private static let fastPathIntents: Set<String> = [
-        "ask_time", "ask_date",
-        "torch_on", "torch_off",
-        "make_call", "send_message",
-        "navigation",
-        "set_timer", "set_alarm", "set_reminder",
-        "toggle_wifi", "toggle_bluetooth",
-        "media_next", "media_previous", "media_play_pause",
-        "play_music",
-        "read_calendar",
-        "remember",
-        "facetime", "facetime_audio",
-        "respond"
+        "ask_time", "ask_date", "torch_on", "torch_off", "make_call", "send_message",
+        "navigate", "navigation", "set_timer", "set_alarm", "set_reminder",
+        "toggle_wifi", "toggle_bluetooth", "media_play_pause", "media_next", "media_previous",
+        "play_music", "open_app", "read_calendar", "read_week_calendar", "find_free_slot",
+        "remember", "respond", "facetime", "facetime_audio"
     ]
 
     // MARK: - Config
@@ -84,58 +77,14 @@ final class GigiAgentEngine {
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
 
-        // === Gate 0: NLU fast-path (deterministic intents, sub-100ms) ===
-        // Runs BEFORE Force Claude / planner: device actions like "what time is it",
-        // "turn on the flashlight", "open spotlight" must execute locally even when
-        // the user has paired the harness with Force Claude on. Cloud LLMs hallucinate
-        // refusals or time out for trivial native intents.
-        let fpStart = Date()
-        let nluIntent = GigiNLUEngine.shared.classify(text)
-        print("GIGI fast-path probe: \(nluIntent.label) (conf=\(nluIntent.confidence)) text='\(text.prefix(60))'")
-        if nluIntent.confidence >= 0.90,
-           Self.fastPathIntents.contains(nluIntent.label) {
-
-            print("GIGI fast-path: \(nluIntent.label) (conf=\(nluIntent.confidence))")
-            let dispatcher = GigiActionDispatcher.shared
-            let bridgeResult = await dispatcher.bridge.execute(nluIntent)
-
-            let speech: String
-            if !bridgeResult.isEmpty {
-                speech = bridgeResult
-            } else {
-                speech = GigiBrainPipeline.localSpeech(for: nluIntent)
-            }
-
-            if nluIntent.label == "make_call", bridgeResult.hasPrefix("Calling ") {
-                let c = nluIntent.params["contact"] ?? ""
-                if !c.isEmpty { await GigiMemory.shared.touchContactIfKnown(c) }
-            }
-
-            mem.addModelSpeech(speech)
-            let elapsed = Int(Date().timeIntervalSince(fpStart) * 1000)
-            print("GIGI fast-path completed: \(elapsed)ms")
-
-            return AgentResult(
-                speech:          speech,
-                executedTools:   [nluIntent.label],
-                isFollowUp:      false,
-                costEstimate:    0,
-                requiresConfirm: nil,
-                isError:         false
-            )
-        }
+        let forceClaudeEnabled = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
 
         // === Gate 1: Force Claude (Phase 2 — D4.a = YES, takes precedence over planner) ===
         // When Brain Mode → Force Claude is on, route the entire request to Claude
         // via the harness streaming bridge. The harness streams Claude's thoughts
         // as `.thinking`/`.toolEvent` bubbles directly into conversation memory.
         // If autoFallback is ON and Force Claude fails, fall through to Gate 2 (planner).
-        //
-        // GIGI issue #88: Force Claude is gated OFF here so the default routing is
-        // Groq agentLoop (with `ask_harness` available as a tool — Groq decides when
-        // to delegate to harness). The Settings toggle still saves to keychain so when
-        // we remove the `false &&` guard the user's preference is preserved.
-        if false /* Force Claude disabled — see issue #88 */ && GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude) {
+        if forceClaudeEnabled {
             let autoFallback = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
             if GigiHarnessClient.shared.isConfigured {
                 let result = await GigiClaudeBridge.shared.run(task: text, context: nil)
@@ -174,7 +123,13 @@ final class GigiAgentEngine {
             // else: fall through to Gate 2 (planner) — D4.b = A
         }
 
-        // === Gate 2: Multi-agent planner (Leo lane, identical to harness-pre-armando-integration) ===
+        // === Gate 2: deterministic NLU fast-path ===
+        // Force Claude deliberately bypasses this gate, even when autoFallback later routes to Groq.
+        if !forceClaudeEnabled, let fastPath = await deterministicFastPath(for: text) {
+            return fastPath
+        }
+
+        // === Gate 3: Multi-agent planner (Leo lane, identical to harness-pre-armando-integration) ===
         // Build initial contents from pruned history (user turn already appended above)
         let history = mem.contents(pruningIfNeeded: true)
         let memoryBlock = await buildMemoryBlock(for: text)
@@ -197,6 +152,45 @@ final class GigiAgentEngine {
             initialContents:   history,
             userText:          text,
             systemInstruction: systemInstruction
+        )
+    }
+
+
+    // MARK: - Deterministic NLU fast-path
+
+    private func deterministicFastPath(for text: String) async -> AgentResult? {
+        let intent = GigiNLUEngine.shared.classify(text)
+        guard intent.confidence >= 0.95,
+              Self.fastPathIntents.contains(intent.label) else {
+            return nil
+        }
+
+        GigiDebugLogger.log("GIGI fast-path: \(intent.label) (\(String(format: "%.2f", intent.confidence)))")
+
+        let speech: String
+        var executedTools: [String] = []
+        if intent.label == "respond" {
+            speech = GigiBrainPipeline.localSpeech(for: intent)
+        } else {
+            let bridgeResult = await GigiActionDispatcher.shared.bridge.execute(intent)
+            if intent.label == "make_call", bridgeResult.hasPrefix("Calling ") {
+                let contact = intent.params["contact"] ?? ""
+                if !contact.isEmpty { await GigiMemory.shared.touchContactIfKnown(contact) }
+            }
+            speech = bridgeResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? GigiBrainPipeline.localSpeech(for: intent)
+                : bridgeResult
+            executedTools = [intent.label]
+        }
+
+        GigiConversationMemory.shared.addModelSpeech(speech)
+        return AgentResult(
+            speech:          speech,
+            executedTools:   executedTools,
+            isFollowUp:      false,
+            costEstimate:    0,
+            requiresConfirm: nil,
+            isError:         false
         )
     }
 

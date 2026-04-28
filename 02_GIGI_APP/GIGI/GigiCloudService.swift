@@ -157,6 +157,7 @@ final class GigiCloudService {
         print("GIGI Groq request: model=\(model ?? agentModel) tools=\(toolsJSON.count) tool_choice=\(body["tool_choice"] ?? "n/a") msgs=\(messages.count)")
 
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        GigiDebugLogger.log("Groq request: model=\(model ?? agentModel) messages=\(messages.count) tools=\(tools.count)")
 
         return try await withThrowingTaskGroup(of: GigiLLMResponse.self) { group in
             group.addTask {
@@ -437,7 +438,13 @@ final class GigiCloudService {
         let text         = message["content"] as? String
 
         var functionCalls: [FunctionCallBlock] = []
-        if let toolCalls = message["tool_calls"] as? [[String: Any]] {
+        let toolCalls = message["tool_calls"] as? [[String: Any]]
+        let rawJSON = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+        Task { @MainActor in
+            GigiDebugLogger.log("Groq response: finish=\(finishReason) tool_calls=\(toolCalls?.count ?? 0) raw=\(String(rawJSON.prefix(2000)))")
+        }
+
+        if let toolCalls {
             for tc in toolCalls {
                 guard let fn      = tc["function"] as? [String: Any],
                       let name    = fn["name"] as? String,
