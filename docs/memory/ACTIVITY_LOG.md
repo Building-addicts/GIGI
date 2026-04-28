@@ -42,3 +42,4 @@
 - `2026-04-28T08:18:47Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #105: "feat(ios): onboarding step for hardware trigger setup (Refs #102)" _(branch: `feat/back-tap-onboarding` · 1 commit · +88/-13 · 1 file · #102)_
 - `2026-04-28T09:04:38Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +177/-40)_
 - `2026-04-28T09:09:47Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +343/-59)_
+- `2026-04-28T09:44:17Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +345/-59)_
