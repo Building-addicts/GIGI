@@ -54,6 +54,81 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 <!-- OMX:GUIDANCE:OPERATING:END -->
 </operating_principles>
 
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GIGI PROJECT OVERLAY — workflow team-shared (vibe-coder mode)   -->
+<!-- Inserito 2026-04-28. NON rimuovere senza confronto col PM.     -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+## GIGI workflow — fonte primaria `CLAUDE.md`
+
+Questo repo è il progetto **GIGI** (assistente vocale iOS/harness Node, deadline lancio MVP 1 maggio 2026). Tutti gli agent CLI (Codex incluso) DEVONO seguire il workflow team-shared definito in `CLAUDE.md` alla root.
+
+**Leggi `CLAUDE.md` come PRIMARY SOURCE** per:
+- Layout monorepo (`01_SERVER_MDM/`, `02_GIGI_APP/`, `03_HARNESS/`, `docs/`)
+- Workflow vibe-coder per dev (worktree obbligatorio, AC E2E, header issue 🎯/🔧/✨)
+- Mappa file rilevanti (hooks, scripts, GitHub Actions, templates)
+- Stato corrente e issue assegnate (via `gh issue list --assignee @me`)
+
+### Adattamenti per Codex (no native hooks)
+
+A inizio sessione, esegui in autonomia (non chiedere conferma):
+
+```bash
+# 1. Sync main + cleanup ref morti (mimica SessionStart hook di Claude Code)
+git fetch origin --prune
+[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] && git pull origin main --ff-only
+git worktree prune
+
+# 2. Lista issue del dev ordinate per priorità
+gh issue list --repo Building-addicts/GIGI --assignee @me --state open
+```
+
+A fine sessione (prima di chiusura):
+
+```bash
+# Logga "standby" su #19 LIVE FEED (script tool-agnostic)
+bash .claude/scripts/post-timeline.sh "<dev_handle>" "<issue_num>" standby "session ended"
+```
+
+### Script tool-agnostic disponibili
+
+Tutti in `.claude/scripts/`, invocabili da qualsiasi agent (Claude Code, Codex, Aider, manuale):
+
+| Script | Scopo |
+|---|---|
+| `post-timeline.sh <handle> <issue> <event> "<details>"` | Posta evento su #19 LIVE FEED |
+| `track-bug.sh <parent> <ac> <handle> <area> "<desc>" "<words>" "<files>" "<pr>"` | 3 azioni atomiche su AC fallito |
+
+Eventi `post-timeline.sh`: `start`, `build_ok`, `build_fail`, `ac_verified`, `bug`, `pr_opened`, `merge`, `standby`.
+
+### Regole vincolanti GIGI (NON negoziabili)
+
+1. **Mai** lavorare su `main` direttamente. Sempre worktree (`git worktree add ../GIGI-work/issue-N -b feat/issue-N main`).
+2. **Pull main fresh** prima di creare worktree (`git pull origin main --ff-only` su main repo dir).
+3. **Mai mergiare** senza tutti gli AC confermati VERO esplicitamente dal dev su device fisico (per iOS) o E2E (per harness).
+4. **Mai** chiudere AC-fail senza chiamare `track-bug.sh` (sub-issue + 3 notifiche atomiche).
+5. **Mai** skippare il build verify ("sembra ok dal codice" non basta).
+6. **Mai** modificare file fuori dallo scope della issue senza chiedere al dev.
+7. **Header issue obbligatorio**: 🎯 Cosa stiamo facendo / 🔧 Cosa implementerà / ✨ Risultato atteso (template in `.github/ISSUE_TEMPLATE/`).
+8. **Lingua app**: tutto user-facing in INGLESE (mercato worldwide). Backstage italiano.
+9. **Convenzioni**: Swift = SwiftUI-first, `@MainActor` su ViewModel. Node = v20+, ES modules, no TS, route `ios-*`. Commit: Conventional Commits.
+
+### Server-side automation (immutata, indipendente dall'agent)
+
+Tutti i workflow GitHub Actions sono tool-agnostic — scattano su eventi GitHub server-side, non sanno né si interessano di chi ha pushato:
+- `auto-timeline.yml` → comment su #19 + append `docs/memory/ACTIVITY_LOG.md`
+- `discord-notify.yml` → notifiche Discord
+- `project-status.yml` → muove card Project board
+- `progress-tracker.yml` → matrioska parent %
+- `pr-lint.yml` → valida PR title + body
+- `health-check.yml` → cron 8:00 CET, daily Discord report
+
+**Niente da configurare lato Codex per questo** — funziona già.
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- END GIGI PROJECT OVERLAY                                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
 ## Working agreements
 - Write a cleanup plan before modifying code for cleanup/refactor/deslop work.
 - Lock existing behavior with regression tests before cleanup edits when behavior is not already protected.
