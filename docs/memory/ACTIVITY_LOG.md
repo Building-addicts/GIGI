@@ -65,3 +65,4 @@
 - `2026-04-28T19:57:24Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #114: "fix(harness): tunnel race condition at boot — pair endpoint returns 503 until ready" _(branch: `fix/issue-113-tunnel-race` · 1 commit · +97/-39 · 2 file · #113)_
 - `2026-04-28T19:57:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #114 "fix(harness): tunnel race condition at boot — pair endpoint returns 503 until ready" di @ArmandoBattaglino _(branch: `fix/issue-113-tunnel-race` · +97/-39 · #113)_
 - `2026-04-28T20:08:12Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #95: "[BUG] Main build broken — missing ensureVoiceTurn/clearPendingDone in GigiSmartOrchestrator after df5a645"
+- `2026-04-28T20:11:32Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #84 _(branch: `feat/issue-50-mvp-preferences-schema` · totale +135/-0)_
