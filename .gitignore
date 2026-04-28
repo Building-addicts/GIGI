@@ -17,6 +17,11 @@ bug/
 # Hooks runtime / Claude Code
 .playwright-mcp/
 .claude/settings.local.json
+# Per-instance build hooks (template committato come local-build.sh.example)
+.claude/local-build.sh
+# Working files della routine PR review (checklist correnti)
+review-checklists/
+!review-checklists/.gitkeep
 
 # Codex agents config — committed selectively (agents/skills/prompts only)
 .codex/*

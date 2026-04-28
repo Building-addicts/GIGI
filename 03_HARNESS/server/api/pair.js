@@ -18,6 +18,7 @@
 // configured host if no Tailscale interface is present.
 import os from 'node:os';
 import QRCode from 'qrcode';
+import { cloudflared } from '../tunnel/cloudflared-manager.js';
 
 function pickHostIp(cfg) {
   // Tailscale assigns IPv4 in 100.64.0.0/10 (CGNAT range, which Tailscale
@@ -60,23 +61,43 @@ function allowedCorsOrigin(req) {
   return 'http://localhost:7777';
 }
 
+// Returns { ready: bool, url: string|null, reason?: string }.
+// For quick mode we consult the cloudflared singleton (live state) instead of
+// cfg.tunnel.quick.last_url (which is a stale config snapshot — there is a
+// 4-5s race at boot where the config is still null while the QR is generated).
+function resolveTunnelUrl(cfg) {
+  const mode = cfg?.tunnel?.mode || 'manual';
+
+  if (mode === 'named') {
+    const hostname = cfg?.tunnel?.named?.hostname;
+    if (!hostname) return { ready: false, url: null, reason: 'NAMED_HOSTNAME_MISSING' };
+    return { ready: true, url: `https://${hostname}` };
+  }
+
+  if (mode === 'quick') {
+    // Live: prefer the cloudflared subprocess publicUrl over the config snapshot.
+    const live = cloudflared?.publicUrl;
+    if (live) return { ready: true, url: live };
+    const cached = cfg?.tunnel?.quick?.last_url;
+    if (cached) return { ready: true, url: cached };
+    return { ready: false, url: null, reason: 'QUICK_TUNNEL_NOT_READY' };
+  }
+
+  // mode === 'lan' | 'manual' → LAN fallback is intentional, always ready.
+  return { ready: true, url: null }; // url filled by caller via pickHostIp
+}
+
 function buildPayload(cfg) {
   const port = cfg?.server?.port || 7779;
   const mode = cfg?.tunnel?.mode || 'manual';
   const secret = process.env.HARNESS_SHARED_SECRET || cfg?.ios?.shared_secret || '';
 
-  // Mode-aware URL selection:
-  //   named → https://<hostname>   (stable forever, survives reboot)
-  //   quick → https://<last_url>   (trycloudflare, changes on restart)
-  //   lan / manual → http://<local-ip>:<port>
-  let url;
-  if (mode === 'named' && cfg?.tunnel?.named?.hostname) {
-    url = `https://${cfg.tunnel.named.hostname}`;
-  } else if (mode === 'quick' && cfg?.tunnel?.quick?.last_url) {
-    url = cfg.tunnel.quick.last_url;
-  } else {
-    url = `http://${pickHostIp(cfg)}:${port}`;
+  const tunnel = resolveTunnelUrl(cfg);
+  if (!tunnel.ready) {
+    return { _notReady: true, reason: tunnel.reason, mode };
   }
+
+  const url = tunnel.url || `http://${pickHostIp(cfg)}:${port}`;
 
   return {
     url,
@@ -116,6 +137,21 @@ export async function handlePair(req, res, { cfg }) {
   }
 
   const payload = buildPayload(cfg);
+  if (payload._notReady) {
+    sendJson(res, 503, {
+      ok: false,
+      error: {
+        code: 'TUNNEL_NOT_READY',
+        message: payload.reason === 'QUICK_TUNNEL_NOT_READY'
+          ? 'Cloudflare quick tunnel still spinning up — retry in a few seconds.'
+          : payload.reason === 'NAMED_HOSTNAME_MISSING'
+            ? 'Named tunnel mode but cfg.tunnel.named.hostname is not set — run setup wizard.'
+            : 'Tunnel not ready.',
+        mode: payload.mode
+      }
+    });
+    return true;
+  }
   const format  = url.searchParams.get('format');
 
   if (format === 'svg') {
