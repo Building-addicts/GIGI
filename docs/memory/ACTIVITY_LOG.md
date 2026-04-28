@@ -79,3 +79,7 @@
 - `2026-04-28T20:18:56Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +235/-0)_
 - `2026-04-28T20:18:59Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +352/-1)_
 - `2026-04-28T20:19:01Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #100 _(branch: `feat/issue-60-empty-speech-guard` · totale +44/-2)_
+- `2026-04-28T20:23:50Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #84 "feat(ios): add MVPPreferences schema + persistence (Sub #13 1/3)" di @fc200490-sketch _(branch: `feat/issue-50-mvp-preferences-schema` · +135/-0 · #50)_
+- `2026-04-28T20:24:03Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-28T20:24:12Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #100 _(branch: `feat/issue-60-empty-speech-guard` · totale +44/-2)_
+- `2026-04-28T20:24:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
