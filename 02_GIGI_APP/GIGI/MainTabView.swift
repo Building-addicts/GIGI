@@ -96,6 +96,9 @@ struct MainTabView: View {
             }
         }
         .onAppear { refreshHarnessConfiguredState() }
+        .onReceive(NotificationCenter.default.publisher(for: .gigiReopenOnboarding)) { _ in
+            withAnimation { showOnboarding = true }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { refreshHarnessConfiguredState() }
         }
