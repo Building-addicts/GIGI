@@ -104,10 +104,11 @@ struct GigiBackgroundTalkIntent: AppIntent {
     @Parameter(title: "What you said", description: "The transcribed phrase to send to GIGI.")
     var text: String
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return .result(dialog: IntentDialog("I didn't catch anything. Try again."))
+            return .result(value: "I didn't catch anything. Try again.",
+                           dialog: IntentDialog("I didn't catch anything. Try again."))
         }
 
         // Local-first routing. Simple system queries that don't require
@@ -117,7 +118,7 @@ struct GigiBackgroundTalkIntent: AppIntent {
         // that need cross-platform actions (order, book, browse) or
         // language-model reasoning fall through to the harness path.
         if let local = LocalAnswer.tryAnswer(for: trimmed) {
-            return .result(dialog: IntentDialog(stringLiteral: local))
+            return .result(value: local, dialog: IntentDialog(stringLiteral: local))
         }
 
         let result = await GigiHarnessClient.shared.agentRun(text: trimmed)
@@ -125,9 +126,10 @@ struct GigiBackgroundTalkIntent: AppIntent {
         case .success(let agent):
             let answer = agent.result.trimmingCharacters(in: .whitespacesAndNewlines)
             if answer.isEmpty {
-                return .result(dialog: IntentDialog("GIGI didn't return anything. Try again."))
+                return .result(value: "GIGI didn't return anything. Try again.",
+                               dialog: IntentDialog("GIGI didn't return anything. Try again."))
             }
-            return .result(dialog: IntentDialog(stringLiteral: answer))
+            return .result(value: answer, dialog: IntentDialog(stringLiteral: answer))
 
         case .failure(let err):
             // Map common failure modes to user-friendly speech rather than
@@ -158,7 +160,7 @@ struct GigiBackgroundTalkIntent: AppIntent {
             case .decodeFailed:
                 message = "GIGI's reply was unreadable. Try again."
             }
-            return .result(dialog: IntentDialog(stringLiteral: message))
+            return .result(value: message, dialog: IntentDialog(stringLiteral: message))
         }
     }
 }
