@@ -63,3 +63,4 @@
 - `2026-04-28T17:37:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #112 "fix(harness): 3 setup-blocker bugs from QA gate setup" di @ArmandoBattaglino _(branch: `fix/issue-111-harness-setup` · +57/-15 · #111)_
 - `2026-04-28T17:37:07Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #111: "fix(harness): 3 setup-blocker bugs from QA gate setup (#64)"
 - `2026-04-28T19:57:24Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #114: "fix(harness): tunnel race condition at boot — pair endpoint returns 503 until ready" _(branch: `fix/issue-113-tunnel-race` · 1 commit · +97/-39 · 2 file · #113)_
+- `2026-04-28T19:57:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #114 "fix(harness): tunnel race condition at boot — pair endpoint returns 503 until ready" di @ArmandoBattaglino _(branch: `fix/issue-113-tunnel-race` · +97/-39 · #113)_
