@@ -523,6 +523,13 @@ struct SettingsView: View {
                 GigiSpeechService.shared.speak("I'm GIGI — your personal Jarvis. Running at full speed.")
             }
             .foregroundColor(.purple)
+
+            #if DEBUG
+            Button("Force Empty TTS (Debug)") {
+                GigiSpeechService.shared.speak("")
+            }
+            .foregroundColor(.orange)
+            #endif
         } header: {
             Text("🔊 Voice")
         }
