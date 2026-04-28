@@ -71,3 +71,11 @@
 - `2026-04-28T20:11:58Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +352/-1)_
 - `2026-04-28T20:12:03Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +235/-0)_
 - `2026-04-28T20:18:19Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #117: "fix(ios): repair main build break introduced by PR #96 squash" _(branch: `fix/main-build-broken-post-96` · 2 commit · +3/-32 · 2 file · #96)_
+- `2026-04-28T20:18:33Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #117 "fix(ios): repair main build break introduced by PR #96 squash" di @ArmandoBattaglino _(branch: `fix/main-build-broken-post-96` · +3/-32 · #96)_
+- `2026-04-28T20:18:40Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #84 _(branch: `feat/issue-50-mvp-preferences-schema` · totale +135/-0)_
+- `2026-04-28T20:18:45Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-28T20:18:48Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #86 _(branch: `feat/issue-51-mvp-preferences-seed` · totale +184/-0)_
+- `2026-04-28T20:18:50Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #91 _(branch: `feat/issue-56-day-plan-reasoner` · totale +158/-0)_
+- `2026-04-28T20:18:56Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +235/-0)_
+- `2026-04-28T20:18:59Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +352/-1)_
+- `2026-04-28T20:19:01Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #100 _(branch: `feat/issue-60-empty-speech-guard` · totale +44/-2)_
