@@ -1,0 +1,15 @@
+host: 0.0.0.0
+
+=== Riavvio harness ===
+[start-all] Panel su porta 7777; il bridge (API iOS :7779) parte automaticamente. Ctrl+C ferma panel, bridge e Chrome avviati da qui.
+Control Panel: http://localhost:7777
+[bridge] [2026-04-28T16:58:46.250Z] GIGI harness server avviato — pid 7024
+[bridge] [2026-04-28T16:58:46.251Z] config: C:\Users\arman\Desktop\GIGI FOLDER\GIGI-work\issue-108-harness-preflight\03_HARNESS\server\config.json
+[bridge] [2026-04-28T16:58:46.251Z] logs: C:\Users\arman\Desktop\GIGI FOLDER\GIGI-work\issue-108-harness-preflight\03_HARNESS\server\logs
+[bridge] [2026-04-28T16:58:46.252Z] [watcher] worker started — 0 watcher attivi su 2
+[bridge] [2026-04-28T16:58:46.253Z] watchers started
+[bridge] [2026-04-28T16:58:46.254Z] ws: iOS stream pronto su /ws/ios/stream (heartbeat 30s)
+[bridge] [2026-04-28T16:58:46.254Z] panel admin: avvia separatamente con `node panel.js` (porta 7777 default)
+[bridge] [2026-04-28T16:58:46.259Z] rpc: server loopback su http://127.0.0.1:7778
+[bridge] [2026-04-28T16:58:46.259Z] iOS HTTP+WS: http://0.0.0.0:7779  ·  ws://0.0.0.0:7779/ws/ios/stream
+

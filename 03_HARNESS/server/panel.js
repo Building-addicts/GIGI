@@ -612,15 +612,49 @@ function getLanIP() {
   return '127.0.0.1';
 }
 
+// Decide the boot label based on the *actual* URL, not the configured mode.
+// Prevents the "URL: 192.168.x.x [quick tunnel]" inconsistency seen when the
+// cloudflared subprocess hadn't spawned yet but mode=quick in the config.
+function tunnelLabelForUrl(urlStr) {
+  if (!urlStr) return ' [LAN only]';
+  try {
+    const u = new URL(urlStr);
+    const host = u.hostname;
+    if (/\.trycloudflare\.com$/i.test(host)) return ' [quick tunnel]';
+    // IPv4 literal or localhost → LAN.
+    if (host === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return ' [LAN only]';
+    // Any other FQDN over HTTPS → named tunnel (or other public CNAME).
+    if (u.protocol === 'https:') return ' [named tunnel]';
+    return ' [LAN only]';
+  } catch {
+    return ' [LAN only]';
+  }
+}
+
 async function printPairingQR() {
-  // Wait for bridge (server.js / port 7779) to be up before printing, so the
-  // QR reflects the correct tunnel URL if one is already active.
+  // Wait for both the bridge AND the tunnel (when mode=quick|named) to be
+  // ready before printing the QR. /api/pair returns 503 with code
+  // TUNNEL_NOT_READY while cloudflared is still spawning — we must not fall
+  // through to the LAN fallback in that window or the QR will encode a LAN
+  // URL that the iPhone can't reach when off-WiFi (issue #113).
   const iosCfgPort = cfg.server?.port || 7779;
-  let bridgeReady = false;
-  for (let i = 0; i < 20; i++) {
+  const tunnelMode = cfg?.tunnel?.mode || 'manual';
+  const requiresTunnel = (tunnelMode === 'quick' || tunnelMode === 'named');
+
+  let payload = null;
+  // Up to 20s polling at 500ms — covers cloudflared cold start (~4-5s typ.)
+  // plus margin for slow links / DNS warmup.
+  for (let i = 0; i < 40; i++) {
     try {
       const r = await fetch(`http://127.0.0.1:${iosCfgPort}/api/pair`, { signal: AbortSignal.timeout(500) });
-      if (r.ok) { bridgeReady = true; break; }
+      if (r.status === 200) {
+        const j = await r.json().catch(() => null);
+        if (j && (j.data || j.url)) {
+          payload = j.data || j;
+          break;
+        }
+      }
+      // 503 TUNNEL_NOT_READY → keep polling. Other non-200 → keep polling too.
     } catch {}
     await new Promise(r => setTimeout(r, 500));
   }
@@ -630,37 +664,25 @@ async function printPairingQR() {
     const require = createRequire(import.meta.url);
     const qrcode = require('qrcode-terminal');
 
-    // Build same JSON payload the web /pair page uses — iOS app decodes JSON.
-    let payload;
-    if (bridgeReady) {
-      // Fetch canonical payload from pair.js (includes tunnel URL if active).
-      try {
-        const r = await fetch(`http://127.0.0.1:${iosCfgPort}/api/pair`, { signal: AbortSignal.timeout(2000) });
-        const j = await r.json();
-        payload = j.data || j;
-      } catch { payload = null; }
+    // If the tunnel never came up and we are in quick|named mode, do NOT
+    // fall back to a LAN-only QR — that would encode an unreachable URL for
+    // off-WiFi clients. Print a clear warning instead.
+    if (!payload && requiresTunnel) {
+      console.warn('[pair] Tunnel non pronto dopo 20s — QR non stampato.');
+      console.warn('[pair] Apri http://localhost:7777/pair quando il tunnel è ready.');
+      return;
     }
 
-    // Fallback: build payload from config directly (LAN IP, no tunnel).
+    // Fallback: only valid for manual / lan modes — encode LAN IP directly.
     if (!payload) {
       const iosCfg = cfg.ios || {};
       const secret = process.env.HARNESS_SHARED_SECRET || iosCfg.shared_secret || '';
-      const mode = cfg?.tunnel?.mode || 'manual';
-      let url;
-      if (mode === 'named' && cfg?.tunnel?.named?.hostname) {
-        url = `https://${cfg.tunnel.named.hostname}`;
-      } else if (mode === 'quick' && cfg?.tunnel?.quick?.last_url) {
-        url = cfg.tunnel.quick.last_url;
-      } else {
-        url = `http://${getLanIP()}:${iosCfgPort}`;
-      }
-      payload = { url, secret, deviceName: os.hostname(), mode, createdAt: new Date().toISOString() };
+      const url = `http://${getLanIP()}:${iosCfgPort}`;
+      payload = { url, secret, deviceName: os.hostname(), mode: tunnelMode, createdAt: new Date().toISOString() };
     }
 
     const qrString = JSON.stringify(payload);
-    const tunnelNote = payload.mode && payload.mode !== 'manual'
-      ? ` [${payload.mode} tunnel]`
-      : ' [LAN only]';
+    const tunnelNote = tunnelLabelForUrl(payload.url);
     console.log('\n── GIGI Pairing QR — scan from iPhone: Settings → Harness → Pair ──');
     qrcode.generate(qrString, { small: true });
     console.log(`URL: ${payload.url}${tunnelNote}`);
