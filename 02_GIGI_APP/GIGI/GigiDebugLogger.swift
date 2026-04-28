@@ -29,7 +29,7 @@ class GigiDebugLogger {
 
     static func voiceEvent(
         _ name: String,
-        _ turnId: String? = nil,
+        turnId: String? = nil,
         _ data: [String: String] = [:],
         location: String = #file,
         function: String = #function,
