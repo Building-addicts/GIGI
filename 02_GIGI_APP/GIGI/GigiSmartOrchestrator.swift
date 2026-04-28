@@ -192,9 +192,83 @@ class GigiSmartOrchestrator: ObservableObject {
         // Passively learn user profile data from natural speech (non-blocking)
         Task { await GigiUserProfile.shared.learnFromText(trimmed) }
 
+        // Local fast-path. The router covers system queries (time, date,
+        // battery, capabilities) and native-action commands (call / message
+        // / open). Markers are dispatched directly to iOS via
+        // `MarkerDispatcher` — no agent loop, no harness round-trip, no
+        // network. Anything the router doesn't claim falls through to the
+        // agent engine below.
+        switch await LocalActionRouter.resolve(for: trimmed) {
+        case .marker(let marker):
+            await handleLocalMarker(marker, thinkingID: thinkingID)
+            return
+        case .answer(let answer):
+            handleLocalAnswer(answer, thinkingID: thinkingID)
+            return
+        case .noMatch:
+            break
+        }
+
         // --- V3 agent loop ---
         let result = await agentEngine.process(text: trimmed)
         handleResult(result, thinkingID: thinkingID)
+    }
+
+    // MARK: - Local fast-path handlers
+
+    /// Dispatches a router marker via `MarkerDispatcher` and finalizes the
+    /// turn. iOS owns the privileged action UI (Apple Call confirmation /
+    /// Messages composer / target app), so we do not speak over those
+    /// surfaces — the spoken side stays empty when the launch succeeds.
+    private func handleLocalMarker(_ marker: String, thinkingID: UUID) async {
+        let result = await MarkerDispatcher.dispatch(marker: marker)
+        switch result {
+        case .launched(let spoken):
+            // Done sound + UI close. We deliberately stay silent if iOS is
+            // about to show its own confirmation sheet (call / SMS / open),
+            // so the TTS doesn't overlap the system UI audio.
+            SoundEngine.play(.taskDone)
+            memory.resolveThinking(id: thinkingID, with: spoken.isEmpty ? "Done." : spoken)
+            let banner = spoken.isEmpty ? "Done." : spoken
+            if spoken.isEmpty {
+                finalizeTurnNow(message: banner)
+            } else {
+                Task { await GigiLiveActivityController.shared.transitionToSpeaking(message: banner) }
+                scheduleDoneAfterTTS(message: banner)
+                speech.speak(spoken)
+            }
+            status = "GIGI: Ready"
+            isThinking = false
+
+        case .rejected(let spoken):
+            // Recoverable: marker recognized but cannot be acted on
+            // (unresolved contact, undialable number, missing target app).
+            // Speak the reason so the user understands why nothing
+            // happened, then finalize.
+            handleLocalAnswer(spoken, thinkingID: thinkingID)
+
+        case .unknownMarker:
+            // Router emits well-formed markers; this branch only fires if
+            // future router work emits a new marker shape that
+            // `MarkerDispatcher.classify` doesn't yet understand. Fall back
+            // to speaking the raw marker as text so the failure is visible.
+            handleLocalAnswer(marker, thinkingID: thinkingID)
+        }
+    }
+
+    /// Speaks a router answer (greeting, time, date, capabilities, etc.)
+    /// through the same TTS + Live Activity pipeline as the agent path,
+    /// without invoking the agent engine.
+    private func handleLocalAnswer(_ answer: String, thinkingID: UUID) {
+        let synthetic = AgentResult(
+            speech: answer,
+            executedTools: [],
+            isFollowUp: false,
+            costEstimate: 0,
+            requiresConfirm: nil,
+            isError: false
+        )
+        handleResult(synthetic, thinkingID: thinkingID)
     }
 
     // MARK: - Result handling (shared by normal turn + confirmation)
