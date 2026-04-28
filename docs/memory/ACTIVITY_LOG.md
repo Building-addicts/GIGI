@@ -9,3 +9,61 @@
 - `2026-04-27 08:30` · auto · Eliminati issue test #20-#21 e 8 commenti test da #19. Rimangono 13 issue prioritarie aperte. _(branch: `main`)_
 - `2026-04-27 10:00` · auto · Retrofit 51/51 issue con header 🎯/🔧/✨. Aggiornato `CLAUDE.md`, creato `docs/SETUP_LEO_FEDE.md` (kickoff message). _(branch: `main` · files: CLAUDE.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-27 10:00` · auto · Creato `docs/KICKOFF_LEO_FEDE.md` — kickoff message Leo+Fede (workflow Claude Code, issue hierarchy, Test E2E obbligatorio, Discord tracking, setup). _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-27 10:07` · auto · Creato `docs/SETUP_LEO_FEDE.md` — setup pratico 11 messaggi per Leo (iOS/SSH) + Fede (harness Node), prerequisiti e comandi copia-incollabili. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 00:33` · auto · Chiuso spam PR #80 (bot fork-farming). Aggiornati `CLAUDE.md`, `docs/memory/ACTIVITY_LOG.md`. Creato `docs/SETUP_LEO_FEDE.md`. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 00:38` · auto · Retrofit issue #9 (header 🎯/🔧/✨, comment fake eliminati). Committato `docs/memory/ACTIVITY_LOG.md` post-cleanup. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 01:16` · auto · Testato timeline-poster: 5 event su #19 (start/build_ok/bug/merge/health-check). Pulizia in pending post-verifica Discord. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 02:35` · auto · Fixato `.github/workflows/project-status.yml` per gestire transizioni mancanti (issues:* events, PR merged → Done). Committato `e65b054` e avviato sync project board per riallineare 55 item. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 02:54` · auto · Corretto `sync_project.py`: rimosso field `merged` inesistente da gh pr list, mappato da `state` con error handling. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 04:08` · auto · Creato `docs/SETUP_LEO_FEDE.md` con kickoff Leo+Fede. PR #22 aperto. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 04:35` · auto · Finalizzato workflow 3-layer dev: implementato auto-sync main e cleanup branch/worktree automatico. Aggiornato `docs/SETUP_LEO_FEDE.md`. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T02:38:21Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #101: "[SMOKE TEST] activity-log server-side append"
+- `2026-04-28T04:38:48+0200` · local · session ended on `main` (last commit: feat(activity-log): server-side via GitHub Actions + local fallback no-AI) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T04:44:57+0200` · local · session ended on `main` (last commit: feat(agents): GIGI overlay in AGENTS.md per supporto Codex CLI) _(modified: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T04:46:38+0200` · local · session ended on `main` (last commit: feat(agents): GIGI overlay in AGENTS.md per supporto Codex CLI) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T04:52:48+0200` · local · session ended on `main` (last commit: feat(agents): GIGI overlay in AGENTS.md per supporto Codex CLI) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:12:01+0200` · local · session ended on `main` (last commit: feat(routine-pr): skill /routine-pr per PR review batch (PM only)) _(modified: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:19:39+0200` · local · session ended on `main` (last commit: feat(routine-pr): skill /routine-pr per PR review batch (PM only)) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:26:54+0200` · local · session ended on `main` (last commit: feat(routine-pr): skill /routine-pr per PR review batch (PM only)) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:43:06+0200` · local · session ended on `main` (last commit: feat(routine-pr): skill /routine-pr per PR review batch (PM only)) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:45:49+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:46:55+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:47:45+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:51:41+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:55:36+0200` · local · session ended on `main` (last commit: fix(routine-pr): regola dura — Claude non spunta MAI L4/L5/Decisione al posto ) _(modified: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:00:44+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:05:11+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:08:40+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:15:38+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:19:04+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T08:09:32Z` · bug-closed · 🐛✅ @Leonardo-Corte ha chiuso issue #102: "[BUG] Wake word "hey gigi" non risponde su iPhone PM (Armando)"
+- `2026-04-28T08:14:13Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #103: "feat(ios): disable wake word for MVP — hardware triggers replace it (Closes #102)" _(branch: `feat/issue-102-wake-word` · 1 commit · +72/-39 · 5 file · #102)_
+- `2026-04-28T08:16:26Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #104: "feat(ios): refine TalkToGIGI AppShortcut phrases for system-wide discovery (Refs #102)" _(branch: `feat/talk-to-gigi-intent` · 1 commit · +20/-6 · 1 file · #102)_
+- `2026-04-28T08:18:47Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #105: "feat(ios): onboarding step for hardware trigger setup (Refs #102)" _(branch: `feat/back-tap-onboarding` · 1 commit · +88/-13 · 1 file · #102)_
+- `2026-04-28T09:04:38Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +177/-40)_
+- `2026-04-28T09:09:47Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +343/-59)_
+- `2026-04-28T09:44:17Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +345/-59)_
+- `2026-04-28T09:52:30Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +472/-73)_
+- `2026-04-28T10:00:28Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +576/-78)_
+- `2026-04-28T10:25:56Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +570/-78)_
+- `2026-04-28T10:48:19Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +572/-78)_
+- `2026-04-28T10:58:24Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +679/-78)_
+- `2026-04-28T11:03:25Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +875/-78)_
+- `2026-04-28T11:09:37Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +881/-78)_
+- `2026-04-28T12:10:28Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #106: "fix(ios): stabilize demo-critical voice intents" _(branch: `feat/issue-88-core-reliability` · 6 commit · +138/-8 · 7 file · #89)_
+- `2026-04-28T12:12:30Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +792/-78)_
+- `2026-04-28T12:55:00Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +883/-78)_
+- `2026-04-28T13:00:01Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +883/-78)_
+- `2026-04-28T13:05:22Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-04-28T15:38:56Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #109: "feat(harness): preflight script auto-detect config (Win + Mac + Linux)" _(branch: `feat/issue-108-harness-preflight` · 1 commit · +278/-0 · 3 file · #108)_
+- `2026-04-28T17:13:42Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #109 "feat(harness): preflight script auto-detect config (Win + Mac + Linux)" di @ArmandoBattaglino _(branch: `feat/issue-108-harness-preflight` · +278/-0 · #108)_
+- `2026-04-28T17:31:01Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #110: "docs(qa-evidence): #64 QA setup evidence packet (sign-off pre-gate)" _(branch: `feat/issue-64-qa-setup` · 1 commit · +117/-0 · 6 file · #64)_
+- `2026-04-28T17:31:31Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #110 "docs(qa-evidence): #64 QA setup evidence packet (sign-off pre-gate)" di @ArmandoBattaglino _(branch: `feat/issue-64-qa-setup` · +117/-0 · #64)_
+- `2026-04-28T17:36:41Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #112: "fix(harness): 3 setup-blocker bugs from QA gate setup" _(branch: `fix/issue-111-harness-setup` · 1 commit · +57/-15 · 4 file · #111)_
+- `2026-04-28T17:37:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #112 "fix(harness): 3 setup-blocker bugs from QA gate setup" di @ArmandoBattaglino _(branch: `fix/issue-111-harness-setup` · +57/-15 · #111)_
+- `2026-04-28T17:37:07Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #111: "fix(harness): 3 setup-blocker bugs from QA gate setup (#64)"
+- `2026-04-28T19:57:24Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #114: "fix(harness): tunnel race condition at boot — pair endpoint returns 503 until ready" _(branch: `fix/issue-113-tunnel-race` · 1 commit · +97/-39 · 2 file · #113)_
+- `2026-04-28T19:57:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #114 "fix(harness): tunnel race condition at boot — pair endpoint returns 503 until ready" di @ArmandoBattaglino _(branch: `fix/issue-113-tunnel-race` · +97/-39 · #113)_
+- `2026-04-28T20:08:12Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #95: "[BUG] Main build broken — missing ensureVoiceTurn/clearPendingDone in GigiSmartOrchestrator after df5a645"
+- `2026-04-28T20:11:32Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #84 _(branch: `feat/issue-50-mvp-preferences-schema` · totale +135/-0)_
+- `2026-04-28T20:11:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #86 _(branch: `feat/issue-51-mvp-preferences-seed` · totale +184/-0)_

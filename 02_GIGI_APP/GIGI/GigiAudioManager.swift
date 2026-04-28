@@ -155,7 +155,7 @@ final class GigiAudioManager: ObservableObject {
         if suppressNextSpeakingFinished {
             suppressNextSpeakingFinished = false
             if state == .speaking { transition(to: .idle) }
-            GigiDebugLogger.voiceEvent("audio.speakingFinishSuppressed", nil, dataForTrace())
+            GigiDebugLogger.voiceEvent("audio.speakingFinishSuppressed", turnId: nil, dataForTrace())
             print("GigiAudioManager: speaking finish suppressed for barge-in")
             return
         }
@@ -187,14 +187,14 @@ final class GigiAudioManager: ObservableObject {
 
     private func scheduleFollowUpTimeout() {
         followUpTimeoutTask?.cancel()
-        GigiDebugLogger.voiceEvent("audio.followUpWindowStarted", nil, dataForTrace())
+        GigiDebugLogger.voiceEvent("audio.followUpWindowStarted", turnId: nil, dataForTrace())
         followUpTimeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.presenceFollowUpWindow * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
             // User actually spoke → VAD fired → state already moved off .recording. No-op.
             guard self.state == .recording else { return }
             print("GigiAudioManager: presence follow-up window elapsed — back to wake-word standby")
-            GigiDebugLogger.voiceEvent("audio.followUpWindowElapsed", nil, self.dataForTrace())
+            GigiDebugLogger.voiceEvent("audio.followUpWindowElapsed", turnId: nil, self.dataForTrace())
             self.stopRecording()
             self.resumeWakeWordIfEnabled()
         }
@@ -211,7 +211,7 @@ final class GigiAudioManager: ObservableObject {
 
     private func transition(to newState: GigiAudioState) {
         print("GigiAudioManager: \(state) → \(newState)")
-        GigiDebugLogger.voiceEvent("audio.transition", nil, ["from": "\(state)", "to": "\(newState)", "presenceMode": "\(presenceMode)"])
+        GigiDebugLogger.voiceEvent("audio.transition", turnId: nil, ["from": "\(state)", "to": "\(newState)", "presenceMode": "\(presenceMode)"])
         // Any transition out of .recording invalidates the Presence follow-up window.
         if state == .recording, newState != .recording {
             followUpTimeoutTask?.cancel()
@@ -241,7 +241,7 @@ final class GigiAudioManager: ObservableObject {
 
     private func resumeWakeWordIfEnabled() {
         print("GigiAudioManager: resumeWakeWordIfEnabled — presence=\(presenceMode)")
-        GigiDebugLogger.voiceEvent("audio.resumeWakeWordIfEnabled", nil, dataForTrace())
+        GigiDebugLogger.voiceEvent("audio.resumeWakeWordIfEnabled", turnId: nil, dataForTrace())
         if presenceMode { startWakeWordListening() }
     }
 
