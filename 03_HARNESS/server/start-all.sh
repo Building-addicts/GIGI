@@ -24,8 +24,16 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 if [ ! -d node_modules ]; then
-  echo "Installo dipendenze..."
+  echo "[start-all] Installo dipendenze server/..."
   npm install
+fi
+
+# Le deps di browser-pool/ sono in un package.json separato e server.js le importa al boot.
+# Senza questa install il bridge crasha con `Cannot find package 'playwright-core'` su fresh clone.
+BROWSER_POOL_DIR="$SCRIPT_DIR/../browser-pool"
+if [ -d "$BROWSER_POOL_DIR" ] && [ -f "$BROWSER_POOL_DIR/package.json" ] && [ ! -d "$BROWSER_POOL_DIR/node_modules" ]; then
+  echo "[start-all] Installo dipendenze browser-pool/..."
+  ( cd "$BROWSER_POOL_DIR" && npm install )
 fi
 
 echo "[start-all] Panel su porta 7777; il bridge (API iOS :7779) parte automaticamente. Ctrl+C ferma panel, bridge e Chrome avviati da qui."
