@@ -26,6 +26,72 @@ import Foundation
 // Failure modes are spoken back through the same dialog channel so the user
 // always hears something even if the harness is offline or unpaired.
 
+// MARK: - LocalAnswer
+//
+// Pattern-based router that handles a small set of system queries entirely
+// on-device, without going through the harness. The point of this layer is
+// twofold:
+//   1. The banner stays useful when the Mac harness is unreachable (Mac
+//      off, tunnel down, not paired) for any request that doesn't need
+//      Claude or an external integration.
+//   2. We don't burn a Claude turn on questions whose answer is in the
+//      device clock or the current locale.
+//
+// Anything not matched here falls through to `agentRun`, which is where
+// reasoning, memory, and cross-platform actions (order pizza, book Uber,
+// search Amazon — the things that genuinely need the harness) are handled.
+//
+// Phrases are matched on lowercased / whitespace-trimmed text. We accept
+// English and Italian forms because the demo speaker mixes them. This is
+// deliberately a thin keyword router rather than the full GigiNLUEngine,
+// because the engine has UI dependencies that don't make sense in a
+// background AppIntent context.
+
+private enum LocalAnswer {
+    static func tryAnswer(for raw: String) -> String? {
+        let lower = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !lower.isEmpty else { return nil }
+
+        if matchesAny(lower, prefixes: ["hello", "hi gigi", "hey gigi", "ciao", "ciao gigi"]) {
+            return "Hi! What can I help with?"
+        }
+
+        if containsAny(lower, phrases: ["what time", "what's the time", "che ore sono", "che ora è", "ora è"]) {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            return "It's \(formatter.string(from: Date()))."
+        }
+
+        if containsAny(lower, phrases: ["what day", "what's the date", "today's date", "che giorno è", "che data è"]) {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .full
+            formatter.timeStyle = .none
+            return "Today is \(formatter.string(from: Date()))."
+        }
+
+        if containsAny(lower, phrases: ["thank you", "thanks", "grazie"]) {
+            return "You're welcome."
+        }
+
+        // Self-test phrase the demo can use to confirm the banner is wired
+        // up before turning the harness on. Useful during stage prep.
+        if containsAny(lower, phrases: ["are you there", "ping", "test"]) {
+            return "I'm here. The banner works."
+        }
+
+        return nil
+    }
+
+    private static func matchesAny(_ text: String, prefixes: [String]) -> Bool {
+        prefixes.contains { text == $0 || text.hasPrefix($0 + " ") || text.hasPrefix($0 + ",") }
+    }
+
+    private static func containsAny(_ text: String, phrases: [String]) -> Bool {
+        phrases.contains { text.contains($0) }
+    }
+}
+
 @available(iOS 16.0, *)
 struct GigiBackgroundTalkIntent: AppIntent {
     static var title: LocalizedStringResource = "Process speech with GIGI"
@@ -48,6 +114,16 @@ struct GigiBackgroundTalkIntent: AppIntent {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .result(dialog: IntentDialog("I didn't catch anything. Try again."))
+        }
+
+        // Local-first routing. Simple system queries that don't require
+        // Claude reasoning or external integrations are answered directly
+        // from the AppIntent, so the banner works even when the harness is
+        // unreachable (Mac off, tunnel down, not paired). Only requests
+        // that need cross-platform actions (order, book, browse) or
+        // language-model reasoning fall through to the harness path.
+        if let local = LocalAnswer.tryAnswer(for: trimmed) {
+            return .result(dialog: IntentDialog(stringLiteral: local))
         }
 
         let result = await GigiHarnessClient.shared.agentRun(text: trimmed)
