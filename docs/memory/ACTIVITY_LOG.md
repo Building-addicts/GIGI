@@ -83,3 +83,11 @@
 - `2026-04-28T20:24:03Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
 - `2026-04-28T20:24:12Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #100 _(branch: `feat/issue-60-empty-speech-guard` · totale +44/-2)_
 - `2026-04-28T20:24:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-04-28T20:41:54Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #60: "[Sub #16 · 1/4] Empty speech guard + done state notify in GigiSpeechService"
+- `2026-04-28T20:42:09Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-28T20:42:23Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-04-28T20:53:13Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #118: "feat(ios): harness reachability monitor with HarnessStatus state machine (#61)" _(branch: `feat/issue-61-harness-reachability-monitor` · 1 commit · +79/-3 · 3 file · #61)_
+- `2026-04-28T21:14:05Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #121: "fix(ios): declare live activity support on widget extension" _(branch: `fix/issue-119-activitykit-entitlement` · 1 commit · +4/-0 · 1 file · #119)_
+- `2026-04-28T21:15:59Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
+- `2026-04-28T22:28:14Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-04-28T23:42:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #119: "investigate: Dynamic Island non visibile su iPhone 15 Pro PM (Sideloadly install)"
