@@ -53,3 +53,4 @@
 - `2026-04-28T12:10:28Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #106: "fix(ios): stabilize demo-critical voice intents" _(branch: `feat/issue-88-core-reliability` · 6 commit · +138/-8 · 7 file · #89)_
 - `2026-04-28T12:12:30Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +792/-78)_
 - `2026-04-28T12:55:00Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +883/-78)_
+- `2026-04-28T13:00:01Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +883/-78)_
