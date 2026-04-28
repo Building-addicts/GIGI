@@ -422,7 +422,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Action Button (iPhone 15 Pro+)")
                         .font(.subheadline.weight(.semibold))
-                    Text("Settings → Action Button → Shortcut → pick the Talk to GIGI Shortcut you built (NOT the Open GIGI App Shortcut). Its OPEN: branch also handles resolved calls via tel: links, so iOS shows the native Call confirmation over your current app.")
+                    Text("Settings → Action Button → Shortcut → pick the Talk to GIGI Shortcut you built (NOT the Open GIGI App Shortcut). Its CALL: branch should pass the stripped phone number into Shortcuts' native Call action, so iOS owns the compliant call flow over your current app.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

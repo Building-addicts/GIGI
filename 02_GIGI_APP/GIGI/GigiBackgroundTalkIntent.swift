@@ -96,8 +96,8 @@ private enum LocalAnswer {
         // AppIntent are returned as command markers. The user's Shortcut owns
         // the privileged foreground action. For calls, the demo-safe path is:
         //
-        //   "call mom" → resolve Mom in Contacts here → OPEN:tel:+15551234
-        //             → Shortcut Open URL → iOS native "Call?" confirmation
+        //   "call mom" → resolve Mom in Contacts here → CALL:+15551234
+        //             → Shortcut Call action → iOS native call confirmation
         //
         // That keeps GIGI closed even if the user started from Instagram, while
         // still using Apple's compliant call-confirmation surface. `CALL:` is
@@ -282,14 +282,15 @@ private enum LocalAnswer {
             return "CALL:\(contactName)"
         }
 
-        guard let telURL = telephoneURLString(from: resolved.phone) else {
+        guard let phoneNumber = shortcutDialablePhoneNumber(from: resolved.phone) else {
             return "I found \(resolved.name), but the phone number doesn't look dialable."
         }
 
-        // Canonical demo marker. The Shortcut's OPEN branch strips `OPEN:` and
-        // runs Open URL. For `tel:` URLs, iOS presents the native call
-        // confirmation over the current app; GIGI never foregrounds.
-        return "OPEN:\(telURL)"
+        // Canonical demo marker. The Shortcut's CALL branch strips `CALL:` and
+        // passes this value into the native Shortcuts "Call" action. That is
+        // more reliable than Open URL + tel: and still keeps GIGI closed while
+        // iOS owns the compliant call confirmation surface.
+        return "CALL:\(phoneNumber)"
     }
 
     private static func ensureContactsAccessForBackgroundAction() async -> Bool {
@@ -309,13 +310,12 @@ private enum LocalAnswer {
         }
     }
 
-    private static func telephoneURLString(from phone: String) -> String? {
-        // Keep only the characters accepted by the tel URL scheme for the demo.
-        // `#` would become a URL fragment if not escaped, so we deliberately
-        // drop service-code characters and keep real phone numbers: + + digits.
+    private static func shortcutDialablePhoneNumber(from phone: String) -> String? {
+        // Keep only real phone-number characters for the native Shortcuts Call
+        // action. We deliberately drop service-code characters for demo safety.
         let cleaned = phone.filter { "0123456789+".contains($0) }
         guard cleaned.filter(\.isNumber).count >= 3 else { return nil }
-        return "tel:\(cleaned)"
+        return cleaned
     }
 
     private static func cleanContactName(_ name: String) -> String {

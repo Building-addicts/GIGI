@@ -434,12 +434,12 @@ struct OnboardingView: View {
                     triggerRow(number: "d", title: "Inside the Repeat block: add Dictate Text")
                     triggerRow(number: "e", title: "Inside the Repeat block: add If — Dictated Text contains stop — and inside that If, add Exit Shortcut")
                     triggerRow(number: "f", title: "Inside the Repeat block, after the If: add Process speech with GIGI — set its Text to the Dictated Text variable")
-                    triggerRow(number: "g", title: "After Process speech with GIGI, branch on its Result: OPEN: strips the prefix and runs Open URL. This covers Spotify and resolved calls like tel:+123, so iOS shows the native Call confirmation without opening GIGI.")
-                    triggerRow(number: "g2", title: "Optional fallback: CALL: strips the prefix, then Get Contact + Call. Use this only if GIGI could not resolve the phone number itself.")
+                    triggerRow(number: "g", title: "After Process speech with GIGI, branch on its Result: CALL: strips the prefix and passes the remaining value into the native Shortcuts Call action. If GIGI resolved the contact, that value is already the phone number.")
+                    triggerRow(number: "g2", title: "Then branch OPEN: strips the prefix and runs Open URL for apps like Spotify. SMS: can go to Send Message.")
                     triggerRow(number: "h", title: "Otherwise, add Speak Text — set its Text to the Result from Process speech with GIGI")
                     triggerRow(number: "i", title: "Outside the loop nothing else is needed. Name it Talk to GIGI and save.")
 
-                    Text("Result: a banner-style dictation overlay slides down at the top of the screen. Say \"call Mom\" and GIGI resolves the contact in the background, returns an OPEN:tel: link, then Shortcuts opens the native iOS Call confirmation over whatever app you were using. The GIGI app never opens.")
+                    Text("Result: a banner-style dictation overlay slides down at the top of the screen. Say \"call Mom\" and GIGI resolves the contact in the background, returns CALL:+number, then Shortcuts runs the native Call action over whatever app you were using. The GIGI app never opens.")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.55))
 
