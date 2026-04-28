@@ -15,9 +15,22 @@ MAPPING="$ROOT/.claude/dev-mapping.json"
 # Non tocca worktree o branch diversi da main: solo se il dev è sul main locale
 # pulito, lo aggiorniamo. Mostriamo al dev quanti commit nuovi ci sono.
 SYNC_MSG=""
+CLEANUP_MSG=""
 if [ -d "$ROOT/.git" ] || [ -f "$ROOT/.git" ]; then
   # Fetch in background (timeout 5s per evitare hang offline)
   ( timeout 5 git -C "$ROOT" fetch origin --prune --quiet 2>/dev/null ) || true
+
+  # ─── Cleanup pass: worktree orphani + branch locali ghost ───────
+  # 1. Rimuovi worktree orphani (dir cancellata a mano dal dev)
+  git -C "$ROOT" worktree prune 2>/dev/null || true
+
+  # 2. Trova branch locali il cui remote è "gone" (cancellato dopo merge)
+  #    NON cancella automatic — segnala al Claude del dev che propone azione.
+  GONE="$(git -C "$ROOT" for-each-ref --format='%(refname:short)|%(upstream:track)' refs/heads 2>/dev/null \
+    | grep '|.*gone' | cut -d'|' -f1 | tr '\n' ' ')"
+  if [ -n "$GONE" ]; then
+    CLEANUP_MSG="🧹 Branch locali obsoleti (remote già cancellato dopo merge): ${GONE}— per pulire dimmi 'pulisci branch'"
+  fi
 
   CURRENT_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
   if [ "$CURRENT_BRANCH" = "main" ]; then
@@ -195,6 +208,7 @@ ISSUE_LINES="$(echo "$FORMATTED" | grep -v '^__ISSUE_COUNT__=')"
 echo "[GIGI session-start] — context per Claude"
 echo ""
 [ -n "$SYNC_MSG" ] && { echo "$SYNC_MSG"; echo ""; }
+[ -n "$CLEANUP_MSG" ] && { echo "$CLEANUP_MSG"; echo ""; }
 echo "Dev identificato: $FULL_NAME ($ROLE) · GitHub: @$HANDLE"
 if [ "$HAS_LOCAL_MD" = "false" ]; then
   echo ""

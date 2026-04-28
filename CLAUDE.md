@@ -229,10 +229,12 @@ gh pr view <num> --json reviewDecision,statusCheckRollup
 
 gh pr merge <num> --squash --delete-branch
 
-# Cleanup worktree
+# Cleanup completo (locale + worktree + ref remoti)
 cd "$CLAUDE_PROJECT_DIR"
 git worktree remove "$WORKTREE"
-git pull origin main
+git branch -D "feat/$SLUG"             # ← branch locale (squash crea commit diverso, serve -D)
+git fetch origin --prune               # ← rimuove ref morti su origin
+git pull origin main --ff-only         # ← aggiorna main locale
 ```
 
 > "Mergiato e pulito. Vuoi prossima issue (#<altra>)? Rispondi 'sì'."

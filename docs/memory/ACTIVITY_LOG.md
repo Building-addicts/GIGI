@@ -13,3 +13,5 @@
 - `2026-04-28 00:33` · auto · Chiuso spam PR #80 (bot fork-farming). Aggiornati `CLAUDE.md`, `docs/memory/ACTIVITY_LOG.md`. Creato `docs/SETUP_LEO_FEDE.md`. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28 00:38` · auto · Retrofit issue #9 (header 🎯/🔧/✨, comment fake eliminati). Committato `docs/memory/ACTIVITY_LOG.md` post-cleanup. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28 01:16` · auto · Testato timeline-poster: 5 event su #19 (start/build_ok/bug/merge/health-check). Pulizia in pending post-verifica Discord. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 02:35` · auto · Fixato `.github/workflows/project-status.yml` per gestire transizioni mancanti (issues:* events, PR merged → Done). Committato `e65b054` e avviato sync project board per riallineare 55 item. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28 02:54` · auto · Corretto `sync_project.py`: rimosso field `merged` inesistente da gh pr list, mappato da `state` con error handling. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
