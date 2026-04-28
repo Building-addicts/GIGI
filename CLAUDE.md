@@ -122,6 +122,12 @@ All'apertura, l'hook ti dà già:
 SLUG="issue-<N>-<short-slug>"   # es: issue-9-di-descend
 WORKTREE="$CLAUDE_PROJECT_DIR/../GIGI-work/$SLUG"
 
+# ⭐ LAYER 2 SYNC: pull main fresh PRIMA di creare worktree
+# Garantisce che il worktree parta dall'ultimo main mergiato dal PM
+cd "$CLAUDE_PROJECT_DIR"
+git checkout main
+git pull origin main --ff-only
+
 # Worktree isolato — main resta intatto, no conflitti tra issue parallele
 git worktree add "$WORKTREE" -b "feat/$SLUG" main
 cd "$WORKTREE"
@@ -281,6 +287,28 @@ Agent({
 
 Solo dopo che il subagent torna successo, comunichi al dev:
 > "🐛 Tracciato come #X (parent: #N, label `bug`, P0). Vuoi fixare ora o lasciare in stand-by?"
+
+### Sync main durante worktree lungo (Layer 3 — anti-conflict)
+
+Se il dev sta lavorando su un worktree da >2 ore, **prima di aprire la PR** controlla quanto main è avanti:
+
+```bash
+# Dentro al worktree del dev
+git fetch origin main
+BEHIND=$(git rev-list --count HEAD..origin/main)
+echo "Worktree dietro main di $BEHIND commit"
+```
+
+Soglie di azione:
+- `BEHIND ≤ 5` → procedi normalmente, conflict trascurabile
+- `BEHIND 6-15` → comunica al dev: *"⚠️ main si è mosso di N commit dal worktree start. Faccio `git merge origin/main` qui per integrare prima della PR? (sì = sicuro, NO force push)"*. Se il dev dice sì, esegui:
+  ```bash
+  git merge origin/main
+  # se conflitti: risolvi con il dev, poi git add . && git commit
+  ```
+- `BEHIND >15` → blocco strong: *"main è significativamente avanti. Pause + chiama @ArmandoBattaglino per decidere se mergiare ora o finire la sub-issue su questo branch e accettare conflitti su PR."*
+
+**⛔ MAI usare `git rebase main`** anche se sembra "più pulito" — i 6 rischi (force push, history rewrite, multi-round conflicts, lost commits, force push warning su PR GitHub, anti-pattern Git) sono peggiori del merge commit visibile. Lo squash merge alla chiusura della PR appiattisce comunque tutto in 1 commit su main, quindi il merge commit del worktree non sopravvive.
 
 ### Step Report obbligatorio prima del merge (regola "matrioska")
 

@@ -10,6 +10,39 @@ set -u
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 MAPPING="$ROOT/.claude/dev-mapping.json"
 
+# ─── Layer 1: Auto-sync main ───────────────────────────────────
+# fetch silenzioso (no errore se network down) + pull --ff-only se safe.
+# Non tocca worktree o branch diversi da main: solo se il dev è sul main locale
+# pulito, lo aggiorniamo. Mostriamo al dev quanti commit nuovi ci sono.
+SYNC_MSG=""
+if [ -d "$ROOT/.git" ] || [ -f "$ROOT/.git" ]; then
+  # Fetch in background (timeout 5s per evitare hang offline)
+  ( timeout 5 git -C "$ROOT" fetch origin --prune --quiet 2>/dev/null ) || true
+
+  CURRENT_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  if [ "$CURRENT_BRANCH" = "main" ]; then
+    # Pull solo se working dir clean (no modifiche non committate)
+    if git -C "$ROOT" diff --quiet HEAD 2>/dev/null && git -C "$ROOT" diff --quiet --cached 2>/dev/null; then
+      BEFORE="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")"
+      ( timeout 5 git -C "$ROOT" pull origin main --ff-only --quiet 2>/dev/null ) || true
+      AFTER="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")"
+      if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$BEFORE" != "$AFTER" ]; then
+        AHEAD="$(git -C "$ROOT" rev-list --count "$BEFORE..$AFTER" 2>/dev/null || echo "?")"
+        LAST_MSG="$(git -C "$ROOT" log -1 --pretty='%s' 2>/dev/null | cut -c1-60)"
+        SYNC_MSG="📥 main aggiornato: ${AHEAD} nuovi commit (ultimo: \"${LAST_MSG}\")"
+      fi
+    else
+      SYNC_MSG="⚠️ main locale ha modifiche non committate — skip auto-pull, gestisci a mano"
+    fi
+  else
+    # Dev su branch diverso (probabilmente worktree). Calcola behind rispetto a origin/main.
+    BEHIND="$(git -C "$ROOT" rev-list --count HEAD..origin/main 2>/dev/null || echo "0")"
+    if [ "$BEHIND" -gt 5 ] 2>/dev/null; then
+      SYNC_MSG="⚠️ Sei su \"$CURRENT_BRANCH\" (worktree?) e main è avanti di $BEHIND commit. Considera: cd al main repo + git pull. Se hai PR aperta, valuta git merge origin/main qui per evitare conflitti grossi."
+    fi
+  fi
+fi
+
 # 1. Identifica il dev da git config user.name
 GIT_NAME="$(git -C "$ROOT" config user.name 2>/dev/null || echo "")"
 [ -z "$GIT_NAME" ] && exit 0
@@ -161,6 +194,7 @@ ISSUE_LINES="$(echo "$FORMATTED" | grep -v '^__ISSUE_COUNT__=')"
 # 6. Componi messaggio di benvenuto + istruzioni di workflow
 echo "[GIGI session-start] — context per Claude"
 echo ""
+[ -n "$SYNC_MSG" ] && { echo "$SYNC_MSG"; echo ""; }
 echo "Dev identificato: $FULL_NAME ($ROLE) · GitHub: @$HANDLE"
 if [ "$HAS_LOCAL_MD" = "false" ]; then
   echo ""
