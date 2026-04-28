@@ -428,23 +428,19 @@ struct OnboardingView: View {
                 // all without the GIGI app ever foregrounding.
                 VStack(alignment: .leading, spacing: 10) {
                     sectionHeader("Step 1 — Build the Talk to GIGI Shortcut", systemImage: "1.circle.fill")
-                    triggerRow(number: "a", title: "Open the Shortcuts app")
-                    triggerRow(number: "b", title: "Tap + (top right) to create a new shortcut")
-                    triggerRow(number: "c", title: "Add Repeat — set the count to a high number (50 is fine)")
-                    triggerRow(number: "d", title: "Inside the Repeat block: add Dictate Text")
-                    triggerRow(number: "e", title: "Inside the Repeat block: add If — Dictated Text contains stop — and inside that If, add Exit Shortcut")
-                    triggerRow(number: "f", title: "Inside the Repeat block, after the If: add Process speech with GIGI — set its Text to the Dictated Text variable")
-                    triggerRow(number: "g", title: "After Process speech with GIGI, branch on its Result: CALL: strips the prefix and passes the remaining value into the native Shortcuts Call action. If GIGI resolved the contact, that value is already the phone number.")
-                    triggerRow(number: "g2", title: "Then branch OPEN: strips the prefix and runs Open URL for apps like Spotify. SMS: can go to Send Message.")
-                    triggerRow(number: "h", title: "Otherwise, add Speak Text — set its Text to the Result from Process speech with GIGI")
-                    triggerRow(number: "i", title: "Outside the loop nothing else is needed. Name it Talk to GIGI and save.")
+                    triggerRow(number: "a", title: "Install the Universal Talk to GIGI Shortcut, then open it in Shortcuts if you want to inspect it.")
+                    triggerRow(number: "b", title: "It loops: Dictate Text → Process speech with GIGI → route markers → repeat until you say stop.")
+                    triggerRow(number: "c", title: "CALL: passes the stripped phone number into the native Shortcuts Call action.")
+                    triggerRow(number: "d", title: "SMS: sends the stripped message body to the stripped recipient with Send Message.")
+                    triggerRow(number: "e", title: "OPEN: strips the prefix and runs Open URL for apps, websites, maps, and WhatsApp links.")
+                    triggerRow(number: "f", title: "Anything else is spoken with Speak Text.")
 
                     Text("Result: a banner-style dictation overlay slides down at the top of the screen. Say \"call Mom\" and GIGI resolves the contact in the background, returns CALL:+number, then Shortcuts runs the native Call action over whatever app you were using. The GIGI app never opens.")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.55))
 
-                    Button { openShortcutsApp() } label: {
-                        Label("Open Shortcuts app", systemImage: "square.stack.3d.up.fill")
+                    Button { openUniversalShortcutInstall() } label: {
+                        Label("Install Universal Shortcut", systemImage: "square.and.arrow.down.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -453,6 +449,16 @@ struct OnboardingView: View {
                             .cornerRadius(10)
                     }
                     .padding(.top, 4)
+
+                    Button { openShortcutsApp() } label: {
+                        Label("Open Shortcuts app", systemImage: "square.stack.3d.up.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(10)
+                    }
                 }
                 .padding(14)
                 .background(Color.white.opacity(0.05))
@@ -482,7 +488,7 @@ struct OnboardingView: View {
 
                 // ── Verify path ──
                 VStack(spacing: 8) {
-                    Button { runShortcutByName("Talk to GIGI") } label: {
+                    Button { runShortcutByName(GigiHardwareShortcut.shortcutName) } label: {
                         Label("Test the Shortcut", systemImage: "play.circle.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.white)
@@ -526,6 +532,16 @@ struct OnboardingView: View {
         #if canImport(UIKit)
         if let url = URL(string: "shortcuts://"), UIApplication.shared.canOpenURL(url) {
             UIApplication.shared.open(url)
+        }
+        #endif
+    }
+
+    private func openUniversalShortcutInstall() {
+        #if canImport(UIKit)
+        if let url = GigiHardwareShortcut.iCloudDownloadURL {
+            UIApplication.shared.open(url)
+        } else {
+            openShortcutsApp()
         }
         #endif
     }
