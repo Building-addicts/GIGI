@@ -61,6 +61,10 @@ struct GIGIApp: App {
                     // Realtime engine connects lazily on first use to save battery at startup
                     // Pre-load semantic memory for top-priority namespaces (non-blocking)
                     await GigiVectorStore.shared.preload(namespaces: [.contacts, .preferences, .places])
+                    #if DEBUG
+                    let mvpRoundTripOK = await GigiUserProfile.shared._debugMVPRoundTrip()
+                    GigiDebugLogger.log("AC5 MVPPreferences round-trip → \(mvpRoundTripOK ? "OK" : "FAIL")")
+                    #endif
                     GigiDebugLogger.log("MainTabView .task finished")
                 }
                 .onAppear {
