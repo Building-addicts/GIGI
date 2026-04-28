@@ -108,7 +108,7 @@ private enum LocalAnswer {
         }
 
         if let message = parseMessageRequest(raw: raw, lower: lower) {
-            return "SMS:\(message.contact)|\(message.body)"
+            return await messageMarker(for: message)
         }
 
         if let target = parseOpenAppRequest(lower) {
@@ -173,15 +173,32 @@ private enum LocalAnswer {
 
     // MARK: - Message marker
 
+    private enum MessagePlatform {
+        case sms
+        case whatsapp
+    }
+
     /// Recognizes simple message requests for the Shortcut's Send Message branch.
-    /// Format returned to Shortcuts: `SMS:<contact>|<body>`.
-    private static func parseMessageRequest(raw: String, lower: String) -> (contact: String, body: String)? {
-        let triggers = [
-            "send a message to ", "send a text to ", "text ", "message ",
-            "send an sms to ", "sms ", "whatsapp ", "send a whatsapp to ",
-            "manda un messaggio a ", "scrivi a ", "messaggia "
+    /// Format returned to Shortcuts: `SMS:<phone>|<body>` for iMessage/SMS, or
+    /// `OPEN:whatsapp://send?...` for WhatsApp.
+    private static func parseMessageRequest(raw: String, lower: String) -> (contact: String, body: String, platform: MessagePlatform)? {
+        let triggers: [(prefix: String, platform: MessagePlatform)] = [
+            ("send a message to ", .sms),
+            ("send a text to ", .sms),
+            ("text ", .sms),
+            ("message ", .sms),
+            ("send an sms to ", .sms),
+            ("sms ", .sms),
+            ("whatsapp ", .whatsapp),
+            ("send a whatsapp to ", .whatsapp),
+            ("manda un messaggio a ", .sms),
+            ("scrivi a ", .sms),
+            ("messaggia ", .sms),
+            ("manda whatsapp a ", .whatsapp),
+            ("manda un whatsapp a ", .whatsapp)
         ]
-        guard let trigger = triggers.first(where: { lower.hasPrefix($0) }) else { return nil }
+        guard let match = triggers.first(where: { lower.hasPrefix($0.prefix) }) else { return nil }
+        let trigger = match.prefix
         let restRaw = String(raw.dropFirst(trigger.count)).trimmingCharacters(in: .whitespacesAndNewlines)
         let restLower = String(lower.dropFirst(trigger.count)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !restRaw.isEmpty else { return nil }
@@ -193,10 +210,32 @@ private enum LocalAnswer {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let bodyStart = restLower.distance(from: restLower.startIndex, to: range.upperBound)
             let bodyRaw = String(restRaw.dropFirst(bodyStart)).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !contactRaw.isEmpty { return (cleanContactName(contactRaw), bodyRaw) }
+            if !contactRaw.isEmpty { return (cleanContactName(contactRaw), bodyRaw, match.platform) }
         }
 
-        return (cleanContactName(restRaw), "")
+        return (cleanContactName(restRaw), "", match.platform)
+    }
+
+    private static func messageMarker(for message: (contact: String, body: String, platform: MessagePlatform)) async -> String {
+        let recipient: String
+        if await ensureContactsAccessForBackgroundAction(),
+           let resolved = await GigiContactsEngine.shared.resolve(message.contact),
+           let phone = shortcutDialablePhoneNumber(from: resolved.phone) {
+            recipient = phone
+        } else {
+            recipient = message.contact
+        }
+
+        switch message.platform {
+        case .sms:
+            return "SMS:\(recipient)|\(message.body)"
+        case .whatsapp:
+            guard let phone = whatsappPhoneNumber(from: recipient) else {
+                return "SMS:\(recipient)|\(message.body)"
+            }
+            let encoded = urlQueryValue(message.body)
+            return "OPEN:whatsapp://send?phone=\(phone)&text=\(encoded)"
+        }
     }
 
     // MARK: - Open external app
@@ -316,6 +355,17 @@ private enum LocalAnswer {
         let cleaned = phone.filter { "0123456789+".contains($0) }
         guard cleaned.filter(\.isNumber).count >= 3 else { return nil }
         return cleaned
+    }
+
+    private static func whatsappPhoneNumber(from phone: String) -> String? {
+        let digits = phone.filter(\.isNumber)
+        return digits.count >= 6 ? digits : nil
+    }
+
+    private static func urlQueryValue(_ value: String) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+&=#?")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
     private static func cleanContactName(_ name: String) -> String {
