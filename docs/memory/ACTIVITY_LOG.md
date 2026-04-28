@@ -19,3 +19,6 @@
 - `2026-04-28 04:35` · auto · Finalizzato workflow 3-layer dev: implementato auto-sync main e cleanup branch/worktree automatico. Aggiornato `docs/SETUP_LEO_FEDE.md`. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28T02:38:21Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #101: "[SMOKE TEST] activity-log server-side append"
 - `2026-04-28T04:38:48+0200` · local · session ended on `main` (last commit: feat(activity-log): server-side via GitHub Actions + local fallback no-AI) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T04:44:57+0200` · local · session ended on `main` (last commit: feat(agents): GIGI overlay in AGENTS.md per supporto Codex CLI) _(modified: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T04:46:38+0200` · local · session ended on `main` (last commit: feat(agents): GIGI overlay in AGENTS.md per supporto Codex CLI) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T04:52:48+0200` · local · session ended on `main` (last commit: feat(agents): GIGI overlay in AGENTS.md per supporto Codex CLI) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
