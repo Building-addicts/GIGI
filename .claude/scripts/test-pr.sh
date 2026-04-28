@@ -111,7 +111,8 @@ fi
 echo ""
 echo "[5/6] 📋 Genero checklist..."
 CHECKLIST="$CHECKLIST_DIR/pr-$PR_NUM.md"
-AC_LINES=$(echo "$BODY" | grep -E '^\s*-\s*\[\s*[ x]?\s*\]' | head -10)
+# Estrai AC dal body MA resetta tutti i [x] a [ ] — gli [x] dell'autore non sono validi per il PM
+AC_LINES=$(echo "$BODY" | grep -E '^\s*-\s*\[\s*[ x]?\s*\]' | head -10 | sed -E 's/\[\s*[xX]\s*\]/[ ]/g')
 
 cat > "$CHECKLIST" <<MD
 # PR #$PR_NUM Review Checklist

@@ -31,5 +31,8 @@
 - `2026-04-28T05:47:45+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28T05:51:41+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28T05:55:36+0200` · local · session ended on `main` (last commit: fix(routine-pr): regola dura — Claude non spunta MAI L4/L5/Decisione al posto ) _(modified: docs/SETUP_LEO_FEDE.md)_
-- `2026-04-28T04:20:38Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #102: "[BUG] Wake word "hey gigi" non risponde su iPhone PM (Armando)" _(parent: (no parent))_
-- `2026-04-28T04:21:20Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #81: "[BUG] Main build broken — undefined symbols + voiceEvent signature drift"
+- `2026-04-28T06:00:44+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:05:11+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:08:40+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:15:38+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T06:19:04+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
