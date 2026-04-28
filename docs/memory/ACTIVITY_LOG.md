@@ -67,3 +67,4 @@
 - `2026-04-28T20:08:12Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #95: "[BUG] Main build broken — missing ensureVoiceTurn/clearPendingDone in GigiSmartOrchestrator after df5a645"
 - `2026-04-28T20:11:32Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #84 _(branch: `feat/issue-50-mvp-preferences-schema` · totale +135/-0)_
 - `2026-04-28T20:11:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #86 _(branch: `feat/issue-51-mvp-preferences-seed` · totale +184/-0)_
+- `2026-04-28T20:11:53Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #91 _(branch: `feat/issue-56-day-plan-reasoner` · totale +158/-0)_
