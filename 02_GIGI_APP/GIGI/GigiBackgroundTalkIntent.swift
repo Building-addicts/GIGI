@@ -1,4 +1,5 @@
 import AppIntents
+import Contacts
 import Foundation
 import UserNotifications
 #if canImport(UIKit)
@@ -52,7 +53,7 @@ import UIKit
 // background AppIntent context.
 
 private enum LocalAnswer {
-    static func tryAnswer(for raw: String) -> String? {
+    static func tryAnswer(for raw: String) async -> String? {
         let lower = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lower.isEmpty else { return nil }
 
@@ -93,14 +94,17 @@ private enum LocalAnswer {
 
         // Native actions that iOS refuses to launch reliably from a background
         // AppIntent are returned as command markers. The user's Shortcut owns
-        // the native action branches:
-        //   CALL:<contact>       → Get Contact + Call
-        //   SMS:<contact>|<body> → Send Message
-        //   OPEN:<url-scheme>    → Open URL
-        // This keeps the GIGI app closed while letting Shortcuts run privileged
-        // system actions in the foreground Shortcut context.
+        // the privileged foreground action. For calls, the demo-safe path is:
+        //
+        //   "call mom" → resolve Mom in Contacts here → OPEN:tel:+15551234
+        //             → Shortcut Open URL → iOS native "Call?" confirmation
+        //
+        // That keeps GIGI closed even if the user started from Instagram, while
+        // still using Apple's compliant call-confirmation surface. `CALL:` is
+        // intentionally left as a legacy/unresolved fallback for manually-built
+        // Shortcuts that prefer Get Contact + Call.
         if let name = parseCallRequest(lower) {
-            return "CALL:\(name)"
+            return await callMarker(for: name)
         }
 
         if let message = parseMessageRequest(raw: raw, lower: lower) {
@@ -235,14 +239,83 @@ private enum LocalAnswer {
 
     // MARK: - Place a call
 
-    /// Recognizes "call X" / "chiama X" patterns and returns the name.
+    /// Recognizes natural "call X" / "chiama X" patterns and returns the name.
+    /// Includes common dictation mistakes seen in live tests: "col mom" /
+    /// "col mam" for "call mom".
     private static func parseCallRequest(_ lower: String) -> String? {
-        let triggers = ["call ", "phone ", "chiama ", "chiamo "]
-        guard let trigger = triggers.first(where: { lower.hasPrefix($0) }) else { return nil }
-        let name = String(lower.dropFirst(trigger.count))
+        let starts = [
+            "call ", "phone ", "dial ", "ring ",
+            "col ", "calla ",
+            "chiama ", "chiamo ", "chiami ", "telefona a "
+        ]
+        let embedded = [
+            "can you call ", "could you call ", "please call ",
+            "puoi chiamare ", "puoi chiamarmi ", "mi chiami ",
+            "per favore chiama "
+        ]
+
+        let name: String
+        if let trigger = starts.first(where: { lower.hasPrefix($0) }) {
+            name = String(lower.dropFirst(trigger.count))
+        } else if let trigger = embedded.first(where: { lower.contains($0) }),
+                  let range = lower.range(of: trigger) {
+            name = String(lower[range.upperBound...])
+        } else {
+            return nil
+        }
+
+        let cleaned = name
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        return name.isEmpty ? nil : cleanContactName(name)
+            .removingCallPolitenessSuffixes()
+        return cleaned.isEmpty ? nil : cleanContactName(cleaned)
+    }
+
+    private static func callMarker(for contactName: String) async -> String {
+        guard await ensureContactsAccessForBackgroundAction() else {
+            return "I need Contacts permission to call \(contactName). Open GIGI once, allow Contacts, then try again from the Action Button."
+        }
+
+        guard let resolved = await GigiContactsEngine.shared.resolve(contactName) else {
+            // Legacy fallback: if the user-built Shortcut has a Get Contact +
+            // Call branch it can still try iOS' own contact picker/resolver.
+            return "CALL:\(contactName)"
+        }
+
+        guard let telURL = telephoneURLString(from: resolved.phone) else {
+            return "I found \(resolved.name), but the phone number doesn't look dialable."
+        }
+
+        // Canonical demo marker. The Shortcut's OPEN branch strips `OPEN:` and
+        // runs Open URL. For `tel:` URLs, iOS presents the native call
+        // confirmation over the current app; GIGI never foregrounds.
+        return "OPEN:\(telURL)"
+    }
+
+    private static func ensureContactsAccessForBackgroundAction() async -> Bool {
+        switch CNContactStore.authorizationStatus(for: .contacts) {
+        case .authorized, .limited:
+            return true
+        case .denied, .restricted:
+            return false
+        case .notDetermined:
+            return await withCheckedContinuation { continuation in
+                CNContactStore().requestAccess(for: .contacts) { granted, _ in
+                    continuation.resume(returning: granted)
+                }
+            }
+        @unknown default:
+            return false
+        }
+    }
+
+    private static func telephoneURLString(from phone: String) -> String? {
+        // Keep only the characters accepted by the tel URL scheme for the demo.
+        // `#` would become a URL fragment if not escaped, so we deliberately
+        // drop service-code characters and keep real phone numbers: + + digits.
+        let cleaned = phone.filter { "0123456789+".contains($0) }
+        guard cleaned.filter(\.isNumber).count >= 3 else { return nil }
+        return "tel:\(cleaned)"
     }
 
     private static func cleanContactName(_ name: String) -> String {
@@ -298,6 +371,23 @@ private enum LocalAnswer {
     }
 }
 
+private extension String {
+    func removingCallPolitenessSuffixes() -> String {
+        var result = self.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffixes = [
+            " for me", " please", " now",
+            " per favore", " grazie", " adesso"
+        ]
+        for suffix in suffixes {
+            if result.hasSuffix(suffix) {
+                result = String(result.dropLast(suffix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return result
+    }
+}
+
 @available(iOS 16.0, *)
 struct GigiBackgroundTalkIntent: AppIntent {
     static var title: LocalizedStringResource = "Process speech with GIGI"
@@ -330,7 +420,7 @@ struct GigiBackgroundTalkIntent: AppIntent {
         // unreachable (Mac off, tunnel down, not paired). Only requests
         // that need cross-platform actions (order, book, browse) or
         // language-model reasoning fall through to the harness path.
-        if let local = LocalAnswer.tryAnswer(for: trimmed) {
+        if let local = await LocalAnswer.tryAnswer(for: trimmed) {
             return .result(value: local)
         }
 
