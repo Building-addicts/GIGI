@@ -34,6 +34,12 @@ struct GigiBackgroundTalkIntent: AppIntent {
     )
     // Stay in the background: iOS only spins the app process up briefly.
     static var openAppWhenRun: Bool = false
+    // Hidden from Spotlight, Siri suggestions, and the Action Button picker —
+    // this intent only makes sense inside a Shortcut that pipes Dictate Text
+    // → Process speech with GIGI → Speak Text. Binding it directly to Action
+    // Button would leave the user staring at a keyboard prompt for the
+    // required text parameter. Shortcuts editor still finds it via search.
+    static var isDiscoverable: Bool = false
 
     @Parameter(title: "What you said", description: "The transcribed phrase to send to GIGI.")
     var text: String

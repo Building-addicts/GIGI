@@ -26,9 +26,16 @@ struct GigiQuickTalkIntent: AppIntent {
 @available(iOS 16.0, *)
 struct GigiAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        // Foreground intent — opens GIGI and starts the in-app voice turn.
-        // Used when the user wants the full app UI (transcript, follow-up,
-        // Live Activity).
+        // Only the foreground intent is registered as an App Shortcut so it
+        // appears in Spotlight, Siri suggestions, and the Action Button
+        // picker — those surfaces want a one-tap user-runnable action.
+        // GigiBackgroundTalkIntent is intentionally NOT registered here:
+        // it requires a `text` parameter that only makes sense when piped
+        // from Dictate Text inside a user Shortcut. iOS still surfaces it
+        // in the Shortcuts editor (action search) so the walkthrough can
+        // wire it up; it just won't appear as a stand-alone bindable
+        // shortcut, which would otherwise leave the user staring at a
+        // keyboard prompt for the required text.
         AppShortcut(
             intent: GigiQuickTalkIntent(),
             phrases: [
@@ -39,19 +46,6 @@ struct GigiAppShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Talk to GIGI",
             systemImageName: "mic.fill"
-        )
-        // Background intent — receives a transcribed phrase from a Shortcut
-        // (Dictate Text → Process speech with GIGI → Speak Text) and never
-        // brings the app to the foreground. The Shortcut owns the mic, GIGI
-        // owns the reasoning, the Shortcut speaks the answer.
-        AppShortcut(
-            intent: GigiBackgroundTalkIntent(),
-            phrases: [
-                "Process with \(.applicationName)",
-                "Send to \(.applicationName)"
-            ],
-            shortTitle: "Process speech with GIGI",
-            systemImageName: "waveform"
         )
     }
 }
