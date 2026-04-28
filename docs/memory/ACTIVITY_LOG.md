@@ -74,3 +74,4 @@
 - `2026-04-28T20:18:33Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #117 "fix(ios): repair main build break introduced by PR #96 squash" di @ArmandoBattaglino _(branch: `fix/main-build-broken-post-96` · +3/-32 · #96)_
 - `2026-04-28T20:18:40Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #84 _(branch: `feat/issue-50-mvp-preferences-schema` · totale +135/-0)_
 - `2026-04-28T20:18:45Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-28T20:18:48Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #86 _(branch: `feat/issue-51-mvp-preferences-seed` · totale +184/-0)_
