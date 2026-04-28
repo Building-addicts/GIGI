@@ -17,3 +17,4 @@
 - `2026-04-28 02:54` · auto · Corretto `sync_project.py`: rimosso field `merged` inesistente da gh pr list, mappato da `state` con error handling. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28 04:08` · auto · Creato `docs/SETUP_LEO_FEDE.md` con kickoff Leo+Fede. PR #22 aperto. _(branch: `main` · files: docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28 04:35` · auto · Finalizzato workflow 3-layer dev: implementato auto-sync main e cleanup branch/worktree automatico. Aggiornato `docs/SETUP_LEO_FEDE.md`. _(branch: `main` · files: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T02:38:21Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #101: "[SMOKE TEST] activity-log server-side append"
