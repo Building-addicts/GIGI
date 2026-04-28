@@ -90,12 +90,25 @@ Mostra l'output completo. Verdetto possibile:
 - **BUILD SUCCEEDED** → procedi al 4.3
 - **BUILD FAILED** → automaticamente proponi al PM di chiamare `reject-pr.sh <N> "build failed: <errore>"`
 
-### 4.3 — Test E2E manuale (5-15 min, dipende dalla PR)
+### 4.3 — Test E2E manuale (DA FARE DAL PM, NON CLAUDE)
 
-Dì al PM:
-> *Apri Sideloadly + installa `GIGI-pr<N>.ipa` sul tuo iPhone. Apri il file `review-checklists/pr-<N>.md` e marca i checkbox L4+L5 mentre testi. Avvisami quando hai finito.*
+⛔ **REGOLA DURA**: Claude non deve MAI marcare L4 o L5 della checklist. Sono responsabilità esclusiva del PM. Anche per build fix, anche se l'autore della PR ha già testato — il PM deve comunque verificare di persona.
 
-ASPETTA il PM. NON proseguire finché non risponde con `fatto`, `ok`, `tutti verdi`, `un AC fail`, ecc.
+Dì al PM, testualmente:
+
+> *"BUILD SUCCEEDED. IPA pronta in `[path completo]`. Ora tocca a te:*
+> *1. **Sideload** l'IPA sul tuo iPhone fisico (drag in Sideloadly)*
+> *2. **Apri** il file `review-checklists/pr-<N>.md` nel tuo editor*
+> *3. **Spunta a mano** i 3 checkbox L4 (smoke test iPhone)*
+> *4. **Spunta a mano** i checkbox L5 (Acceptance Criteria del body PR)*
+> *5. **Spunta a mano** la 'Decisione finale' tra: TUTTI ✓ / Almeno uno ✗ / Posticipo*
+> *6. **Avvisami** quando hai finito.*
+>
+> *Resto in attesa — non posso procedere senza la tua verifica fisica."*
+
+Poi **ASPETTA**. Non procedere finché il PM non risponde con `fatto`, `vai col merge`, `un AC fail`, ecc.
+
+**Non marcare TU i checkbox.** Anche se il PM dice "fidati è build fix only", la regola resta: lui spunta, tu verifichi.
 
 ### 4.4 — Decisione finale
 
@@ -147,15 +160,39 @@ Saluta:
 
 ---
 
-## REGOLE VINCOLANTI per Claude
+## REGOLE VINCOLANTI per Claude (NON-NEGOZIABILI)
 
 1. **NON saltare** lo STEP 1 (gating PM). Mai eseguire la routine se l'utente non è Armando.
-2. **NON forzare** `merge-pr.sh` se il PM non ha confermato test E2E manuale OK.
-3. **NON eseguire** `merge-pr.sh` o `reject-pr.sh` senza che `test-pr.sh` sia stato eseguito prima (la checklist non esisterebbe).
-4. **NON parallelizzare** le PR — sempre 1 alla volta in sequenza, anche se sembra più veloce.
-5. **NON usare** Agent / subagent per chiamare gli script — esegui direttamente via Bash tool nel main context.
-6. **NON modificare** file source code nel main repo durante la routine — sei in modalità review, non sviluppo.
-7. **Se test-pr.sh fallisce** per setup error (no SSH, no IPA folder, ecc.) → guida il PM ad aggiornare `.claude/local-build.sh` PRIMA di riprovare.
+
+2. ⛔ **NON marcare MAI i checkbox L4 e L5** della checklist al posto del PM. **Nemmeno per build fix**. **Nemmeno se sembra ovvio**. **Nemmeno se l'autore della PR ha già testato**. L4 (smoke test iPhone fisico) e L5 (Acceptance Criteria) sono SEMPRE responsabilità esclusiva del PM. Se Claude marca L4/L5 al posto del PM, sta **mentendo** sulla verifica e annulla l'intero scopo della routine.
+
+3. ⛔ **NON marcare MAI la "Decisione finale"** al posto del PM. La decisione (merge / reject / posticipo) deve essere spuntata MANUALMENTE dal PM dopo aver completato L4+L5 fisicamente.
+
+4. **NON forzare** `merge-pr.sh`. Se il safeguard rifiuta perché checkbox aperti, **non modificare lo script per bypassarlo** — è il safeguard che ti protegge da errori. Aspetta che il PM completi la checklist a mano.
+
+5. **NON eseguire** `merge-pr.sh` o `reject-pr.sh` senza che `test-pr.sh` sia stato eseguito prima (la checklist non esisterebbe).
+
+6. **NON parallelizzare** le PR — sempre 1 alla volta in sequenza, anche se sembra più veloce.
+
+7. **NON usare** Agent / subagent per chiamare gli script — esegui direttamente via Bash tool nel main context.
+
+8. **NON modificare** file source code nel main repo durante la routine — sei in modalità review, non sviluppo.
+
+9. **Se test-pr.sh fallisce** per setup error (no SSH, no IPA folder, ecc.) → guida il PM ad aggiornare `.claude/local-build.sh` PRIMA di riprovare.
+
+10. **Per ogni PR, dopo `test-pr.sh` BUILD SUCCEEDED**, comunica al PM testualmente:
+
+    > *"BUILD SUCCEEDED + IPA pronta in `[path]`. Ora tocca a TE:*
+    > *1. Sideload l'IPA sul tuo iPhone fisico*
+    > *2. Aprire il file `review-checklists/pr-N.md`*
+    > *3. Spuntare a mano i checkbox L4 (smoke) e L5 (AC)*
+    > *4. Spuntare la 'Decisione finale' (TUTTI ✓ / Almeno uno ✗ / Posticipo)*
+    > *5. Avvisarmi quando hai finito.*
+    > *Non procederò al merge finché non vedo la checklist completata e mi confermi 'vai col merge'."*
+
+    Poi **ASPETTA**. Non procedere finché il PM non risponde.
+
+11. **Quando il PM dice "vai col merge"**: PRIMA di chiamare `merge-pr.sh`, leggi il file checklist con il tool Read e verifica visivamente che L4+L5 siano TUTTI `[x]` e che la Decisione finale "TUTTI L1-L5 ✓" sia spuntata. Se trovi `[ ]` aperti su L4/L5/Decisione → **NON procedere**, chiedi al PM di completare a mano.
 
 ## Errori comuni e fix rapidi
 

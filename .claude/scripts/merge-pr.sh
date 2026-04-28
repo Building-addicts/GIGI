@@ -37,18 +37,38 @@ if [ ! -f "$CHECKLIST" ]; then
   exit 2
 fi
 
-# ─── Safeguard 2: tutti i checkbox L2/L4/L5 devono essere ✓ ───
-# Eccezioni: L1+L3 sono auto-marcati da test-pr.sh, L4 sezione manuale dev
-UNCHECKED=$(grep -cE '^\s*-\s*\[\s*\]' "$CHECKLIST" || echo 0)
-TOTAL_CHECKBOXES=$(grep -cE '^\s*-\s*\[[ x]\]' "$CHECKLIST" || echo 1)
+# ─── Safeguard 2: TUTTI L1-L5 devono essere ✓ ───
+# Esclude la sezione "## Decisione finale" perché contiene 3 opzioni mutually
+# exclusive (merge / reject / posticipo) — solo una è spuntata, le altre 2 [ ]
+# sono normali. Validation si ferma all'header "## Decisione finale".
+PRE_DECISION=$(awk '/^## Decisione finale/{exit} {print}' "$CHECKLIST")
+UNCHECKED=$(echo "$PRE_DECISION" | grep -cE '^\s*-\s*\[\s*\]' || true)
+[ -z "$UNCHECKED" ] && UNCHECKED=0
 
 if [ "$UNCHECKED" -gt 0 ]; then
-  echo "❌ Checklist incompleta — $UNCHECKED/$TOTAL_CHECKBOXES checkbox NON spuntati"
+  echo "❌ Checklist incompleta — $UNCHECKED checkbox L1-L5 NON spuntati"
   echo ""
-  echo "Checkbox aperti in $CHECKLIST:"
-  grep -nE '^\s*-\s*\[\s*\]' "$CHECKLIST" | head -10
+  echo "Checkbox aperti (sezioni L1-L5):"
+  echo "$PRE_DECISION" | grep -nE '^\s*-\s*\[\s*\]' | head -10
   echo ""
-  echo "Marcali manualmente prima di mergeare. Tutti devono essere [x]."
+  echo "⚠️  Solo IL PM può spuntare i checkbox L4 (smoke iPhone) e L5 (AC)."
+  echo "   Claude/AI NON DEVE spuntare al posto del PM, anche per build fix."
+  echo ""
+  echo "Apri $CHECKLIST nel tuo editor, completa a mano, poi rilancia merge-pr.sh."
+  exit 1
+fi
+
+# ─── Safeguard 3: l'opzione "TUTTI L1-L5 ✓" deve essere spuntata in Decisione ───
+DECISION_MERGE=$(awk '/^## Decisione finale/,0' "$CHECKLIST" | grep -E '^\s*-\s*\[x\].*TUTTI L1-L5' || true)
+if [ -z "$DECISION_MERGE" ]; then
+  echo "❌ La 'Decisione finale' non ha spuntato 'TUTTI L1-L5 ✓'"
+  echo ""
+  echo "Apri il file checklist e spunta esplicitamente:"
+  echo "  - [x] **TUTTI L1-L5 ✓** → eseguo: bash .claude/scripts/merge-pr.sh $PR_NUM"
+  echo ""
+  echo "File: $CHECKLIST"
+  echo ""
+  echo "⚠️  Solo il PM può spuntare la decisione finale."
   exit 1
 fi
 

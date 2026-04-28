@@ -136,21 +136,27 @@ cat > "$CHECKLIST" <<MD
 - [x] BUILD SUCCEEDED via lb_build_ios
 - [x] IPA packaged via lb_package_ipa
 
-## L4 — Smoke test su iPhone fisico
+## L4 — Smoke test su iPhone fisico (DA FARE DAL PM, NON CLAUDE)
 - [ ] App lancia senza crash
 - [ ] Feature toccata dalla PR funziona alla prima interazione
 - [ ] Nessuna regressione visibile su flussi esistenti
 
-## L5 — Acceptance Criteria del body PR
+> ⚠️ Questi 3 checkbox vanno spuntati **a mano dal PM** dopo aver installato l'IPA su iPhone. Claude NON deve mai marcarli al posto del PM, neppure per build-fix.
+
+## L5 — Acceptance Criteria del body PR (DA VERIFICARE DAL PM)
 $( [ -n "$AC_LINES" ] && echo "$AC_LINES" || echo "- [ ] Nessun AC esplicito nel body — verifica visivamente la feature" )
+
+> ⚠️ Anche questi vanno verificati **fisicamente dal PM** sul device.
 
 ---
 
-## Decisione finale
+## Decisione finale (DA SPUNTARE DAL PM)
 
 - [ ] **TUTTI L1-L5 ✓** → eseguo: \`bash .claude/scripts/merge-pr.sh $PR_NUM\`
 - [ ] **Almeno uno ✗** → eseguo: \`bash .claude/scripts/reject-pr.sh $PR_NUM "<motivo>"\`
 - [ ] **Posticipo** → riprovo domani
+
+> ⚠️ Solo il PM può spuntare la decisione finale, dopo aver verificato fisicamente L4+L5. Claude NON deve mai spuntare al posto del PM.
 MD
 
 echo "    ✓ Checklist: $CHECKLIST"
