@@ -1,6 +1,7 @@
 import AppIntents
 import Foundation
 import UserNotifications
+import Contacts
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -91,6 +92,45 @@ private enum LocalAnswer {
             return "I'll remind you in a minute: \(payload)"
         }
 
+        // Open a third-party app by scheme. The Info.plist's
+        // LSApplicationQueriesSchemes list whitelists the URL schemes we can
+        // probe with canOpenURL — anything outside that list is a silent no.
+        // The dispatch happens on the main actor because UIApplication is
+        // main-actor isolated. We don't await — fire and return a confirming
+        // dialog. iOS may show a "GIGI tried to open Spotify" prompt the
+        // first time; subsequent invocations go through silently.
+        if let target = parseOpenAppRequest(lower) {
+            let opened = openExternalScheme(target.scheme)
+            if opened {
+                return "Opening \(target.label)."
+            } else {
+                return "I can't reach \(target.label) from here. Make sure it's installed."
+            }
+        }
+
+        // Place a phone call by looking up the contact and firing the tel:
+        // URL. The contact lookup is allowed in the background AppIntent
+        // context as long as NSContactsUsageDescription is present and the
+        // user has granted Contacts access. UIApplication.open(tel:) from a
+        // background AppIntent is best-effort — iOS may surface a system
+        // confirmation prompt; on supported devices the call dialer slides
+        // up. If the contact has no phone number we fall back to a dialog.
+        if let name = parseCallRequest(lower) {
+            switch resolveContactPhone(named: name) {
+            case .success(let (display, number)):
+                let didOpen = openTelephone(number)
+                if didOpen {
+                    return "Calling \(display)."
+                } else {
+                    return "I have \(display)'s number but iOS won't let me dial it from the background. Open the GIGI app and tap call."
+                }
+            case .notFound:
+                return "I couldn't find \(name) in your contacts."
+            case .denied:
+                return "Contacts access is off. Enable it in Settings → GIGI → Contacts."
+            }
+        }
+
         if containsAny(lower, phrases: ["what time", "what's the time", "che ore sono", "che ora è", "ora è"]) {
             let formatter = DateFormatter()
             formatter.timeStyle = .short
@@ -145,6 +185,162 @@ private enum LocalAnswer {
 
     private static func containsAny(_ text: String, phrases: [String]) -> Bool {
         phrases.contains { text.contains($0) }
+    }
+
+    // MARK: - Open external app
+
+    /// Maps "open Spotify", "apri WhatsApp", etc. to a known URL scheme.
+    /// The list mirrors LSApplicationQueriesSchemes in Info.plist — adding
+    /// schemes here without listing them there makes canOpenURL return
+    /// false silently.
+    private static func parseOpenAppRequest(_ lower: String) -> (scheme: String, label: String)? {
+        let triggers = ["open ", "launch ", "start ", "apri ", "lancia ", "avvia "]
+        guard let trigger = triggers.first(where: { lower.hasPrefix($0) }) else { return nil }
+        let target = String(lower.dropFirst(trigger.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if target.isEmpty { return nil }
+
+        let schemes: [(label: String, keywords: [String], scheme: String)] = [
+            ("Spotify",      ["spotify"],                     "spotify://"),
+            ("WhatsApp",     ["whatsapp", "whats app"],       "whatsapp://"),
+            ("Instagram",    ["instagram", "ig"],             "instagram://"),
+            ("Telegram",     ["telegram", "tg"],              "tg://"),
+            ("YouTube",      ["youtube", "yt"],               "youtube://"),
+            ("TikTok",       ["tiktok", "tik tok"],           "tiktok://"),
+            ("Maps",         ["maps", "apple maps", "mappe"], "maps://"),
+            ("Google Maps",  ["google maps"],                 "comgooglemaps://"),
+            ("Waze",         ["waze"],                        "waze://"),
+            ("Uber",         ["uber"],                        "uber://"),
+            ("Lyft",         ["lyft"],                        "lyft://"),
+            ("Uber Eats",    ["uber eats", "ubereats"],       "ubereats://"),
+            ("DoorDash",     ["doordash", "door dash"],       "doordash://")
+        ]
+
+        if let match = schemes.first(where: { entry in
+            entry.keywords.contains(where: { target.contains($0) })
+        }) {
+            return (match.scheme, match.label)
+        }
+        return nil
+    }
+
+    /// Fires `UIApplication.open(url)` synchronously by hopping to the main
+    /// actor. AppIntent perform() is already async so we can await.
+    @discardableResult
+    private static func openExternalScheme(_ scheme: String) -> Bool {
+        #if canImport(UIKit)
+        guard let url = URL(string: scheme) else { return false }
+        var didOpen = false
+        let semaphore = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url, options: [:]) { ok in
+                    didOpen = ok
+                    semaphore.signal()
+                }
+            } else {
+                semaphore.signal()
+            }
+        }
+        _ = semaphore.wait(timeout: .now() + 2)
+        return didOpen
+        #else
+        return false
+        #endif
+    }
+
+    // MARK: - Place a call
+
+    /// Recognizes "call X" / "chiama X" patterns and returns the name.
+    private static func parseCallRequest(_ lower: String) -> String? {
+        let triggers = ["call ", "phone ", "chiama ", "chiamo "]
+        guard let trigger = triggers.first(where: { lower.hasPrefix($0) }) else { return nil }
+        let name = String(lower.dropFirst(trigger.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return name.isEmpty ? nil : name
+    }
+
+    private enum ContactLookup {
+        case success(display: String, number: String)
+        case notFound
+        case denied
+    }
+
+    /// Looks up a contact by name and returns the first phone number we
+    /// find. CNContactStore enumerate runs in the background AppIntent
+    /// without UI; the user must have granted Contacts permission.
+    private static func resolveContactPhone(named query: String) -> ContactLookup {
+        let store = CNContactStore()
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        if status == .denied || status == .restricted { return .denied }
+
+        let keys: [CNKeyDescriptor] = [
+            CNContactGivenNameKey as CNKeyDescriptor,
+            CNContactFamilyNameKey as CNKeyDescriptor,
+            CNContactNicknameKey as CNKeyDescriptor,
+            CNContactOrganizationNameKey as CNKeyDescriptor,
+            CNContactPhoneNumbersKey as CNKeyDescriptor
+        ]
+
+        // Build a predicate from the first token of the query — Apple's
+        // predicate matches a single name component, not a free-form query.
+        let firstToken = query.split(separator: " ").first.map(String.init) ?? query
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var picked: (String, String)? = nil
+        var deniedFlag = false
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            store.requestAccess(for: .contacts) { granted, _ in
+                guard granted else {
+                    deniedFlag = true
+                    semaphore.signal()
+                    return
+                }
+                let predicate = CNContact.predicateForContacts(matchingName: firstToken)
+                if let matches = try? store.unifiedContacts(matching: predicate, keysToFetch: keys),
+                   let contact = matches.first(where: { !$0.phoneNumbers.isEmpty }) {
+                    let display = [contact.givenName, contact.familyName, contact.nickname]
+                        .first(where: { !$0.isEmpty }) ?? contact.organizationName
+                    let number = contact.phoneNumbers.first?.value.stringValue ?? ""
+                    if !number.isEmpty {
+                        picked = (display.isEmpty ? firstToken : display, number)
+                    }
+                }
+                semaphore.signal()
+            }
+        }
+        _ = semaphore.wait(timeout: .now() + 4)
+
+        if deniedFlag { return .denied }
+        if let p = picked { return .success(display: p.0, number: p.1) }
+        return .notFound
+    }
+
+    @discardableResult
+    private static func openTelephone(_ number: String) -> Bool {
+        #if canImport(UIKit)
+        let cleaned = number.filter { "0123456789+*#".contains($0) }
+        guard !cleaned.isEmpty, let url = URL(string: "tel:\(cleaned)") else { return false }
+        var didOpen = false
+        let semaphore = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url, options: [:]) { ok in
+                    didOpen = ok
+                    semaphore.signal()
+                }
+            } else {
+                semaphore.signal()
+            }
+        }
+        _ = semaphore.wait(timeout: .now() + 2)
+        return didOpen
+        #else
+        return false
+        #endif
     }
 
     /// Pulls a minute count out of common timer phrasings.
