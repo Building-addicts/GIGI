@@ -30,3 +30,4 @@
 - `2026-04-28T05:46:55+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28T05:47:45+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28T05:51:41+0200` · local · session ended on `main` (last commit: fix(routine-pr): sposto skill in .claude/commands/ per slash command) _(modified: docs/memory/ACTIVITY_LOG.md,docs/SETUP_LEO_FEDE.md)_
+- `2026-04-28T05:55:36+0200` · local · session ended on `main` (last commit: fix(routine-pr): regola dura — Claude non spunta MAI L4/L5/Decisione al posto ) _(modified: docs/SETUP_LEO_FEDE.md)_

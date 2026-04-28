@@ -68,14 +68,66 @@ Aspetta la decisione del PM.
 
 Per ogni PR confermata dal PM, segui questa sequenza esatta:
 
-### 4.1 — Inspect quick (10 sec)
+### 4.1 — Sintesi strutturata della PR (1-2 min)
+
+Leggi metadata + body completo + diff:
 
 ```bash
-gh pr view <N> --repo Building-addicts/GIGI --json title,body,author,additions,deletions,changedFiles
-gh pr diff <N> --repo Building-addicts/GIGI | head -50
+gh pr view <N> --repo Building-addicts/GIGI --json title,body,author,additions,deletions,changedFiles,headRefName
+gh pr diff <N> --repo Building-addicts/GIGI | head -80
 ```
 
-Mostra al PM una sintesi di **1 paragrafo**: cosa fa la PR + verdetto a colpo d'occhio.
+Poi presenta al PM una **sintesi strutturata** in italiano con QUESTE sezioni esatte:
+
+```markdown
+## 📋 PR #<N> — <title>
+
+**Autore**: @<handle> · **Branch**: `<branch>` · **Diff**: +X/-Y su Z file
+
+### 🎯 Cosa risolve (problema)
+<1-2 frasi estratte dal body PR section "What" o "🎯 Cosa stiamo facendo".
+Se il body non ha questa info, deduci dal title + diff.>
+
+### 🔧 Cosa è stato implementato
+<3-5 bullet concreti dal body PR section "Cosa implementerà" o derivati dai
+file/diff. Riporta cambi funzionali, NO codice.>
+- ...
+
+### ✨ Risultato atteso
+<1 frase: cosa cambia per l'utente / per la pipeline. Da body PR.>
+
+### 📐 Acceptance Criteria da verificare (L5)
+<Estratti dal body PR. Cerca pattern:
+  - Sezione "## Acceptance Criteria" o "## AC"
+  - Sezione "## Test plan" con checkbox `- [ ]` o `- [x]`
+  - Sezione "Test E2E utente"
+  - Liste numerate di "AC #1", "AC1:", ecc.
+Se trovi N AC, listali numerati 1-N. Se NON ne trovi, dichiaralo:
+"Nessun AC esplicito nel body — concorderemo i test al volo durante L4">
+
+1. AC#1 — <descrizione testabile>
+2. AC#2 — <descrizione testabile>
+3. AC#3 — ...
+
+### 🧪 Test plan dichiarato dall'autore
+<Estratto dal body PR. Cosa l'autore dice di aver verificato (build, AC,
+test su device). Tipicamente sotto "## Test plan" o "Verified".
+Se il body non ne ha: "Autore non ha dichiarato test plan esplicito.">
+
+- ...
+
+### 🔍 Verdetto a colpo d'occhio (Claude code review)
+<Da combinazione diff + body. Una di:
+  - "🟢 SAFE: diff chirurgico (<N file>), scope coerente con title, niente surprise"
+  - "🟡 ATTENZIONE: diff > 200 righe / >5 file / tocca aree critiche [X, Y]"
+  - "🔴 RISCHIO: scope diverso da title, file fuori dichiarato, possibili regressioni">
+```
+
+Poi chiedi al PM:
+> *"Confermi di voler procedere con BUILD VERIFY su questa PR? (sì/no)"*
+
+Se sì → vai al 4.2.
+Se no → torna al menu PR.
 
 ### 4.2 — Test pre-merge (1-3 min)
 
@@ -90,25 +142,82 @@ Mostra l'output completo. Verdetto possibile:
 - **BUILD SUCCEEDED** → procedi al 4.3
 - **BUILD FAILED** → automaticamente proponi al PM di chiamare `reject-pr.sh <N> "build failed: <errore>"`
 
-### 4.3 — Test E2E manuale (DA FARE DAL PM, NON CLAUDE)
+### 4.3 — Walk-through guidato test per test (DA GUIDARE PASSO-PASSO)
 
-⛔ **REGOLA DURA**: Claude non deve MAI marcare L4 o L5 della checklist. Sono responsabilità esclusiva del PM. Anche per build fix, anche se l'autore della PR ha già testato — il PM deve comunque verificare di persona.
+Questa è la fase critica. Claude **GUIDA il PM attraverso ogni AC e test**, uno alla volta. Per ogni step:
+1. Mostra al PM cosa testare (estratto dal body PR / sintesi 4.1)
+2. Aspetta il feedback esplicito del PM (VERO/FALSO)
+3. Solo dopo il feedback, marca il checkbox L4/L5 corrispondente
 
-Dì al PM, testualmente:
+Schema operativo:
 
-> *"BUILD SUCCEEDED. IPA pronta in `[path completo]`. Ora tocca a te:*
-> *1. **Sideload** l'IPA sul tuo iPhone fisico (drag in Sideloadly)*
-> *2. **Apri** il file `review-checklists/pr-<N>.md` nel tuo editor*
-> *3. **Spunta a mano** i 3 checkbox L4 (smoke test iPhone)*
-> *4. **Spunta a mano** i checkbox L5 (Acceptance Criteria del body PR)*
-> *5. **Spunta a mano** la 'Decisione finale' tra: TUTTI ✓ / Almeno uno ✗ / Posticipo*
-> *6. **Avvisami** quando hai finito.*
->
-> *Resto in attesa — non posso procedere senza la tua verifica fisica."*
+```
+Apertura:
+> *"BUILD SUCCEEDED. IPA pronta in `<path>`. Ora ti guido attraverso il
+>  test E2E. Per ogni AC ti dico cosa testare, tu provi sul tuo iPhone
+>  e mi rispondi VERO o FALSO. Pronto?"*
 
-Poi **ASPETTA**. Non procedere finché il PM non risponde con `fatto`, `vai col merge`, `un AC fail`, ecc.
+Aspetta "sì" / "pronto" / "vai".
 
-**Non marcare TU i checkbox.** Anche se il PM dice "fidati è build fix only", la regola resta: lui spunta, tu verifichi.
+Smoke test L4 (3 step):
+
+  Step L4.1 — App lancia senza crash
+  > *"L4.1 → Apri Sideloadly e installa GIGI-pr<N>.ipa sul tuo iPhone.
+  >  Lancia l'app. Si apre senza crash entro 5 secondi?
+  >  Rispondi VERO o FALSO."*
+  
+  ASPETTA risposta PM. Se VERO → marca [x] L4.1 nella checklist via Edit.
+  Se FALSO → chiedi dettagli ("cosa hai visto?"), poi vai a "AC fail" workflow.
+
+  Step L4.2 — Feature nuova funziona
+  > *"L4.2 → Esercita la feature nuova della PR. <Descrivi 1 azione concreta
+  >  derivata dal title + diff, es: 'dì hey gigi e verifica che la pill scenda'>.
+  >  Funziona? VERO o FALSO."*
+  
+  ASPETTA risposta. VERO → marca [x] L4.2. FALSO → workflow fail.
+
+  Step L4.3 — Nessuna regressione
+  > *"L4.3 → Fai 1-2 azioni base che già funzionavano prima (es: parla con
+  >  GIGI in modo normale). Funzionano ancora come prima? VERO o FALSO."*
+  
+  ASPETTA risposta. Marca [x] L4.3 se VERO.
+
+Acceptance Criteria L5 (per ogni AC estratto in 4.1):
+
+  Per ogni AC#K dalla lista:
+  > *"AC#K → <descrizione AC>. Verifica sul tuo iPhone. VERO o FALSO?"*
+  
+  ASPETTA risposta. Se VERO → marca [x] AC#K. Se FALSO → AC fail workflow.
+
+  Se il body non aveva AC espliciti:
+  > *"Il body PR non aveva AC espliciti. Concordiamo 2-3 verifiche:
+  >  1. La feature dichiarata in title funziona end-to-end?
+  >  2. <altro test inferito da Claude>
+  >  Procediamo? Per ognuno mi dirai VERO/FALSO."*
+
+Chiusura walk-through:
+
+  Quando tutti gli step L4 e L5 sono risposti:
+  > *"Recap della verifica:
+  >   L4.1: <esito>  L4.2: <esito>  L4.3: <esito>
+  >   AC#1: <esito>  AC#2: <esito>  ...
+  >
+  >  TUTTI VERO → vado a marcare la 'Decisione finale = TUTTI L1-L5 ✓' e
+  >  procedo al merge.
+  >  ALMENO UNO FALSO → vado a workflow reject.
+  >
+  >  Confermi? (sì/aspetta)"*
+
+  Solo sull'OK del PM, marca la decisione finale e procedi a 4.4.
+```
+
+⛔ **REGOLA DURA**: Claude marca i checkbox **SOLO** dopo conferma esplicita del PM per quel singolo step (VERO/FALSO). **NON** marcare in base a interpretazione, intuizione, o "sembra ovvio". Il PM dice "VERO" → Claude registra. Senza conferma esplicita → checkbox resta `[ ]`.
+
+**AC fail workflow** (se il PM dice FALSO a un step):
+1. Chiedi dettagli specifici: *"Cosa hai visto? Quali parole esatte? Quale AC è fallito?"*
+2. Mostra al PM: *"Posso aprire una sub-issue bug parent #<parent>, AC#<K>, oppure rejectare la PR direttamente. Cosa preferisci?"*
+3. Se sub-issue: usa `track-bug.sh` (vedi CLAUDE.md sezione bug-tracker)
+4. Poi: `reject-pr.sh <N> "<motivo strutturato>"`
 
 ### 4.4 — Decisione finale
 
@@ -164,9 +273,13 @@ Saluta:
 
 1. **NON saltare** lo STEP 1 (gating PM). Mai eseguire la routine se l'utente non è Armando.
 
-2. ⛔ **NON marcare MAI i checkbox L4 e L5** della checklist al posto del PM. **Nemmeno per build fix**. **Nemmeno se sembra ovvio**. **Nemmeno se l'autore della PR ha già testato**. L4 (smoke test iPhone fisico) e L5 (Acceptance Criteria) sono SEMPRE responsabilità esclusiva del PM. Se Claude marca L4/L5 al posto del PM, sta **mentendo** sulla verifica e annulla l'intero scopo della routine.
+2. ⛔ **NON marcare i checkbox L4/L5 in base a interpretazione**. NO "sembra ovvio", NO "l'autore ha già testato", NO "build fix non serve testare". Claude marca un checkbox L4/L5 **SOLO** dopo che il PM ha risposto esplicitamente "VERO" a quello specifico step nel walk-through guidato (4.3). Senza conferma esplicita del PM per quel singolo step → checkbox resta `[ ]`.
 
-3. ⛔ **NON marcare MAI la "Decisione finale"** al posto del PM. La decisione (merge / reject / posticipo) deve essere spuntata MANUALMENTE dal PM dopo aver completato L4+L5 fisicamente.
+   ✅ OK: *PM dice "AC#1 verificato VERO sul mio iPhone"* → Claude marca `[x]` AC#1
+   ❌ NO: Claude assume "AC#1 ovvio per build fix" → Claude marca `[x]` AC#1
+   ❌ NO: Claude legge body PR "autore ha testato" → Claude marca `[x]` L4 al posto del PM
+
+3. ⛔ **NON marcare la "Decisione finale" in base a interpretazione**. La decisione (merge / reject / posticipo) viene marcata SOLO sull'OK esplicito del PM al recap finale del walk-through ("TUTTI VERO → marco 'TUTTI L1-L5 ✓' → confermo? sì/aspetta"). Senza l'OK esplicito → resta `[ ]`.
 
 4. **NON forzare** `merge-pr.sh`. Se il safeguard rifiuta perché checkbox aperti, **non modificare lo script per bypassarlo** — è il safeguard che ti protegge da errori. Aspetta che il PM completi la checklist a mano.
 
