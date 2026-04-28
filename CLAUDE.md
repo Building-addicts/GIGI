@@ -314,6 +314,33 @@ Soglie di azione:
 
 **⛔ MAI usare `git rebase main`** anche se sembra "più pulito" — i 6 rischi (force push, history rewrite, multi-round conflicts, lost commits, force push warning su PR GitHub, anti-pattern Git) sono peggiori del merge commit visibile. Lo squash merge alla chiusura della PR appiattisce comunque tutto in 1 commit su main, quindi il merge commit del worktree non sopravvive.
 
+### Processo di review PR (PM only — `/routine-pr`)
+
+Per il PM (Armando) esiste una **skill dedicata** `/routine-pr` che guida la sessione di review delle PR aperte. Garanzie built-in:
+
+- **Smart prioritization**: TIER 1-4, chain dependencies, blocks, risk → ordine ottimale
+- **5 livelli di test** (L1 CI auto, L2 code review, L3 build verify auto, L4 smoke iPhone, L5 AC manuali)
+- **Safeguard**: `merge-pr.sh` rifiuta se `review-checklists/pr-N.md` ha checkbox non spuntati
+- **Universale**: comandi build/SSH/scp delegati a `.claude/local-build.sh` (per-PM, gitignored — copia da `local-build.sh.example`)
+
+**Setup una volta**:
+```bash
+cp .claude/local-build.sh.example .claude/local-build.sh
+# adatta le 4 funzioni lb_sync_branch / lb_build_ios / lb_package_ipa / lb_cleanup
+# al tuo ambiente (Windows+SSH, Mac locale, ecc.)
+```
+
+**Uso**:
+```
+/routine-pr           # entrare in routine guidata
+# o uso diretto degli script:
+bash .claude/scripts/test-pr.sh <N>      # fetch + build + IPA + checklist
+bash .claude/scripts/merge-pr.sh <N>     # merge controllato (richiede checklist completata)
+bash .claude/scripts/reject-pr.sh <N> "<motivo>"  # request changes strutturato
+```
+
+Worktree: il PM **non usa worktree** durante review (lavora sempre su main del repo principale, sync read-only via `gh pr` + SSH delegate). I worktree sono solo per i dev che scrivono codice.
+
 ### Step Report obbligatorio prima del merge (regola "matrioska")
 
 Ogni sub-issue chiusa è **un avanzamento esplicito** verso il completamento della parent, e ogni parent verso il lancio MVP. Il merge non è "ok finito" — è un **passo celebrato**.
