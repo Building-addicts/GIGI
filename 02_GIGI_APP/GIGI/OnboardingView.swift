@@ -434,10 +434,11 @@ struct OnboardingView: View {
                     triggerRow(number: "d", title: "Inside the Repeat block: add Dictate Text")
                     triggerRow(number: "e", title: "Inside the Repeat block: add If — Dictated Text contains stop — and inside that If, add Exit Shortcut")
                     triggerRow(number: "f", title: "Inside the Repeat block, after the If: add Process speech with GIGI — set its Text to the Dictated Text variable")
-                    triggerRow(number: "g", title: "Inside the Repeat block, last action: add Speak Text — set its Text to the Dialog variable from Process speech with GIGI")
-                    triggerRow(number: "h", title: "Outside the loop nothing else is needed. Name it Talk to GIGI and save.")
+                    triggerRow(number: "g", title: "After Process speech with GIGI, branch on its Result: CALL: runs Get Contact + Call, SMS: runs Send Message, OPEN: runs Open URL")
+                    triggerRow(number: "h", title: "Otherwise, add Speak Text — set its Text to the Result from Process speech with GIGI")
+                    triggerRow(number: "i", title: "Outside the loop nothing else is needed. Name it Talk to GIGI and save.")
 
-                    Text("Result: a banner-style dictation overlay slides down at the top of the screen, you speak, GIGI answers through Speak Text, the overlay reappears for the next turn, and saying \"stop\" exits. The GIGI app never opens.")
+                    Text("Result: a banner-style dictation overlay slides down at the top of the screen, you speak, GIGI either returns a spoken answer or hands CALL:/SMS:/OPEN: to native Shortcuts actions. The overlay reappears for the next turn, and saying \"stop\" exits. The GIGI app never opens.")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.55))
 
