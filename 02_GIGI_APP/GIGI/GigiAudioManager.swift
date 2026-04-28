@@ -56,9 +56,14 @@ final class GigiAudioManager: ObservableObject {
 
     // MARK: - Public API
 
-    /// Start passively listening for the wake word. Wake word is only allowed
-    /// inside Presence Mode; outside Presence there is no second standalone path.
+    /// Start passively listening for the wake word.
+    ///
+    /// MVP de-scope (#102): wake word is disabled. iOS does not allow continuous
+    /// background mic for non-VoIP apps — wake is replaced by hardware triggers
+    /// (Back Tap, Action Button) and AppIntent / Siri phrase. The engine code is
+    /// kept dormant for v1.1. All call sites become no-ops here.
     func startWakeWordListening() {
+        guard !GigiWakeWordEngine.isDisabledForMVP else { return }
         guard presenceMode else {
             print("GigiAudioManager: startWakeWord skipped — Presence inactive")
             return

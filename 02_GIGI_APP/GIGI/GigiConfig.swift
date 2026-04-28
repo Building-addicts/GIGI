@@ -49,4 +49,5 @@ enum GigiGateway {
 
 extension Notification.Name {
     static let gigiGatewayCallback = Notification.Name("gigi.gateway.callback")
+    static let gigiReopenOnboarding = Notification.Name("gigi.onboarding.reopen")
 }
