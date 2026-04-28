@@ -40,3 +40,4 @@
 - `2026-04-28T08:14:13Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #103: "feat(ios): disable wake word for MVP — hardware triggers replace it (Closes #102)" _(branch: `feat/issue-102-wake-word` · 1 commit · +72/-39 · 5 file · #102)_
 - `2026-04-28T08:16:26Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #104: "feat(ios): refine TalkToGIGI AppShortcut phrases for system-wide discovery (Refs #102)" _(branch: `feat/talk-to-gigi-intent` · 1 commit · +20/-6 · 1 file · #102)_
 - `2026-04-28T08:18:47Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #105: "feat(ios): onboarding step for hardware trigger setup (Refs #102)" _(branch: `feat/back-tap-onboarding` · 1 commit · +88/-13 · 1 file · #102)_
+- `2026-04-28T09:04:38Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +177/-40)_
