@@ -555,10 +555,12 @@ struct OnboardingView: View {
         let identifier = withUnsafePointer(to: &systemInfo.machine) {
             $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(validatingUTF8: $0) ?? "" }
         }
-        // Action Button ships on iPhone 15 Pro / Pro Max (iPhone16,1 / 16,2),
-        // iPhone 16 Pro / Pro Max (iPhone17,1 / 17,2), and all iPhone 16 non-Pro
-        // (iPhone17,3 / 17,4). Conservative check: any iPhone16,* or iPhone17,*.
-        return identifier.hasPrefix("iPhone16,") || identifier.hasPrefix("iPhone17,")
+        // Action Button ships on iPhone 15 Pro family (iPhone16,1 / 16,2),
+        // the entire iPhone 16 line (iPhone17,*), and the iPhone 17 family
+        // (iPhone18,*). Anything older falls through to Back Tap.
+        return identifier.hasPrefix("iPhone16,")
+            || identifier.hasPrefix("iPhone17,")
+            || identifier.hasPrefix("iPhone18,")
         #else
         return false
         #endif
