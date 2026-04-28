@@ -37,3 +37,4 @@
 - `2026-04-28T06:15:38+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28T06:19:04+0200` · local · session ended on `main` (last commit: feat(routine-pr): walk-through guidato AC-per-AC + sintesi PR strutturata) _(modified: .claude/scripts/test-pr.sh,docs/memory/ACTIVITY_LOG.md docs/SETUP_LEO_FEDE.md)_
 - `2026-04-28T08:09:32Z` · bug-closed · 🐛✅ @Leonardo-Corte ha chiuso issue #102: "[BUG] Wake word "hey gigi" non risponde su iPhone PM (Armando)"
+- `2026-04-28T08:14:13Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #103: "feat(ios): disable wake word for MVP — hardware triggers replace it (Closes #102)" _(branch: `feat/issue-102-wake-word` · 1 commit · +72/-39 · 5 file · #102)_
