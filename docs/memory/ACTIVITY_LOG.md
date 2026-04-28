@@ -92,3 +92,4 @@
 - `2026-04-28T22:28:14Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
 - `2026-04-28T23:42:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #119: "investigate: Dynamic Island non visibile su iPhone 15 Pro PM (Sideloadly install)"
 - `2026-04-28T23:52:36Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-28T23:56:22Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #124: "feat(ios): persistent harness offline banner + dashboard status pill (#62)" _(branch: `feat/issue-62-offline-banner` · 3 commit · +141/-3 · 6 file · #62)_
