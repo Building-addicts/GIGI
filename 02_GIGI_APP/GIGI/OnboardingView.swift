@@ -402,52 +402,124 @@ struct OnboardingView: View {
     // button that fires the same code path the trigger will hit.
 
     private var hardwareTriggerStep: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "hand.tap.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.purple)
+        ScrollView {
+            VStack(spacing: 18) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.purple)
 
-            Text("Talk to GIGI from anywhere")
-                .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+                Text("Talk to GIGI without opening the app")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                Text("Two one-time setups — then a tap on the back of your iPhone opens a system dictation overlay, GIGI answers, and you hear the reply. The app stays closed.")
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.horizontal, 28)
+
+                // ── Setup 1: build the iOS Shortcut that wraps everything ──
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader("Step 1 — Build the Shortcut", systemImage: "1.circle.fill")
+                    triggerRow(number: "a", title: "Open the Shortcuts app")
+                    triggerRow(number: "b", title: "Tap + (top right) to create a new shortcut")
+                    triggerRow(number: "c", title: "Add Dictate Text — tap Done when you stop talking")
+                    triggerRow(number: "d", title: "Add Process speech with GIGI — set its Text to the Dictated Text variable")
+                    triggerRow(number: "e", title: "Add Speak Text — set its Text to the Dialog variable from the previous step")
+                    triggerRow(number: "f", title: "Name it Talk to GIGI and save")
+
+                    Button { openShortcutsApp() } label: {
+                        Label("Open Shortcuts app", systemImage: "square.stack.3d.up.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.purple.opacity(0.85))
+                            .cornerRadius(10)
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(14)
+                .padding(.horizontal, 20)
+
+                // ── Setup 2: bind the Shortcut to a hardware trigger ──
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader("Step 2 — Bind it to your iPhone", systemImage: "2.circle.fill")
+                    triggerRow(number: "a", title: "Open the iOS Settings app")
+                    triggerRow(number: "b", title: hardwareTriggerPath)
+                    triggerRow(number: "c", title: "Scroll to Shortcuts and pick Talk to GIGI")
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(14)
+                .padding(.horizontal, 20)
+
+                // ── Verify path ──
+                VStack(spacing: 8) {
+                    Button { runShortcutByName("Talk to GIGI") } label: {
+                        Label("Test the Shortcut", systemImage: "play.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.green.opacity(0.85))
+                            .cornerRadius(10)
+                    }
+                    Text("Runs your saved Shortcut. If you haven't built it yet, Shortcuts will tell you it's missing.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                }
                 .padding(.horizontal, 24)
 
-            Text("Set up a hardware shortcut once, then open GIGI in under a second — even with the screen locked.")
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .foregroundColor(.white.opacity(0.7))
-                .padding(.horizontal, 28)
-
-            VStack(alignment: .leading, spacing: 12) {
-                triggerRow(number: "1", title: "Open the iOS Settings app")
-                triggerRow(number: "2", title: hardwareTriggerPath)
-                triggerRow(number: "3", title: "Pick App Shortcuts → GIGI → Talk to GIGI")
+                Text("No setup? Say \"Hey Siri, hey GIGI\" anywhere — works without configuring anything, but the answer comes through Siri.")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 20)
             }
-            .padding(16)
-            .background(Color.white.opacity(0.05))
-            .cornerRadius(14)
-            .padding(.horizontal, 24)
-
-            Button {
-                QuickTalkController.shared.start()
-            } label: {
-                Label("Test it now", systemImage: "mic.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.purple.opacity(0.85))
-                    .cornerRadius(10)
-            }
-            .padding(.horizontal, 28)
-
-            Text("Tip: \"Hey Siri, hey GIGI\" works on every iPhone with no setup.")
-                .font(.footnote)
-                .foregroundColor(.white.opacity(0.5))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
         }
+    }
+
+    private func sectionHeader(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundColor(.purple)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.white)
+            Spacer()
+        }
+    }
+
+    /// Opens the iOS Shortcuts app via its `shortcuts://` URL scheme. If the
+    /// app is not installed (Shortcuts ships with iOS, so this is rare), the
+    /// call is a no-op rather than a crash.
+    private func openShortcutsApp() {
+        #if canImport(UIKit)
+        if let url = URL(string: "shortcuts://"), UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        }
+        #endif
+    }
+
+    /// Runs a saved user Shortcut by name. The walkthrough uses this so the
+    /// onboarding "Test the Shortcut" button verifies the user really built
+    /// and saved a Shortcut named "Talk to GIGI" — Shortcuts surfaces a clear
+    /// error sheet if no match is found.
+    private func runShortcutByName(_ name: String) {
+        #if canImport(UIKit)
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        if let url = URL(string: "shortcuts://run-shortcut?name=\(encoded)"),
+           UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        }
+        #endif
     }
 
     private func triggerRow(number: String, title: String) -> some View {
