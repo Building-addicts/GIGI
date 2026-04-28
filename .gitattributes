@@ -1,0 +1,6 @@
+# Forza LF endings su shell scripts e file POSIX-only.
+# Senza questo, Win Git autocrlf converte a CRLF nel working copy → bash crash con `$'\r'`.
+
+*.sh        text eol=lf
+*.bash      text eol=lf
+start-*.sh  text eol=lf
