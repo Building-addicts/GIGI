@@ -9,9 +9,13 @@ import Foundation
 
 @available(iOS 16.0, *)
 struct GigiQuickTalkIntent: AppIntent {
-    static var title: LocalizedStringResource = "Talk to GIGI"
+    // Renamed from "Talk to GIGI" to avoid colliding with the user-built
+    // Shortcut of the same name that powers the background path. This
+    // intent always opens the app — its title makes that explicit so users
+    // don't pick it expecting the dictation banner.
+    static var title: LocalizedStringResource = "Open GIGI"
     static var description = IntentDescription(
-        "Open GIGI in conversation mode — the listening card slides in, you talk, GIGI answers, and the loop continues until you say stop or tap close."
+        "Open the GIGI app and start a foreground conversation — the listening card slides in, you talk, GIGI answers, and the loop continues until you say stop or tap close. Use this when you want the full app UI; for a background banner-only flow, build the Talk to GIGI Shortcut from onboarding."
     )
     static var openAppWhenRun: Bool = true   // mic requires foreground
 
@@ -45,11 +49,10 @@ struct GigiAppShortcuts: AppShortcutsProvider {
             intent: GigiQuickTalkIntent(),
             phrases: [
                 "Hey \(.applicationName)",
-                "Talk to \(.applicationName)",
-                "Ask \(.applicationName)",
-                "Open \(.applicationName)"
+                "Open \(.applicationName)",
+                "Ask \(.applicationName)"
             ],
-            shortTitle: "Talk to GIGI",
+            shortTitle: "Open GIGI",
             systemImageName: "mic.fill"
         )
     }

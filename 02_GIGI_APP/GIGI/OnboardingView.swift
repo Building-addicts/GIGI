@@ -421,14 +421,25 @@ struct OnboardingView: View {
                     .padding(.horizontal, 28)
 
                 // ── Setup 1: build the iOS Shortcut that wraps everything ──
+                //
+                // The structure is a Repeat loop so the conversation keeps
+                // going after each answer — Dictate Text reopens, GIGI
+                // hears the next phrase, and the response is spoken back,
+                // all without the GIGI app ever foregrounding.
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader("Step 1 — Build the Shortcut", systemImage: "1.circle.fill")
+                    sectionHeader("Step 1 — Build the Talk to GIGI Shortcut", systemImage: "1.circle.fill")
                     triggerRow(number: "a", title: "Open the Shortcuts app")
                     triggerRow(number: "b", title: "Tap + (top right) to create a new shortcut")
-                    triggerRow(number: "c", title: "Add Dictate Text — tap Done when you stop talking")
-                    triggerRow(number: "d", title: "Add Process speech with GIGI — set its Text to the Dictated Text variable")
-                    triggerRow(number: "e", title: "Add Speak Text — set its Text to the Dialog variable from the previous step")
-                    triggerRow(number: "f", title: "Name it Talk to GIGI and save")
+                    triggerRow(number: "c", title: "Add Repeat — set the count to a high number (50 is fine)")
+                    triggerRow(number: "d", title: "Inside the Repeat block: add Dictate Text")
+                    triggerRow(number: "e", title: "Inside the Repeat block: add If — Dictated Text contains stop — and inside that If, add Exit Shortcut")
+                    triggerRow(number: "f", title: "Inside the Repeat block, after the If: add Process speech with GIGI — set its Text to the Dictated Text variable")
+                    triggerRow(number: "g", title: "Inside the Repeat block, last action: add Speak Text — set its Text to the Dialog variable from Process speech with GIGI")
+                    triggerRow(number: "h", title: "Outside the loop nothing else is needed. Name it Talk to GIGI and save.")
+
+                    Text("Result: a banner-style dictation overlay slides down at the top of the screen, you speak, GIGI answers through Speak Text, the overlay reappears for the next turn, and saying \"stop\" exits. The GIGI app never opens.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.55))
 
                     Button { openShortcutsApp() } label: {
                         Label("Open Shortcuts app", systemImage: "square.stack.3d.up.fill")
@@ -447,11 +458,20 @@ struct OnboardingView: View {
                 .padding(.horizontal, 20)
 
                 // ── Setup 2: bind the Shortcut to a hardware trigger ──
+                //
+                // Critical: the picker shows two entries that look almost
+                // identical — the App Shortcut "Open GIGI" (foregrounds the
+                // app) and the user-built Shortcut "Talk to GIGI" (banner
+                // only). We steer the user to the second one explicitly.
                 VStack(alignment: .leading, spacing: 10) {
                     sectionHeader("Step 2 — Bind it to your iPhone", systemImage: "2.circle.fill")
                     triggerRow(number: "a", title: "Open the iOS Settings app")
                     triggerRow(number: "b", title: hardwareTriggerPath)
-                    triggerRow(number: "c", title: "Scroll to Shortcuts and pick Talk to GIGI")
+                    triggerRow(number: "c", title: "Scroll to the Shortcuts section (not App Shortcuts) and pick Talk to GIGI — the one you just built")
+
+                    Text("If you accidentally pick \"Open GIGI\" under App Shortcuts, the GIGI app will open instead of the dictation banner. Use the Shortcuts section.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.55))
                 }
                 .padding(14)
                 .background(Color.white.opacity(0.05))
