@@ -90,3 +90,4 @@
 - `2026-04-28T21:14:05Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #121: "fix(ios): declare live activity support on widget extension" _(branch: `fix/issue-119-activitykit-entitlement` · 1 commit · +4/-0 · 1 file · #119)_
 - `2026-04-28T21:15:59Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
 - `2026-04-28T22:28:14Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-04-28T23:42:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #119: "investigate: Dynamic Island non visibile su iPhone 15 Pro PM (Sideloadly install)"
