@@ -45,3 +45,4 @@
 - `2026-04-28T09:44:17Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +345/-59)_
 - `2026-04-28T09:52:30Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +472/-73)_
 - `2026-04-28T10:00:28Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +576/-78)_
+- `2026-04-28T10:25:56Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +570/-78)_
