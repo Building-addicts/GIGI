@@ -23,7 +23,7 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | Stack, vincoli, goal | `docs/memory/PROJECT.md` |
 | Focus corrente | `docs/memory/CONTEXT.md` |
 | Decisioni architetturali | `docs/adr/` (numerate, immutabili) |
-| Cronologia attività (auto) | `docs/memory/ACTIVITY_LOG.md` (alimentato dall'hook `Stop`) |
+| Cronologia attività (auto) | `docs/memory/ACTIVITY_LOG.md` (alimentato server-side da `auto-timeline.yml` su PR/issue events + opzionale local hook `Stop` no-AI) |
 | Procedure ripetitive (build, deploy, pair) | `docs/runbooks/` |
 | Ricerche tecniche | `docs/research/`, `docs/plans/` |
 | Come contribuire (umano) | `CONTRIBUTING.md` |
@@ -59,7 +59,9 @@ Run rapido harness: `./start-harness.sh` → dettagli in `03_HARNESS/README.md`.
 1. Decisione architetturale presa → nuovo file `docs/adr/NNNN-titolo.md` (formato in `docs/adr/0000-template.md`)
 2. Cambio focus → aggiorna `CONTEXT.md`
 3. Procedura operativa nuova/cambiata → aggiungi/aggiorna `docs/runbooks/<nome>.md`
-4. Tutto il resto (cronologia attività, file toccati, riassunto turno) → l'hook `Stop` appende automaticamente a `ACTIVITY_LOG.md` via Haiku 4.5
+4. Tutto il resto (cronologia attività, file toccati, riassunto turno) → due fonti automatiche per `ACTIVITY_LOG.md`:
+   - **Server-side (sempre attiva, no AI)**: `auto-timeline.yml` appende su ogni evento PR/issue, indipendente dall'IDE del dev
+   - **Local hook (opzionale, no AI)**: hook `Stop` di Claude Code appende riga grezza con branch + file modificati + ultimo commit message
 
 Niente memorie per-agente: l'utente è solo, agenti paralleli rari, `ACTIVITY_LOG.md` automatico è la sola fonte cronologica.
 
