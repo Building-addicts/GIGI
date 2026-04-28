@@ -59,3 +59,4 @@
 - `2026-04-28T17:13:42Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #109 "feat(harness): preflight script auto-detect config (Win + Mac + Linux)" di @ArmandoBattaglino _(branch: `feat/issue-108-harness-preflight` · +278/-0 · #108)_
 - `2026-04-28T17:31:01Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #110: "docs(qa-evidence): #64 QA setup evidence packet (sign-off pre-gate)" _(branch: `feat/issue-64-qa-setup` · 1 commit · +117/-0 · 6 file · #64)_
 - `2026-04-28T17:31:31Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #110 "docs(qa-evidence): #64 QA setup evidence packet (sign-off pre-gate)" di @ArmandoBattaglino _(branch: `feat/issue-64-qa-setup` · +117/-0 · #64)_
+- `2026-04-28T17:36:41Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #112: "fix(harness): 3 setup-blocker bugs from QA gate setup" _(branch: `fix/issue-111-harness-setup` · 1 commit · +57/-15 · 4 file · #111)_
