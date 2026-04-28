@@ -80,7 +80,6 @@
 			membershipExceptions = (
 				AppIntent.swift,
 				GIGIWidget.swift,
-				GIGIWidgetControl.swift,
 				Info.plist,
 			);
 			target = E0D953023C4404E8BCF0FFEC /* GIGIWidgetExtension */;
