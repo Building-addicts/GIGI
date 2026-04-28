@@ -17,6 +17,7 @@ struct DashboardView: View {
     @State private var showWhatsAppSheet = false
     @State private var showProfileSheet = false
     @State private var showGuidedSetup = false
+    @ObservedObject private var diagnostics = GigiBrainDiagnostics.shared
 
     var body: some View {
         ZStack {
@@ -156,6 +157,8 @@ struct DashboardView: View {
                 .padding(.vertical, 5)
                 .background((groqReady ? Color.green : Color.red).opacity(0.1))
                 .clipShape(Capsule())
+
+                harnessStatusPill
             }
 
             Spacer()
@@ -169,6 +172,29 @@ struct DashboardView: View {
                     .foregroundColor(groqReady ? .green : .red)
             }
         }
+    }
+
+    // MARK: - Harness reachability pill (#16 sub 3/4)
+
+    private var harnessStatusPill: some View {
+        let (label, color): (String, Color) = {
+            switch diagnostics.harnessStatus {
+            case .online:   return ("HARNESS ONLINE",   .green)
+            case .degraded: return ("HARNESS DEGRADED", .orange)
+            case .offline:  return ("HARNESS OFFLINE",  .red)
+            case .unknown:  return ("HARNESS …",        .gray)
+            }
+        }()
+        return HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
     }
 
     // MARK: - First-config banner
