@@ -59,35 +59,6 @@ enum GigiHardwareShortcut {
     }
 }
 
-// MARK: - Action Dispatcher Shortcut (in-app voice + Control Center)
-//
-// Receives a `LocalActionRouter` marker as `Shortcut Input` and runs the
-// matching native action (Call / Send Message / Open URL) without going
-// through Dictate Text. Triggered by `MarkerDispatcher.runDispatcherShortcut`
-// when the foreground orchestrator or the Control Center quick-listen
-// path produces a marker. Distinct from `GigiHardwareShortcut`, which is
-// the Action Button / Back Tap entry point that still owns Dictate Text.
-enum GigiDispatcherShortcut {
-    /// Exact name the user must give the imported Shortcut. The
-    /// `shortcuts://run-shortcut?name=...` URL scheme matches by display
-    /// name, so onboarding has to nudge the user to keep the original
-    /// name when importing.
-    static let shortcutName = "GIGI Action Dispatcher"
-
-    /// iCloud share link for the canonical dispatcher Shortcut. The
-    /// onboarding flow opens this URL so the user can install the Shortcut
-    /// with one tap. Empty until the dispatcher is published; in the
-    /// meantime `MarkerDispatcher` falls back to direct iOS URL schemes
-    /// when the Shortcut isn't present, so the in-app flow keeps working.
-    private static let defaultICloudShortcutURL = ""
-
-    static var iCloudDownloadURL: URL? {
-        let trimmed = defaultICloudShortcutURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return URL(string: trimmed).flatMap { $0.scheme == "https" ? $0 : nil }
-    }
-}
-
 extension Notification.Name {
     static let gigiGatewayCallback = Notification.Name("gigi.gateway.callback")
     static let gigiReopenOnboarding = Notification.Name("gigi.onboarding.reopen")
