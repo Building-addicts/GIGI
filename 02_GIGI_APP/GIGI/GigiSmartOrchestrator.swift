@@ -198,14 +198,18 @@ class GigiSmartOrchestrator: ObservableObject {
         // `MarkerDispatcher` — no agent loop, no harness round-trip, no
         // network. Anything the router doesn't claim falls through to the
         // agent engine below.
-        switch await LocalActionRouter.resolve(for: trimmed) {
+        let routerOutcome = await LocalActionRouter.resolve(for: trimmed)
+        switch routerOutcome {
         case .marker(let marker):
+            GigiDebugLogger.voiceEvent("orchestrator.routerMarker", turnId, ["marker": marker])
             await handleLocalMarker(marker, thinkingID: thinkingID)
             return
         case .answer(let answer):
+            GigiDebugLogger.voiceEvent("orchestrator.routerAnswer", turnId, ["len": "\(answer.count)"])
             handleLocalAnswer(answer, thinkingID: thinkingID)
             return
         case .noMatch:
+            GigiDebugLogger.voiceEvent("orchestrator.routerNoMatch", turnId)
             break
         }
 

@@ -219,20 +219,36 @@ enum LocalActionRouter {
     /// Format returned: `SMS:<phone>|<body>` for iMessage/SMS, or
     /// `OPEN:whatsapp://send?...` for WhatsApp.
     private static func parseMessageRequest(raw: String, lower: String) -> (contact: String, body: String, platform: MessagePlatform)? {
+        // Order matters: longer prefixes must come BEFORE their shorter
+        // ancestors so "send a message to " wins over the bare "message ".
         let triggers: [(prefix: String, platform: MessagePlatform)] = [
-            ("send a message to ", .sms),
-            ("send a text to ", .sms),
-            ("text ", .sms),
-            ("message ", .sms),
-            ("send an sms to ", .sms),
-            ("sms ", .sms),
-            ("whatsapp ", .whatsapp),
-            ("send a whatsapp to ", .whatsapp),
-            ("manda un messaggio a ", .sms),
-            ("scrivi a ", .sms),
-            ("messaggia ", .sms),
-            ("manda whatsapp a ", .whatsapp),
-            ("manda un whatsapp a ", .whatsapp)
+            ("send a whatsapp message to ", .whatsapp),
+            ("send a whatsapp to ",        .whatsapp),
+            ("whatsapp message to ",       .whatsapp),
+            ("manda un whatsapp a ",       .whatsapp),
+            ("manda whatsapp a ",          .whatsapp),
+            ("scrivi su whatsapp a ",      .whatsapp),
+            ("send a message to ",         .sms),
+            ("send a text to ",            .sms),
+            ("send an sms to ",            .sms),
+            // Mixed EN+IT phrasing seen in live tests, e.g. "send a message di fede"
+            ("send a message di ",         .sms),
+            ("send a text di ",            .sms),
+            ("manda un messaggio a ",      .sms),
+            ("scrivi un messaggio a ",     .sms),
+            ("manda messaggio a ",         .sms),
+            ("scrivi a ",                  .sms),
+            ("messaggia ",                 .sms),
+            ("parla a ",                   .sms),
+            ("dì a ",                      .sms),
+            ("di a ",                      .sms),
+            ("text ",                      .sms),
+            ("message ",                   .sms),
+            ("tell ",                      .sms),
+            ("say to ",                    .sms),
+            ("ping ",                      .sms),
+            ("sms ",                       .sms),
+            ("whatsapp ",                  .whatsapp)
         ]
         guard let match = triggers.first(where: { lower.hasPrefix($0.prefix) }) else { return nil }
         let trigger = match.prefix
