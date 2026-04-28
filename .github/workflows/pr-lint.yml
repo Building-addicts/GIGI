@@ -49,13 +49,14 @@ jobs:
             }
 
             // 2. Section "What" non vuota
-            const whatMatch = body.match(/##\s*What\s*\n+([^\n#]+)/i);
+            //    Cattura tutto fino al prossimo heading (## o ###) — ammette riferimenti #N nel testo.
+            const whatMatch = body.match(/##\s*What\s*\n+([\s\S]+?)(?=\n##|$)/i);
             if (!whatMatch || whatMatch[1].trim().length < 10) {
               errors.push('❌ Sezione `## What` mancante o troppo corta (min 10 caratteri).');
             }
 
-            // 3. Section "Why" non vuota
-            const whyMatch = body.match(/##\s*Why\s*\n+([^\n#]+)/i);
+            // 3. Section "Why" non vuota (idem)
+            const whyMatch = body.match(/##\s*Why\s*\n+([\s\S]+?)(?=\n##|$)/i);
             if (!whyMatch || whyMatch[1].trim().length < 10) {
               errors.push('❌ Sezione `## Why` mancante o troppo corta.');
             }

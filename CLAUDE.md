@@ -23,7 +23,7 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | Stack, vincoli, goal | `docs/memory/PROJECT.md` |
 | Focus corrente | `docs/memory/CONTEXT.md` |
 | Decisioni architetturali | `docs/adr/` (numerate, immutabili) |
-| Cronologia attività (auto) | `docs/memory/ACTIVITY_LOG.md` (alimentato dall'hook `Stop`) |
+| Cronologia attività (auto) | `docs/memory/ACTIVITY_LOG.md` (alimentato server-side da `auto-timeline.yml` su PR/issue events + opzionale local hook `Stop` no-AI) |
 | Procedure ripetitive (build, deploy, pair) | `docs/runbooks/` |
 | Ricerche tecniche | `docs/research/`, `docs/plans/` |
 | Come contribuire (umano) | `CONTRIBUTING.md` |
@@ -59,7 +59,9 @@ Run rapido harness: `./start-harness.sh` → dettagli in `03_HARNESS/README.md`.
 1. Decisione architetturale presa → nuovo file `docs/adr/NNNN-titolo.md` (formato in `docs/adr/0000-template.md`)
 2. Cambio focus → aggiorna `CONTEXT.md`
 3. Procedura operativa nuova/cambiata → aggiungi/aggiorna `docs/runbooks/<nome>.md`
-4. Tutto il resto (cronologia attività, file toccati, riassunto turno) → l'hook `Stop` appende automaticamente a `ACTIVITY_LOG.md` via Haiku 4.5
+4. Tutto il resto (cronologia attività, file toccati, riassunto turno) → due fonti automatiche per `ACTIVITY_LOG.md`:
+   - **Server-side (sempre attiva, no AI)**: `auto-timeline.yml` appende su ogni evento PR/issue, indipendente dall'IDE del dev
+   - **Local hook (opzionale, no AI)**: hook `Stop` di Claude Code appende riga grezza con branch + file modificati + ultimo commit message
 
 Niente memorie per-agente: l'utente è solo, agenti paralleli rari, `ACTIVITY_LOG.md` automatico è la sola fonte cronologica.
 
@@ -121,6 +123,12 @@ All'apertura, l'hook ti dà già:
 # Slug per il branch: numero issue + 2-3 parole chiave del titolo, lowercase, dash
 SLUG="issue-<N>-<short-slug>"   # es: issue-9-di-descend
 WORKTREE="$CLAUDE_PROJECT_DIR/../GIGI-work/$SLUG"
+
+# ⭐ LAYER 2 SYNC: pull main fresh PRIMA di creare worktree
+# Garantisce che il worktree parta dall'ultimo main mergiato dal PM
+cd "$CLAUDE_PROJECT_DIR"
+git checkout main
+git pull origin main --ff-only
 
 # Worktree isolato — main resta intatto, no conflitti tra issue parallele
 git worktree add "$WORKTREE" -b "feat/$SLUG" main
@@ -223,10 +231,12 @@ gh pr view <num> --json reviewDecision,statusCheckRollup
 
 gh pr merge <num> --squash --delete-branch
 
-# Cleanup worktree
+# Cleanup completo (locale + worktree + ref remoti)
 cd "$CLAUDE_PROJECT_DIR"
 git worktree remove "$WORKTREE"
-git pull origin main
+git branch -D "feat/$SLUG"             # ← branch locale (squash crea commit diverso, serve -D)
+git fetch origin --prune               # ← rimuove ref morti su origin
+git pull origin main --ff-only         # ← aggiorna main locale
 ```
 
 > "Mergiato e pulito. Vuoi prossima issue (#<altra>)? Rispondi 'sì'."
@@ -281,6 +291,55 @@ Agent({
 
 Solo dopo che il subagent torna successo, comunichi al dev:
 > "🐛 Tracciato come #X (parent: #N, label `bug`, P0). Vuoi fixare ora o lasciare in stand-by?"
+
+### Sync main durante worktree lungo (Layer 3 — anti-conflict)
+
+Se il dev sta lavorando su un worktree da >2 ore, **prima di aprire la PR** controlla quanto main è avanti:
+
+```bash
+# Dentro al worktree del dev
+git fetch origin main
+BEHIND=$(git rev-list --count HEAD..origin/main)
+echo "Worktree dietro main di $BEHIND commit"
+```
+
+Soglie di azione:
+- `BEHIND ≤ 5` → procedi normalmente, conflict trascurabile
+- `BEHIND 6-15` → comunica al dev: *"⚠️ main si è mosso di N commit dal worktree start. Faccio `git merge origin/main` qui per integrare prima della PR? (sì = sicuro, NO force push)"*. Se il dev dice sì, esegui:
+  ```bash
+  git merge origin/main
+  # se conflitti: risolvi con il dev, poi git add . && git commit
+  ```
+- `BEHIND >15` → blocco strong: *"main è significativamente avanti. Pause + chiama @ArmandoBattaglino per decidere se mergiare ora o finire la sub-issue su questo branch e accettare conflitti su PR."*
+
+**⛔ MAI usare `git rebase main`** anche se sembra "più pulito" — i 6 rischi (force push, history rewrite, multi-round conflicts, lost commits, force push warning su PR GitHub, anti-pattern Git) sono peggiori del merge commit visibile. Lo squash merge alla chiusura della PR appiattisce comunque tutto in 1 commit su main, quindi il merge commit del worktree non sopravvive.
+
+### Processo di review PR (PM only — `/routine-pr`)
+
+Per il PM (Armando) esiste una **skill dedicata** `/routine-pr` che guida la sessione di review delle PR aperte. Garanzie built-in:
+
+- **Smart prioritization**: TIER 1-4, chain dependencies, blocks, risk → ordine ottimale
+- **5 livelli di test** (L1 CI auto, L2 code review, L3 build verify auto, L4 smoke iPhone, L5 AC manuali)
+- **Safeguard**: `merge-pr.sh` rifiuta se `review-checklists/pr-N.md` ha checkbox non spuntati
+- **Universale**: comandi build/SSH/scp delegati a `.claude/local-build.sh` (per-PM, gitignored — copia da `local-build.sh.example`)
+
+**Setup una volta**:
+```bash
+cp .claude/local-build.sh.example .claude/local-build.sh
+# adatta le 4 funzioni lb_sync_branch / lb_build_ios / lb_package_ipa / lb_cleanup
+# al tuo ambiente (Windows+SSH, Mac locale, ecc.)
+```
+
+**Uso**:
+```
+/routine-pr           # entrare in routine guidata
+# o uso diretto degli script:
+bash .claude/scripts/test-pr.sh <N>      # fetch + build + IPA + checklist
+bash .claude/scripts/merge-pr.sh <N>     # merge controllato (richiede checklist completata)
+bash .claude/scripts/reject-pr.sh <N> "<motivo>"  # request changes strutturato
+```
+
+Worktree: il PM **non usa worktree** durante review (lavora sempre su main del repo principale, sync read-only via `gh pr` + SSH delegate). I worktree sono solo per i dev che scrivono codice.
 
 ### Step Report obbligatorio prima del merge (regola "matrioska")
 
