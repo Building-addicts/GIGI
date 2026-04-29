@@ -83,6 +83,11 @@ class GigiActionBridge {
     // MARK: - Execute intent
 
     func execute(_ intent: GigiIntent) async -> String {
+        if intent.params["confirmation_source"] == "permission_sheet" {
+            print("GIGI Bridge: approved via permission_sheet -> \(intent.label)")
+            return await executeApproved(intent)
+        }
+
         if GigiConfirmationPolicyEngine.shared.requiresConfirmation(toolName: intent.label) {
             let payload = PermissionPayload.make(toolName: intent.label, args: intent.params)
             switch await GigiConfirmationPolicyEngine.shared.requestConfirmation(payload: payload) {
