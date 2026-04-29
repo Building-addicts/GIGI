@@ -80,7 +80,7 @@ final class GigiClaudeBridge {
         }
 
         let harnessResult = await runViaHarness(task: task, context: context)
-        if case .failure = harnessResult {
+        if harnessResult.error != nil {
             // AC2: harness call failed mid-turn → degrade gracefully to local
             // path instead of bubbling the error up to the user.
             GigiDebugLogger.log("ClaudeBridge path=fallback (harness call failed, retrying via local) task='\(task.prefix(60))'")
