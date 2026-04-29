@@ -114,3 +114,4 @@
 - `2026-04-29T17:02:08Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #141: "feat(ios): TalkingSessionTaskListView overlay laterale interattivo (Sub #14 3/3)" _(branch: `feat/issue-55-task-list-view` · 5 commit · +154/-0 · 3 file · #55)_
 - `2026-04-29T17:34:10Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +433/-6)_
 - `2026-04-29T17:45:29Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +481/-14)_
+- `2026-04-29T17:53:16Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +481/-14)_
