@@ -15,12 +15,18 @@ final class GigiConfirmationPolicyEngine {
         "send_message":        .send,
         "send_whatsapp":       .send,
         "web_whatsapp":        .send,
+        "send_email":          .send,
         // Booking / orders
         "web_book_restaurant": .externalAction,
         "web_order_food":      .externalAction,
         "computer_use":        .externalAction,
         // Calendar modification
         "create_event":        .modify,
+        "create_calendar_event": .modify,
+        "set_reminder":        .modify,
+        "create_reminder":     .modify,
+        "create_follow_up_task": .modify,
+        "swap_schedule_slot":  .modify,
         // Destructive
         "homekit_lock":        .modify,
         "homekit_unlock":      .modify,
@@ -36,6 +42,10 @@ final class GigiConfirmationPolicyEngine {
     func requiresConfirmation(toolName: String) -> Bool {
         guard let policy = policyOverrides[toolName] else { return false }
         return policy != .never
+    }
+
+    func requestConfirmation(payload: PermissionPayload) async -> PermissionConfirmationResult {
+        await GigiSmartOrchestrator.shared.requestPermissionConfirmation(payload: payload)
     }
 
     func setPolicy(_ policy: GigiConfirmationPolicy, forTool tool: String) {

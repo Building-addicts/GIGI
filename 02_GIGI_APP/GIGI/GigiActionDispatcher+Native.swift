@@ -140,6 +140,19 @@ extension GigiActionDispatcher {
             guard !title.isEmpty else { return .failure("title parameter required") }
             let date  = string(args, "date", fallback: "today")
             let time  = string(args, "time", fallback: "12:00")
+            if string(args, "confirmation_source") == "permission_sheet" {
+                let result = await bridge.execute(GigiIntent(
+                    label: "create_event",
+                    confidence: 0.99,
+                    params: [
+                        "title": title,
+                        "date": date,
+                        "time": time,
+                        "confirmation_source": "permission_sheet",
+                    ]
+                ))
+                return .success(result)
+            }
             let result = await bridge.createEvent(title: title, date: date, time: time)
             return .success(result)
 

@@ -95,6 +95,12 @@ struct MainTabView: View {
                 refreshHarnessConfiguredState()
             }
         }
+        .sheet(item: $orchestrator.pendingPermissionPayload) { payload in
+            PermissionConfirmationSheet(payload: payload) { result in
+                orchestrator.resolvePermissionConfirmation(result)
+            }
+            .interactiveDismissDisabled()
+        }
         .onAppear { refreshHarnessConfiguredState() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { refreshHarnessConfiguredState() }

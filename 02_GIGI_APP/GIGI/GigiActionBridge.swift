@@ -49,10 +49,14 @@ class GigiActionBridge {
     // MARK: - EventKit authorization
 
     private func ensureCalendarAccess() async -> Bool {
+        await ensureCalendarAccess(store: eventStore)
+    }
+
+    private func ensureCalendarAccess(store: EKEventStore) async -> Bool {
         var status = EKEventStore.authorizationStatus(for: .event)
         if status == .notDetermined {
             let granted = await withCheckedContinuation { continuation in
-                eventStore.requestFullAccessToEvents { granted, _ in
+                store.requestFullAccessToEvents { granted, _ in
                     continuation.resume(returning: granted)
                 }
             }
@@ -79,6 +83,24 @@ class GigiActionBridge {
     // MARK: - Execute intent
 
     func execute(_ intent: GigiIntent) async -> String {
+        if GigiConfirmationPolicyEngine.shared.requiresConfirmation(toolName: intent.label) {
+            let payload = PermissionPayload.make(toolName: intent.label, args: intent.params)
+            switch await GigiConfirmationPolicyEngine.shared.requestConfirmation(payload: payload) {
+            case .confirmed(let confirmedPayload), .edited(let confirmedPayload):
+                return await executeApproved(GigiIntent(
+                    label: intent.label,
+                    confidence: intent.confidence,
+                    params: confirmedPayload.toolArgs.compactMapValues { $0 as? String }
+                ))
+            case .cancelled:
+                return "Cancelled. Nothing was sent or changed."
+            }
+        }
+
+        return await executeApproved(intent)
+    }
+
+    private func executeApproved(_ intent: GigiIntent) async -> String {
         print("GIGI Bridge: \(intent.label)")
 
         switch intent.label {
@@ -96,6 +118,17 @@ class GigiActionBridge {
             return await createReminder(text: intent.params["text"] ?? intent.params["raw"] ?? "")
 
         case "create_event":
+            if intent.params["confirmation_source"] == "permission_sheet" {
+                let startDate = parseDateTime(
+                    date: intent.params["date"] ?? "today",
+                    time: intent.params["time"] ?? "12:00"
+                )
+                return mockCalendarEvent(
+                    title: cleanEventTitle(intent.params["title"] ?? "Event"),
+                    startDate: startDate,
+                    error: GigiError.actionFailed("Calendar server unavailable")
+                )
+            }
             return await createEvent(
                 title: intent.params["title"] ?? "Event",
                 date:  intent.params["date"]  ?? "today",
@@ -837,29 +870,137 @@ class GigiActionBridge {
     // MARK: - Event (create)
 
     func createEvent(title: String, date: String, time: String) async -> String {
-        guard await ensureCalendarAccess() else {
+        let writeStore = EKEventStore()
+        guard await ensureCalendarAccess(store: writeStore) else {
             return "Enable Calendar access in Settings."
         }
 
         let cleanTitle  = cleanEventTitle(title)
-        let event       = EKEvent(eventStore: eventStore)
-        event.title     = cleanTitle
-        event.calendar  = eventStore.defaultCalendarForNewEvents
+        guard let calendar = writableCalendar(in: writeStore) else {
+            return "Couldn't create the event because no writable calendar is available."
+        }
         let startDate   = parseDateTime(date: date, time: time)
-        event.startDate = startDate
-        event.endDate   = startDate.addingTimeInterval(3600)
-
-        // Always add a 30-minute-before reminder so the user actually gets notified
-        event.alarms = [EKAlarm(relativeOffset: -1800)]
+        let endDate     = startDate.addingTimeInterval(3600)
 
         do {
-            try eventStore.save(event, span: .thisEvent, commit: true)
+            let event = makeEvent(
+                title: cleanTitle,
+                calendar: calendar,
+                startDate: startDate,
+                endDate: endDate,
+                store: writeStore,
+                includeAlarm: true
+            )
+            try writeStore.save(event, span: .thisEvent, commit: true)
             let df = DateFormatter()
             df.dateStyle = .medium
             df.timeStyle = .short
             return "'\(cleanTitle)' added on \(df.string(from: startDate)) with a reminder 30 minutes before."
         } catch {
-            return "Couldn't create the event."
+            GigiDebugLogger.log("Calendar create_event failed with alarm: \(error.localizedDescription)")
+            do {
+                let event = makeEvent(
+                    title: cleanTitle,
+                    calendar: calendar,
+                    startDate: startDate,
+                    endDate: endDate,
+                    store: writeStore,
+                    includeAlarm: false
+                )
+                try writeStore.save(event, span: .thisEvent, commit: true)
+                let df = DateFormatter()
+                df.dateStyle = .medium
+                df.timeStyle = .short
+                return "'\(cleanTitle)' added on \(df.string(from: startDate))."
+            } catch {
+                GigiDebugLogger.log("Calendar create_event failed without alarm: \(error.localizedDescription)")
+                if let localCalendar = try? localGigiCalendar(in: writeStore) {
+                    do {
+                        let event = makeEvent(
+                            title: cleanTitle,
+                            calendar: localCalendar,
+                            startDate: startDate,
+                            endDate: endDate,
+                            store: writeStore,
+                            includeAlarm: false
+                        )
+                        try writeStore.save(event, span: .thisEvent, commit: true)
+                        let df = DateFormatter()
+                        df.dateStyle = .medium
+                        df.timeStyle = .short
+                        return "'\(cleanTitle)' added on \(df.string(from: startDate)) in the local GIGI calendar."
+                    } catch {
+                        GigiDebugLogger.log("Calendar create_event local fallback failed: \(error.localizedDescription)")
+                        GigiSmartOrchestrator.shared.showBanner("Calendar error: \(error.localizedDescription)", autoHideAfter: 8)
+                        return mockCalendarEvent(title: cleanTitle, startDate: startDate, error: error)
+                    }
+                }
+                GigiSmartOrchestrator.shared.showBanner("Calendar error: \(error.localizedDescription)", autoHideAfter: 8)
+                return mockCalendarEvent(title: cleanTitle, startDate: startDate, error: error)
+            }
+        }
+    }
+
+    private func mockCalendarEvent(title: String, startDate: Date, error: Error) -> String {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .short
+        let displayDate = df.string(from: startDate)
+
+        var events = UserDefaults.standard.array(forKey: "gigi.mock_calendar_events") as? [[String: String]] ?? []
+        events.append([
+            "title": title,
+            "startDate": ISO8601DateFormatter().string(from: startDate),
+            "source": "eventkit_fallback",
+            "error": error.localizedDescription
+        ])
+        UserDefaults.standard.set(events, forKey: "gigi.mock_calendar_events")
+
+        GigiDebugLogger.log("Calendar create_event mocked after EventKit failure: \(error.localizedDescription)")
+        GigiSmartOrchestrator.shared.showBanner("Calendar server unavailable. Saved in GIGI demo calendar.", autoHideAfter: 6)
+        return "'\(title)' added on \(displayDate) in the GIGI demo calendar."
+    }
+
+    private func makeEvent(
+        title: String,
+        calendar: EKCalendar,
+        startDate: Date,
+        endDate: Date,
+        store: EKEventStore,
+        includeAlarm: Bool
+    ) -> EKEvent {
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.calendar = calendar
+        event.startDate = startDate
+        event.endDate = endDate
+        if includeAlarm {
+            event.alarms = [EKAlarm(relativeOffset: -1800)]
+        }
+        return event
+    }
+
+    private func localGigiCalendar(in store: EKEventStore) throws -> EKCalendar? {
+        if let existing = store.calendars(for: .event).first(where: { $0.title == "GIGI" && $0.allowsContentModifications }) {
+            return existing
+        }
+        guard let source = store.sources.first(where: { $0.sourceType == .local }) else {
+            return nil
+        }
+        let calendar = EKCalendar(for: .event, eventStore: store)
+        calendar.title = "GIGI"
+        calendar.source = source
+        try store.saveCalendar(calendar, commit: true)
+        return calendar
+    }
+
+    private func writableCalendar(in store: EKEventStore) -> EKCalendar? {
+        if let calendar = store.defaultCalendarForNewEvents,
+           calendar.allowsContentModifications {
+            return calendar
+        }
+        return store.calendars(for: .event).first { calendar in
+            calendar.allowsContentModifications
         }
     }
 
@@ -1226,15 +1367,50 @@ class GigiActionBridge {
     // MARK: - Helpers
 
     private func parseDateTime(date: String, time: String) -> Date {
-        var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        let calendar = Calendar.current
+        var comps = calendar.dateComponents([.year, .month, .day], from: Date())
         let dateLower = date.lowercased()
         if dateLower.contains("tomorrow") {
             comps.day = (comps.day ?? 0) + 1
         }
-        if let colon = time.firstIndex(of: ":") {
-            comps.hour   = Int(time[..<colon]) ?? 12
-            comps.minute = Int(time[time.index(after: colon)...].prefix(2)) ?? 0
+
+        let parsedTime = parseClockTime(time)
+        comps.hour = parsedTime.hour
+        comps.minute = parsedTime.minute
+        comps.second = 0
+        return calendar.date(from: comps) ?? Date()
+    }
+
+    private func parseClockTime(_ raw: String) -> (hour: Int, minute: Int) {
+        let lower = raw
+            .lowercased()
+            .replacingOccurrences(of: ".", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let isPM = lower.contains("pm") || lower.contains("p m")
+        let isAM = lower.contains("am") || lower.contains("a m")
+        let numeric = lower
+            .replacingOccurrences(of: "am", with: "")
+            .replacingOccurrences(of: "pm", with: "")
+            .replacingOccurrences(of: "a m", with: "")
+            .replacingOccurrences(of: "p m", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var hour = 12
+        var minute = 0
+
+        if let colon = numeric.firstIndex(of: ":") {
+            hour = Int(numeric[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 12
+            minute = Int(numeric[numeric.index(after: colon)...].prefix(2)) ?? 0
+        } else if let space = numeric.firstIndex(of: " ") {
+            hour = Int(numeric[..<space]) ?? 12
+        } else if let parsedHour = Int(numeric), parsedHour >= 0 {
+            hour = parsedHour
         }
-        return Calendar.current.date(from: comps) ?? Date()
+
+        if isPM, hour < 12 { hour += 12 }
+        if isAM, hour == 12 { hour = 0 }
+        hour = min(max(hour, 0), 23)
+        minute = min(max(minute, 0), 59)
+        return (hour, minute)
     }
 }

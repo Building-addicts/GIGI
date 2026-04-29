@@ -23,6 +23,7 @@ class GigiSmartOrchestrator: ObservableObject {
     @Published var isThinking      = false
     @Published var bannerMessage   = ""
     @Published var showGatewayInstallPrompt = false
+    @Published var pendingPermissionPayload: PermissionPayload?
 
     // MARK: - Dependencies
 
@@ -41,6 +42,7 @@ class GigiSmartOrchestrator: ObservableObject {
     private var pendingDoneMessage: String?
     private var doneSafetyTask: Task<Void, Never>?
     private var currentVoiceTurnId: String?
+    private var permissionContinuation: CheckedContinuation<PermissionConfirmationResult, Never>?
 
     // MARK: - Quick Talk callbacks (set by QuickTalkController)
     var onQuickTalkStateChange: ((QuickTalkController.Phase) -> Void)?
@@ -166,6 +168,29 @@ class GigiSmartOrchestrator: ObservableObject {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             if self?.bannerMessage == message { self?.bannerMessage = "" }
         }
+    }
+
+    func requestPermissionConfirmation(payload: PermissionPayload) async -> PermissionConfirmationResult {
+        if let permissionContinuation {
+            permissionContinuation.resume(returning: .cancelled)
+            self.permissionContinuation = nil
+        }
+
+        status = "GIGI: Waiting for your approval..."
+        isThinking = false
+        pendingPermissionPayload = payload
+
+        return await withCheckedContinuation { continuation in
+            permissionContinuation = continuation
+        }
+    }
+
+    func resolvePermissionConfirmation(_ result: PermissionConfirmationResult) {
+        pendingPermissionPayload = nil
+        status = "GIGI: Ready"
+        guard let permissionContinuation else { return }
+        self.permissionContinuation = nil
+        permissionContinuation.resume(returning: result)
     }
 
     // MARK: - Main entry point

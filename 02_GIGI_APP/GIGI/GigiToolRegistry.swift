@@ -115,7 +115,7 @@ struct MakeCallTool: GigiTool {
 
 struct SendMessageTool: GigiTool {
     let name = "send_message"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["message", "text", "sms", "imessage", "whatsapp", "telegram", "manda", "scrivi", "messaggio"]
 
     let declaration = FunctionDeclaration(
@@ -188,7 +188,7 @@ struct PlayMusicTool: GigiTool {
 
 struct SetReminderTool: GigiTool {
     let name = "set_reminder"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["reminder", "remind", "promemoria", "ricordami", "remember", "non dimenticare"]
 
     let declaration = FunctionDeclaration(
@@ -212,7 +212,7 @@ struct SetReminderTool: GigiTool {
 
 struct CreateEventTool: GigiTool {
     let name = "create_event"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["calendar", "event", "meeting", "appointment", "schedule", "agenda", "crea", "evento", "riunione", "appuntamento"]
 
     let declaration = FunctionDeclaration(
@@ -232,10 +232,11 @@ struct CreateEventTool: GigiTool {
 
     func execute(args: [String: Any]) async -> ToolResult {
         await bridge("create_event", params: [
-            "title":   str(args, "title"),
-            "date":    str(args, "date"),
-            "time":    str(args, "time"),
-            "contact": str(args, "contact")
+            "title":               str(args, "title"),
+            "date":                str(args, "date"),
+            "time":                str(args, "time"),
+            "contact":             str(args, "contact"),
+            "confirmation_source": str(args, "confirmation_source")
         ])
     }
 }
@@ -690,7 +691,7 @@ struct ReadNewsTool: GigiTool {
 
 struct SendEmailTool: GigiTool {
     let name = "send_email"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["email", "mail", "invia", "scrivi", "manda email"]
 
     let declaration = FunctionDeclaration(
@@ -926,7 +927,7 @@ struct SearchGroupsTool: GigiTool {
 
 struct WebWhatsAppTool: GigiTool {
     let name = "web_whatsapp"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["whatsapp", "wa", "whatsapp web", "messaggio whatsapp"]
 
     let declaration = FunctionDeclaration(
@@ -984,7 +985,7 @@ struct WebBookRestaurantTool: GigiTool {
 
 struct WebOrderFoodTool: GigiTool {
     let name = "web_order_food"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["order", "food", "delivery", "pizza", "deliveroo", "ubereats", "doordash", "glovo", "justeat", "just eat", "just-eat", "just hit", "cibo", "ordina", "ordinami", "consegna"]
 
     let declaration = FunctionDeclaration(

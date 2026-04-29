@@ -405,6 +405,17 @@ final class GigiAgentEngine {
     func executeParallel(_ calls: [FunctionCallBlock]) async -> [ToolResult] {
         guard !calls.isEmpty else { return [] }
 
+        if calls.contains(where: { call in
+            guard let tool = GigiToolRegistry.shared.tool(named: call.name) else { return false }
+            return tool.requiresConfirmation || GigiConfirmationPolicyEngine.shared.requiresConfirmation(toolName: call.name)
+        }) {
+            var sequentialResults: [ToolResult] = []
+            for call in calls {
+                sequentialResults.append(await executeToolCall(call))
+            }
+            return sequentialResults
+        }
+
         // Index-preserving withTaskGroup: tasks complete in arbitrary order,
         // results are placed back at their original indices.
         var results = [ToolResult](
@@ -431,6 +442,18 @@ final class GigiAgentEngine {
         guard let tool = GigiToolRegistry.shared.tool(named: call.name) else {
             return .failure("Unknown tool: \(call.name)")
         }
+
+        let confirmationPolicy = GigiConfirmationPolicyEngine.shared
+        if tool.requiresConfirmation || confirmationPolicy.requiresConfirmation(toolName: call.name) {
+            let payload = PermissionPayload.make(toolName: call.name, args: call.asArgs)
+            switch await confirmationPolicy.requestConfirmation(payload: payload) {
+            case .confirmed(let confirmedPayload), .edited(let confirmedPayload):
+                return await tool.execute(args: confirmedPayload.toolArgs)
+            case .cancelled:
+                return .success("Cancelled. Nothing was sent or changed.")
+            }
+        }
+
         return await tool.execute(args: call.asArgs)
     }
 
