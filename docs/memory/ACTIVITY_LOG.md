@@ -102,3 +102,4 @@
 - `2026-04-29T02:50:42Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #133: "feat(infra): smart session-start dashboard — 3 column layout (Actionable / Waiting / PR Review)" _(branch: `fix/issue-130-smart-dashboard` · 1 commit · +239/-26 · 3 file · #130)_
 - `2026-04-29T02:50:56Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #130: "feat(infra): smart session-start dashboard — Actionable / Waiting / In-progress columns"
 - `2026-04-29T13:46:09Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #134: "feat(ios): GigiTaskExtractor engine + Jaccard dedup (Sub #14 1/3)" _(branch: `feat/issue-53-task-extractor` · 2 commit · +132/-0 · 3 file · #53)_
+- `2026-04-29T14:35:28Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #135: "feat(ios): wire GigiTaskExtractor to PresenceSession via memory observer (Sub #14 2/3)" _(branch: `feat/issue-54-task-extractor-wiring` · 4 commit · +64/-0 · 3 file · #54)_
