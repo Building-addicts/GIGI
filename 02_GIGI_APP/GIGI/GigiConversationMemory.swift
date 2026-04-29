@@ -57,6 +57,14 @@ final class GigiConversationMemory: ObservableObject {
         trimIfNeeded()
     }
 
+    func recentUserTranscript(turns: Int = 6) -> String {
+        messages
+            .filter { $0.role == .user }
+            .suffix(turns)
+            .map { "- \($0.text)" }
+            .joined(separator: "\n")
+    }
+
     func addThinking() -> UUID {
         let msg = GigiMessage(role: .gigi, text: "", isThinking: true)
         messages.append(msg)
