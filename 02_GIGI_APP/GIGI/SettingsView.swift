@@ -27,6 +27,7 @@ struct SettingsView: View {
     @AppStorage(GigiWakeWordEngine.userDefaultsEnabledKey) private var wakeWordEnabled = false
     @ObservedObject private var audioManager = GigiAudioManager.shared
     @ObservedObject private var presence = PresenceSessionController.shared
+    @ObservedObject private var taskExtractor = GigiTaskExtractor.shared
     @State private var ttsRate: Double = 0.52
     @State private var memoryCount = 0
     @State private var showClearMemoryAlert = false
@@ -588,6 +589,21 @@ struct SettingsView: View {
             }
 
             #if DEBUG
+            HStack {
+                Text("Live extractor status")
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("turn \(presence.turnCounter) · \(taskExtractor.tasks.count) tasks")
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                    if let ts = presence.lastExtractionAt {
+                        Text("last extract: \(ts.formatted(date: .omitted, time: .standard))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
             Button("Test Task Extractor") {
                 Task {
                     let transcript = "I need to reply to Fede about the demo, prepare for the 3pm meeting, and book lunch with Marco tomorrow"
