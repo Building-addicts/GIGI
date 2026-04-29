@@ -107,3 +107,4 @@
 - `2026-04-29T15:33:05Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #137 _(branch: `feat/issue-136-auto-blocked-actions` · totale +350/-2)_
 - `2026-04-29T15:33:08Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #136: "feat(infra): GitHub Actions per gestione automatica label 'blocked' + PR blocking marker cleanup"
 - `2026-04-29T15:33:14Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #137 "feat(infra): GitHub Actions auto-blocked label + PR marker cleanup" di @ArmandoBattaglino _(branch: `feat/issue-136-auto-blocked-actions` · +350/-2 · #136)_
+- `2026-04-29T15:36:33Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #138: "[TEST] auto-blocked-label workflow validation — DELETE AFTER"
