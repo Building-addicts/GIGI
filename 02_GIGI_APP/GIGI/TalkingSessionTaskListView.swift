@@ -26,7 +26,7 @@ struct TalkingSessionTaskListView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         .frame(maxWidth: isCollapsed ? 130 : 200, alignment: .leading)
         .offset(totalOffset)
-        .gesture(dragGesture)
+        .highPriorityGesture(dragGesture)
         .animation(.easeInOut(duration: 0.2), value: isCollapsed)
         .animation(.easeInOut(duration: 0.25), value: extractor.tasks.count)
     }
