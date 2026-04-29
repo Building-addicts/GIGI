@@ -111,3 +111,4 @@
 - `2026-04-29T15:56:04Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #140: "docs(claude.md): blocking convention OBBLIGO per Claude del dev" _(branch: `feat/issue-141-claude-blocking-convention` · 1 commit · +60/-0 · 1 file · #139)_
 - `2026-04-29T15:56:18Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #140 "docs(claude.md): blocking convention OBBLIGO per Claude del dev" di @ArmandoBattaglino _(branch: `feat/issue-141-claude-blocking-convention` · +60/-0 · #139)_
 - `2026-04-29T15:56:26Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #139: "docs(claude.md): blocking convention OBBLIGO per Claude del dev"
+- `2026-04-29T17:02:08Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #141: "feat(ios): TalkingSessionTaskListView overlay laterale interattivo (Sub #14 3/3)" _(branch: `feat/issue-55-task-list-view` · 5 commit · +154/-0 · 3 file · #55)_
