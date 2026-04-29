@@ -106,6 +106,66 @@ Sotto questo blocco, i dettagli tecnici (Target files, Changes, Build verify, AC
 
 Il **Test E2E utente** deve rispecchiare letteralmente il "Risultato atteso" come AC#1 — dev e PM verificano la stessa promessa.
 
+### ⚠️ Convention blocking dependency — Claude OBBLIGO (auto-detected by GitHub Actions)
+
+**Quando Claude apre/edita una issue o posta un comment** che parla di una dipendenza da un'altra issue/PR ancora open, DEVE usare uno dei pattern riconosciuti dai workflow `auto-blocked-label.yml` / `auto-unblock.yml` / `auto-clear-pr-blocking-marker.yml`. Se Claude scrive linguaggio generico tipo *"questa è bloccata da quella"* senza un pattern + numero, le GitHub Actions non rilevano la dipendenza e il sistema dashboard (🟡 WAITING column) NON funziona.
+
+#### Pattern OBBLIGATORI da usare quando esiste una dipendenza
+
+```markdown
+Blocked by #N
+Blocked from #N
+Depends on #N
+Waiting on #N
+Waiting for #N
+Aspetto #N            ← italiano accettato
+Aspetto chiusura di #N
+Stand-by finché #N
+```
+
+Esempi corretti:
+- ✅ `"⏸️ Blocked by #127 — multi-instance Live Activities pollution. Riprenderò dopo merge."`
+- ✅ `"Questa issue depends on #89 (NLU fast-path) — aspetto fix prima di partire."`
+- ✅ `"Stand-by finché #127 non è chiuso, poi riprendo qui."`
+
+Esempi VIETATI (NON triggerano automation):
+- ❌ `"Questa è bloccata da quella issue"` (no number)
+- ❌ `"Aspetto che Leo finisca #127"` (verbo + nome dev, troppo informale)
+- ❌ `"Need #127 fix first"` (`need` non è nel pattern set)
+
+#### PR blocking marker
+
+Quando Claude posta un blocking comment su una PR, usa SEMPRE il marker HTML invisibile:
+
+```markdown
+⛔ Blocking comment <!-- BLOCKING:127,89 -->
+
+Questa PR resta in standby finché:
+- #127 — descrizione breve
+- #89 — descrizione breve
+
+cc @autore @ArmandoBattaglino
+```
+
+Il marker `<!-- BLOCKING:127,89 -->` è parsato da `auto-clear-pr-blocking-marker.yml` per postare clearance comment quando TUTTE le issue listate vengono chiuse. **Senza marker non c'è clearance automatica.**
+
+#### Override manuale (raro)
+
+Se la dipendenza è esterna (non una issue del repo) o vaga, Claude può forzare label via:
+```bash
+gh issue edit <N> --repo Building-addicts/GIGI --add-label blocked
+```
+Ma è eccezione, non default. Sempre preferire pattern esplicito.
+
+#### Auto-validazione prima di scrivere
+
+Prima di postare comment/body issue/PR che menzionano una dipendenza, Claude DEVE auto-revisionare:
+1. Sto parlando di una dipendenza? (presenza di parole tipo "blocca", "dipende", "aspetto", "waiting", "stand-by")
+2. Sì → la dipendenza è una issue di questo repo? Sì → menziono un `#N` con uno dei pattern obbligatori sopra?
+3. Se no → riformulo prima di postare.
+
+Vedi `docs/runbooks/session-start-dashboard.md` per details + GitHub Actions logic.
+
 ### Flusso completo per ogni issue (da seguire alla lettera)
 
 #### 1. Onboarding sessione (auto via SessionStart hook)
