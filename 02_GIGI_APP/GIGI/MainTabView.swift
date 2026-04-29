@@ -93,7 +93,8 @@ struct MainTabView: View {
 
             // Sub #14 3/3: Talking Session task list overlay — sibling of TabView
             // so its DragGesture does not conflict with TabView page swipe.
-            if presence.isActive && !showOnboarding {
+            // Visible only on Chat tab (selection == 0).
+            if presence.isActive && !showOnboarding && selection == 0 {
                 HStack {
                     Spacer()
                     TalkingSessionTaskListView()
@@ -107,6 +108,7 @@ struct MainTabView: View {
         .animation(.easeInOut(duration: 0.4), value: showOnboarding)
         .animation(.easeInOut(duration: 0.3), value: harnessConfigured)
         .animation(.easeInOut(duration: 0.3), value: presence.isActive)
+        .animation(.easeInOut(duration: 0.25), value: selection)
         .sheet(isPresented: $showPresence) {
             PresenceView()
                 .presentationDetents([.large])
