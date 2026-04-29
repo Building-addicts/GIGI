@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 struct ExtractedTask: Codable, Identifiable, Equatable {
     var id: UUID = UUID()
