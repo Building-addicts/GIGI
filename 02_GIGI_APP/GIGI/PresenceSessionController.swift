@@ -54,7 +54,8 @@ final class PresenceSessionController: ObservableObject {
     private var standaloneMuted = false
 
     // Sub #14 2/3: live task extraction
-    private var turnCounter: Int = 0
+    @Published private(set) var turnCounter: Int = 0
+    @Published private(set) var lastExtractionAt: Date?
     private var extractionTask: Task<Void, Never>?
     private var userTurnsCancellable: AnyCancellable?
     private var lastObservedUserCount: Int = 0
@@ -80,12 +81,14 @@ final class PresenceSessionController: ObservableObject {
                 guard userCount > self.lastObservedUserCount else { return }
                 self.lastObservedUserCount = userCount
                 self.turnCounter += 1
+                print("[PresenceSession] turnCounter=\(self.turnCounter)")
                 GigiDebugLogger.log("PresenceSession turnCounter=\(self.turnCounter)")
                 if self.turnCounter % 2 == 0 {
                     self.extractionTask?.cancel()
-                    self.extractionTask = Task {
+                    self.extractionTask = Task { @MainActor [weak self] in
                         let transcript = await GigiConversationMemory.shared.recentUserTranscript(turns: 6)
                         await GigiTaskExtractor.shared.extract(from: transcript)
+                        self?.lastExtractionAt = Date()
                     }
                 }
             }
