@@ -93,3 +93,4 @@
 - `2026-04-28T23:42:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #119: "investigate: Dynamic Island non visibile su iPhone 15 Pro PM (Sideloadly install)"
 - `2026-04-28T23:52:36Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
 - `2026-04-28T23:56:22Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #124: "feat(ios): persistent harness offline banner + dashboard status pill (#62)" _(branch: `feat/issue-62-offline-banner` · 3 commit · +141/-3 · 6 file · #62)_
+- `2026-04-29T00:40:11Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #125: "[BUG] #85 — Always Listening regression: wake doesn't fire in background + AC#5 Stop button missing" _(parent: #85)_
