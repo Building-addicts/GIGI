@@ -63,9 +63,22 @@ struct ChatView: View {
                     .padding(.top, 56)
                     .zIndex(99)
             }
+
+            // ── Talking Session task list (Sub #14 3/3) ─────────────────────
+            if presence.isActive {
+                HStack {
+                    Spacer()
+                    TalkingSessionTaskListView()
+                        .padding(.top, 120)
+                        .padding(.trailing, 12)
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .zIndex(50)
+            }
         }
         .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
         .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
+        .animation(.easeInOut(duration: 0.3), value: presence.isActive)
     }
 
     // MARK: - Sub-views
