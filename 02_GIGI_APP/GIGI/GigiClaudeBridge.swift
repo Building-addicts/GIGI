@@ -117,9 +117,14 @@ final class GigiClaudeBridge {
     }
 
     private func runFallback(task: String, context: String?) async -> ToolResult {
+        // Mark the path *before* the call so the UI pill reflects fallback
+        // mode even when the local Groq attempt itself fails (e.g. rate-limit
+        // 429). The pill is a "we tried the local brain" signal, not a
+        // "succeeded" signal — keeps the demo audience honest about state.
+        GigiBrainDiagnostics.shared.recordTurnPath(.fallback)
+
         if let text = await GigiFallbackEngine.shared.runComplexQuery(task: task, context: context) {
             GigiDebugLogger.log("ClaudeBridge path=fallback OK (len=\(text.count))")
-            GigiBrainDiagnostics.shared.recordTurnPath(.fallback)
             return ToolResult.success(text, tokenEstimate: 100)
         }
         // Local path also failed — surface a hard error, since at this point
