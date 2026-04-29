@@ -6,6 +6,10 @@ enum HarnessStatus: String {
     case online, degraded, offline, unknown
 }
 
+enum TurnPath: String {
+    case unknown, harness, fallback
+}
+
 @MainActor
 final class GigiBrainDiagnostics: ObservableObject {
     static let shared = GigiBrainDiagnostics()
@@ -14,9 +18,19 @@ final class GigiBrainDiagnostics: ObservableObject {
     @Published private(set) var lastSuccessAt: Date?
     @Published private(set) var consecutiveFailures: Int = 0
 
+    /// Which path served the most recent turn — surfaced by `GigiClaudeBridge`.
+    /// UI binds to this for the provisional "LOCAL AI" indicator on the
+    /// dashboard. Resets to `.harness` whenever a turn flows through the
+    /// harness; sticks at `.fallback` while the local path is in use.
+    @Published private(set) var lastTurnPath: TurnPath = .unknown
+
     private var monitorTask: Task<Void, Never>?
 
     private init() {}
+
+    func recordTurnPath(_ path: TurnPath) {
+        lastTurnPath = path
+    }
 
     /// Starts a polling loop that pings the harness health endpoint and
     /// publishes the resulting `HarnessStatus`. Foreground 5s, background 30s.

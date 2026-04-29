@@ -253,6 +253,19 @@ final class GigiCloudService {
         )
     }
 
+    /// Same Groq path as `ask(_:)` but with a caller-supplied system prompt.
+    /// Used by `GigiFallbackEngine.runComplexQuery` so the offline-mode
+    /// instructions can override the default agent persona.
+    func askRaw(system: String, user: String) async throws -> String {
+        try await callGroqRaw(
+            system: system,
+            user: user,
+            model: agentModel,
+            maxTokens: 220,
+            temperature: 0.5
+        )
+    }
+
     // MARK: - News summarization
 
     func summarizeNews(text: String, topic: String) async -> String {
