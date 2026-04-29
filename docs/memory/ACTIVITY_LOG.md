@@ -96,3 +96,4 @@
 - `2026-04-29T00:40:11Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #125: "[BUG] #85 — Always Listening regression: wake doesn't fire in background + AC#5 Stop button missing" _(parent: #85)_
 - `2026-04-29T00:52:25Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #126: "[BUG critical] Always Listening: wake non funziona in background — SFSpeechRecognizer limit" _(parent: (no parent))_
 - `2026-04-29T00:53:17Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #127: "[BUG critical] Multiple stale Live Activities accumulate on Lock Screen — ensureIslandActivity lifecycle broken" _(parent: (no parent))_
+- `2026-04-29T00:54:08Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #125: "[BUG] #85 — Always Listening regression: wake doesn't fire in background + AC#5 Stop button missing"
