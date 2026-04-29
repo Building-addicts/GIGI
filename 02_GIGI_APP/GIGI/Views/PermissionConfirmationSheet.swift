@@ -259,6 +259,13 @@ struct PermissionConfirmationSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                #if DEBUG
+                if payload.kind == .calendarEvent {
+                    Text("Issue 77 debug build")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.blue)
+                }
+                #endif
             }
         }
     }
