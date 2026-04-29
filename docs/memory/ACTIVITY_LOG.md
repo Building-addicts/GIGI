@@ -99,3 +99,4 @@
 - `2026-04-29T00:54:08Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #125: "[BUG] #85 — Always Listening regression: wake doesn't fire in background + AC#5 Stop button missing"
 - `2026-04-29T01:39:49Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #128: "feat(ios): Claude bridge auto-fallback to Gemini direct on harness failure (#63)" _(branch: `feat/issue-63-claude-fallback` · 5 commit · +217/-8 · 7 file · #63)_
 - `2026-04-29T02:14:59Z` · issue-closed · ✅ @Leonardo-Corte ha chiuso issue #9: "[iOS] Dynamic Island: pill scende su wake (descendForListening)"
+- `2026-04-29T02:50:42Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #133: "feat(infra): smart session-start dashboard — 3 column layout (Actionable / Waiting / PR Review)" _(branch: `fix/issue-130-smart-dashboard` · 1 commit · +239/-26 · 3 file · #130)_
