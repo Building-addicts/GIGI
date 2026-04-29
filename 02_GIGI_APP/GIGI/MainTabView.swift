@@ -81,9 +81,23 @@ struct MainTabView: View {
                     .transition(.opacity)
                     .zIndex(99)
             }
+
+            // Sub #14 3/3: Talking Session task list overlay — sibling of TabView
+            // so its DragGesture does not conflict with TabView page swipe.
+            if presence.isActive && !showOnboarding {
+                HStack {
+                    Spacer()
+                    TalkingSessionTaskListView()
+                        .padding(.top, 120)
+                        .padding(.trailing, 12)
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .zIndex(48)
+            }
         }
         .animation(.easeInOut(duration: 0.4), value: showOnboarding)
         .animation(.easeInOut(duration: 0.3), value: harnessConfigured)
+        .animation(.easeInOut(duration: 0.3), value: presence.isActive)
         .sheet(isPresented: $showPresence) {
             PresenceView()
                 .presentationDetents([.large])
