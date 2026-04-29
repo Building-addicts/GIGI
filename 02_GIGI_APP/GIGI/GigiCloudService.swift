@@ -256,11 +256,18 @@ final class GigiCloudService {
     /// Same Groq path as `ask(_:)` but with a caller-supplied system prompt.
     /// Used by `GigiFallbackEngine.runComplexQuery` so the offline-mode
     /// instructions can override the default agent persona.
+    ///
+    /// Routes through `fastModel` (llama-3.1-8b-instant) by default rather
+    /// than `agentModel`. Two reasons: (1) free-tier Groq splits quotas
+    /// per model, so when the agent loop has saturated the 70B TPM the
+    /// fallback can still serve answers from the 8B; (2) the fallback is
+    /// already a degraded path, and AC5 of #63 demands a voiced reply
+    /// within 8 seconds — the smaller model is materially faster.
     func askRaw(system: String, user: String) async throws -> String {
         try await callGroqRaw(
             system: system,
             user: user,
-            model: agentModel,
+            model: fastModel,
             maxTokens: 220,
             temperature: 0.5
         )
