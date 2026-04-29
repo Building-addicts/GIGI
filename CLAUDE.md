@@ -111,11 +111,29 @@ Il **Test E2E utente** deve rispecchiare letteralmente il "Risultato atteso" com
 #### 1. Onboarding sessione (auto via SessionStart hook)
 All'apertura, l'hook ti dà già:
 - nome del dev + handle GitHub (da `.claude/dev-mapping.json`)
-- lista delle sue issue aperte assegnate, ordinate per priorità (release-blocker → P0 → P1 → P2 → P3)
+- **dashboard a 3 colonne** delle issue assegnate + PR aperte del repo
 - istruzioni vincolanti (riassunte qui)
 
-**Tu (Claude del dev)** saluti per nome e proponi la **prima** issue in cima. Esempio:
-> "Ciao Leo 👋 Hai 4 issue aperte. La più urgente è #9 — Dynamic Island descent. Vuoi iniziare? (rispondi 'sì')"
+Il dashboard si compone di 3 sezioni (max 3+3+2 = 8 righe totali):
+
+| Colonna | Cosa mostra | Quando proporla al dev |
+|---|---|---|
+| 🟢 **ACTIONABLE NOW** | Issue open senza dipendenze attive — ordinate per priorità (release-blocker → P0→P3) | Sempre. Proponi la prima al dev |
+| 🟡 **WAITING** | Issue con label `blocked` esplicita — bloccate da dipendenze | Skip. Mostra ma NON proporre come "iniziamo" |
+| 🔴 **PR IN REVIEW** | Tutte le PR aperte del repo (visibili a tutti i dev) — `[👤 PR #N]` per le PR del dev attuale | Per visibilità + eventuale review. Non sono "issue da iniziare" |
+
+**Tu (Claude del dev)** saluti per nome e proponi la **prima issue in 🟢 ACTIONABLE**. Esempio:
+> "Ciao Leo 👋 Hai 4 issue assegnate. La prossima actionable è #9 — Dynamic Island descent. Vuoi iniziare? (rispondi 'sì')"
+
+Se 🟢 è vuoto (tutte le issue del dev sono blocked), comunicalo:
+> "Tutte le tue issue sono bloccate da dipendenze. Vuoi vedere la lista 🟡 waiting per un check rapido?"
+
+**Convention per finire in colonna giusta**:
+- Per mettere issue in 🟡 WAITING: aggiungi label `blocked` (manuale dal PM/dev)
+- Per togliere da 🟡: rimuovi label `blocked` quando dipendenza è risolta
+- Marker comment `<!-- BLOCKING:N,M -->` su PR è già in uso per blocking comments (vedi #127), ma NON viene parsato dal session-start (sarebbe troppo costoso fetchare comment di ogni issue). Per ora basta label esplicita.
+
+Vedi `docs/runbooks/session-start-dashboard.md` per troubleshoot.
 
 #### 2. Avvio lavoro (su "sì" del dev)
 
