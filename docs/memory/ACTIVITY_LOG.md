@@ -97,3 +97,4 @@
 - `2026-04-29T00:52:25Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #126: "[BUG critical] Always Listening: wake non funziona in background — SFSpeechRecognizer limit" _(parent: (no parent))_
 - `2026-04-29T00:53:17Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #127: "[BUG critical] Multiple stale Live Activities accumulate on Lock Screen — ensureIslandActivity lifecycle broken" _(parent: (no parent))_
 - `2026-04-29T00:54:08Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #125: "[BUG] #85 — Always Listening regression: wake doesn't fire in background + AC#5 Stop button missing"
+- `2026-04-29T01:39:49Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #128: "feat(ios): Claude bridge auto-fallback to Gemini direct on harness failure (#63)" _(branch: `feat/issue-63-claude-fallback` · 5 commit · +217/-8 · 7 file · #63)_
