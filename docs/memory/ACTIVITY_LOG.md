@@ -85,3 +85,4 @@
 - `2026-04-28T20:24:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
 - `2026-04-28T20:41:54Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #60: "[Sub #16 · 1/4] Empty speech guard + done state notify in GigiSpeechService"
 - `2026-04-28T20:42:09Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-29T12:39:29+0200` · local · session ended on `feat/issue-132-sys-catalog` (last commit: chore(ios): point hardware setup at final Shortcut) _(modified: 02_GIGI_APP/GIGI/GigiBackgroundTalkIntent.swift,docs/runbooks/talk-to-gigi-sys-branch.md)_
