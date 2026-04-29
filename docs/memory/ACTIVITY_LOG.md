@@ -115,3 +115,4 @@
 - `2026-04-29T17:34:10Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +433/-6)_
 - `2026-04-29T17:45:29Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +481/-14)_
 - `2026-04-29T17:53:16Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +481/-14)_
+- `2026-04-29T17:57:30Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +493/-16)_
