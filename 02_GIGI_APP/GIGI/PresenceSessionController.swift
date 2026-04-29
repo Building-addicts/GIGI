@@ -56,13 +56,39 @@ final class PresenceSessionController: ObservableObject {
     // Sub #14 2/3: live task extraction
     private var turnCounter: Int = 0
     private var extractionTask: Task<Void, Never>?
+    private var userTurnsCancellable: AnyCancellable?
+    private var lastObservedUserCount: Int = 0
 
     private init() {
         GigiDebugLogger.log("PresenceSessionController init START")
         observeOrchestrator()
         GigiDebugLogger.log("PresenceSessionController observeOrchestrator OK")
         observeDynamicIslandCommands()
+        observeUserTurnsForExtraction()
         GigiDebugLogger.log("PresenceSessionController init END")
+    }
+
+    // Sub #14 2/3: observe ConversationMemory user messages instead of wrapping
+    // GigiAudioManager.onTranscription (which is owned by GigiSmartOrchestrator and
+    // would be overwritten by last-writer-wins on singleton init order).
+    private func observeUserTurnsForExtraction() {
+        userTurnsCancellable = GigiConversationMemory.shared.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] messages in
+                guard let self, self.isActive else { return }
+                let userCount = messages.filter { $0.role == .user }.count
+                guard userCount > self.lastObservedUserCount else { return }
+                self.lastObservedUserCount = userCount
+                self.turnCounter += 1
+                GigiDebugLogger.log("PresenceSession turnCounter=\(self.turnCounter)")
+                if self.turnCounter % 2 == 0 {
+                    self.extractionTask?.cancel()
+                    self.extractionTask = Task {
+                        let transcript = await GigiConversationMemory.shared.recentUserTranscript(turns: 6)
+                        await GigiTaskExtractor.shared.extract(from: transcript)
+                    }
+                }
+            }
     }
 
     // MARK: - Session lifecycle
@@ -154,6 +180,7 @@ final class PresenceSessionController: ObservableObject {
         extractionTask?.cancel()
         GigiTaskExtractor.shared.clear()
         turnCounter = 0
+        lastObservedUserCount = GigiConversationMemory.shared.messages.filter { $0.role == .user }.count
         GigiAudioManager.shared.stopAll()
 
         Task {
@@ -295,15 +322,8 @@ final class PresenceSessionController: ObservableObject {
                 self.state = .thinking
                 await GigiLiveActivityController.shared.updatePresence(state: .thinking, message: "Thinking about it", transcript: text)
 
-                // Sub #14 2/3: trigger task extraction every 2 user turns
-                self.turnCounter += 1
-                if self.turnCounter % 2 == 0 {
-                    self.extractionTask?.cancel()
-                    self.extractionTask = Task {
-                        let transcript = await GigiConversationMemory.shared.recentUserTranscript(turns: 6)
-                        await GigiTaskExtractor.shared.extract(from: transcript)
-                    }
-                }
+                // Sub #14 2/3: extraction wiring moved to observeUserTurnsForExtraction()
+                // because onTranscription gets overwritten by GigiSmartOrchestrator init.
             }
         }
     }
