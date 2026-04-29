@@ -1,0 +1,99 @@
+# Auto-post clearance comment on PRs whose blocking marker references the
+# issue that was just closed.
+#
+# Trigger: issues.closed
+# - Scans open PRs (and recently merged ones, optional) for marker `<!-- BLOCKING:N,M,... -->`
+# - If marker contains the closed issue number AND all listed numbers are now closed,
+#   posts `✅ All blocking issues resolved — PR ready for review`
+#
+# Sister workflows: auto-blocked-label.yml, auto-unblock.yml
+
+name: Auto Clear PR Blocking Marker
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: read
+  pull-requests: write
+  contents: read
+
+jobs:
+  clear-pr-marker:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.issue.pull_request }}
+    steps:
+      - name: Scan open PRs for matching BLOCKING marker
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const closed_issue_number = context.payload.issue.number;
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+
+            console.log(`Issue #${closed_issue_number} closed — scanning PRs for BLOCKING marker`);
+
+            // 1. List open PRs
+            const prs_resp = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            console.log(`Open PRs: ${prs_resp.length}`);
+
+            const marker_re = /<!--\s*BLOCKING:\s*([\d,\s]+)\s*-->/i;
+
+            for (const pr of prs_resp) {
+              const pr_number = pr.number;
+
+              // Fetch comments of the PR
+              const comments_resp = await github.rest.issues.listComments({
+                owner, repo, issue_number: pr_number, per_page: 100,
+              });
+
+              for (const c of comments_resp.data) {
+                const m = (c.body || '').match(marker_re);
+                if (!m) continue;
+
+                // Extract numbers
+                const nums = m[1].split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+                if (!nums.includes(closed_issue_number)) continue;
+
+                console.log(`  PR #${pr_number}: marker found with [${nums.join(',')}]`);
+
+                // Check that ALL numbers are now closed
+                let all_closed = true;
+                const open_remaining = [];
+                for (const n of nums) {
+                  try {
+                    const { data: ref_issue } = await github.rest.issues.get({ owner, repo, issue_number: n });
+                    if (ref_issue.state === 'open') {
+                      all_closed = false;
+                      open_remaining.push(n);
+                    }
+                  } catch (e) {
+                    console.log(`    ref #${n} unreachable: ${e.message}`);
+                  }
+                }
+
+                if (all_closed) {
+                  // Check we haven't already posted clearance for this set
+                  const existing_clearance_re = /✅ All blocking issues resolved/i;
+                  const has_clearance = comments_resp.data.some(cc => existing_clearance_re.test(cc.body || ''));
+                  if (has_clearance) {
+                    console.log(`    PR #${pr_number}: clearance comment already posted — skip`);
+                    break;
+                  }
+
+                  await github.rest.issues.createComment({
+                    owner, repo, issue_number: pr_number,
+                    body: `✅ All blocking issues resolved (${nums.map(n => `#${n}`).join(', ')}) — PR ready for review.`,
+                  });
+                  console.log(`    PR #${pr_number}: ✓ posted clearance`);
+                } else {
+                  console.log(`    PR #${pr_number}: still blocked by [${open_remaining.join(',')}] — no comment`);
+                }
+                break; // only process first matching marker comment per PR
+              }
+            }
+
+            console.log('auto-clear-pr-blocking-marker done');
