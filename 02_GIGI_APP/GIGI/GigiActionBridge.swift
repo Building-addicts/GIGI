@@ -84,7 +84,7 @@ class GigiActionBridge {
 
     func execute(_ intent: GigiIntent) async -> String {
         if intent.params["confirmation_source"] == "permission_sheet" {
-            print("GIGI Bridge: approved via permission_sheet -> \(intent.label)")
+            GigiDebugLogger.log("ISSUE77 approved via permission_sheet -> \(intent.label)")
             return await executeApproved(intent)
         }
 
@@ -124,6 +124,7 @@ class GigiActionBridge {
 
         case "create_event":
             if intent.params["confirmation_source"] == "permission_sheet" {
+                GigiDebugLogger.log("ISSUE77 create_event using approved mock path params=\(intent.params)")
                 let startDate = parseDateTime(
                     date: intent.params["date"] ?? "today",
                     time: intent.params["time"] ?? "12:00"

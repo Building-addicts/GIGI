@@ -344,6 +344,24 @@ final class GigiAgentEngine {
                     onInterimEvent?(.toolCompleted(name: call.name, result: result.error ?? result.value))
                 }
 
+                if response.functionCalls.count == 1,
+                   response.functionCalls.first?.name == "create_event",
+                   let result = results.first,
+                   result.error == nil,
+                   !result.value.isEmpty {
+                    GigiDebugLogger.log("ISSUE77 create_event direct final response: \(result.value)")
+                    mem.addToolResults([(name: "create_event", result: result.value)])
+                    mem.addModelSpeech(result.value)
+                    return AgentResult(
+                        speech:          result.value,
+                        executedTools:   executedTools,
+                        isFollowUp:      false,
+                        costEstimate:    totalCost,
+                        requiresConfirm: nil,
+                        isError:         false
+                    )
+                }
+
                 // Check for required confirmation (payment / destructive)
                 if let confirmIndex = results.firstIndex(where: { $0.requiresConfirm != nil }),
                    let confirmNeeded = results[confirmIndex].requiresConfirm,
@@ -445,11 +463,14 @@ final class GigiAgentEngine {
 
         let confirmationPolicy = GigiConfirmationPolicyEngine.shared
         if tool.requiresConfirmation || confirmationPolicy.requiresConfirmation(toolName: call.name) {
+            GigiDebugLogger.log("ISSUE77 requesting permission for \(call.name)")
             let payload = PermissionPayload.make(toolName: call.name, args: call.asArgs)
             switch await confirmationPolicy.requestConfirmation(payload: payload) {
             case .confirmed(let confirmedPayload), .edited(let confirmedPayload):
+                GigiDebugLogger.log("ISSUE77 confirmed \(call.name) args=\(confirmedPayload.toolArgs)")
                 return await tool.execute(args: confirmedPayload.toolArgs)
             case .cancelled:
+                GigiDebugLogger.log("ISSUE77 cancelled \(call.name)")
                 return .success("Cancelled. Nothing was sent or changed.")
             }
         }
