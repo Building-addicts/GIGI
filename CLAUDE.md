@@ -517,7 +517,7 @@ Se il dev ti dice qualcosa di rischioso/ambiguo (es. "fai tu", "decidi tu"), il 
 
 ## Stato corrente (2026-04-27)
 
-**Settimana lancio MVP** — deadline **venerdì 1 maggio 2026**. Code freeze mercoledì 30 ore 16:00 (QA gate #17), demo venerdì.
+**Settimana lancio MVP** — deadline **venerdì 1 maggio 2026**.
 
 Board GitHub: 51 issue strutturate + linkate native:
 - **13 PARENT epic** (#10-#18 + #76-#79) con header 🎯/🔧/✨
