@@ -37,18 +37,22 @@ final class GigiConfirmationPolicyEngine: ObservableObject {
     private var pendingContinuation: CheckedContinuation<ConfirmationResult, Never>?
 
     /// Suspends until the user confirms / edits / cancels via the sheet.
-    /// Cancellation of the surrounding task resolves to `.cancelled` to keep
-    /// the engine state consistent.
+    /// Replay protection lives in `GigiAgentEngine.executeToolCall` so we don't
+    /// have to coordinate two caches.
     func requestConfirmation(payload: PermissionPayload) async -> ConfirmationResult {
         // Defensive: collapse any stale request before starting a new one.
         if let prior = pendingContinuation {
             pendingContinuation = nil
             prior.resume(returning: .cancelled)
         }
-        return await withCheckedContinuation { (cont: CheckedContinuation<ConfirmationResult, Never>) in
+
+        GigiDebugLogger.log("PermissionPolicy: present sheet id=\(payload.id)")
+        let result = await withCheckedContinuation { (cont: CheckedContinuation<ConfirmationResult, Never>) in
             pendingContinuation = cont
             presentedPayload = payload
         }
+        GigiDebugLogger.log("PermissionPolicy: resolved id=\(payload.id) result=\(result.label)")
+        return result
     }
 
     /// Called by the sheet's button handlers.

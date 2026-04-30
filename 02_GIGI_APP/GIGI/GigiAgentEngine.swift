@@ -46,6 +46,13 @@ final class GigiAgentEngine {
     private var pendingConfirmTool: (any GigiTool)?
     private var pendingConfirmArgs: [String: Any] = [:]
 
+    // Track payload ids the user already approved + we already executed within
+    // the recent past, so an LLM that re-emits the same tool call (planner
+    // decomposition, multi-iteration loop, parallel duplicates) does not
+    // re-trigger the side effect. 90 s window covers a single turn comfortably.
+    private var executedPermissionIds: [String: Date] = [:]
+    private let executedPermissionTTL: TimeInterval = 90
+
     // MARK: - Callbacks
 
     var onInterimEvent: ((InterimEvent) -> Void)?
@@ -440,13 +447,27 @@ final class GigiAgentEngine {
         if tool.requiresConfirmation,
            (args["__approved"] as? Bool) != true,
            let payload = PermissionPayload.from(toolName: call.name, args: args) {
+            // Replay guard: if the same payload was already executed in the
+            // current window, return a no-op success so the LLM stops looping.
+            let now = Date()
+            executedPermissionIds = executedPermissionIds.filter { $0.value > now }
+            if executedPermissionIds[payload.id] != nil {
+                GigiDebugLogger.log("PermissionGate: replay skip tool=\(call.name) id=\(payload.id)")
+                return .success("Already done. Do not call this tool again.", tokenEstimate: 5)
+            }
+
+            GigiDebugLogger.log("PermissionGate: enter tool=\(call.name) id=\(payload.id)")
             let result = await GigiConfirmationPolicyEngine.shared.requestConfirmation(payload: payload)
+            GigiDebugLogger.log("PermissionGate: exit tool=\(call.name) result=\(result.label)")
             switch result {
             case .cancelled:
-                return .success("Cancelled.", tokenEstimate: 5)
+                executedPermissionIds[payload.id] = now.addingTimeInterval(executedPermissionTTL)
+                return .success("User declined the action. Stop here and do not retry the same tool.", tokenEstimate: 5)
             case .confirmed(let p), .edited(let p):
                 args = p.toolArgs
                 args["__approved"] = true
+                executedPermissionIds[payload.id] = now.addingTimeInterval(executedPermissionTTL)
+                if p.id != payload.id { executedPermissionIds[p.id] = now.addingTimeInterval(executedPermissionTTL) }
                 return await tool.execute(args: args)
             }
         }

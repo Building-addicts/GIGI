@@ -59,6 +59,14 @@ enum ConfirmationResult {
     case confirmed(PermissionPayload)
     case edited(PermissionPayload)
     case cancelled
+
+    var label: String {
+        switch self {
+        case .confirmed: return "confirmed"
+        case .edited:    return "edited"
+        case .cancelled: return "cancelled"
+        }
+    }
 }
 
 // MARK: - Tool ↔ Payload mapping
