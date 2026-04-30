@@ -143,3 +143,4 @@
 - `2026-04-30T18:17:34+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: fix(config): Info.plist key wins over Keychain (NVIDIA test) — overrides stale) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
 - `2026-04-30T18:26:25+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: log(local): session ended on `feat/nvidia-nim-provider-test` (last commit: fix(c) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
 - `2026-04-30T18:40:09+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: Merge remote-tracking branch 'origin/feat/issue-59-propose-day-plan-tool' into f) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
+- `2026-04-30T18:44:56+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: fix(nvidia): bump timeouts (8/12/15→20/25/30s) for NVIDIA NIM variance + neutr) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
