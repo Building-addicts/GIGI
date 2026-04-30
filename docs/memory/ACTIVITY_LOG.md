@@ -142,3 +142,4 @@
 - `2026-04-30T17:39:06Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #94 "feat(ios): register propose_day_plan tool — voice delivery (Sub #15 4/4)" di @fc200490-sketch _(branch: `feat/issue-59-propose-day-plan-tool` · +118/-2 · #59)_
 - `2026-04-30T17:39:12Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #59: "[Sub #15 · 4/4] Voice delivery + tool registration `propose_day_plan`"
 - `2026-04-30T17:41:02Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
+- `2026-04-30T19:46:39+0200` · local · session ended on `feat/issue-88-core-reliability` (last commit: merge(main): combine #106 fast-path always-included tools with #94 propose_day_p) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
