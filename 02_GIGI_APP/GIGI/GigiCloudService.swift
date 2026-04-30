@@ -116,9 +116,12 @@ struct GigiLLMResponse {
 final class GigiCloudService {
     static let shared = GigiCloudService()
 
-    private let groqEndpoint = "https://api.groq.com/openai/v1/chat/completions"
-    private let agentModel   = "llama-3.3-70b-versatile"  // main agent loop
-    private let fastModel    = "llama-3.1-8b-instant"     // NLU / quick tasks
+    // Provider switch: NVIDIA NIM (build.nvidia.com). Same OpenAI-compatible
+    // API as Groq, just different host + model IDs. Bearer key still read via
+    // GigiConfig.groqAPIKey (Info.plist slot reused — value is the NVIDIA key).
+    private let groqEndpoint = "https://integrate.api.nvidia.com/v1/chat/completions"
+    private let agentModel   = "meta/llama-3.3-70b-instruct"  // main agent loop (NVIDIA NIM)
+    private let fastModel    = "meta/llama-3.1-8b-instruct"   // NLU / quick tasks (NVIDIA NIM)
 
     private init() {}
 
