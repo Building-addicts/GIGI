@@ -459,17 +459,34 @@ final class GigiAgentEngine {
             GigiDebugLogger.log("PermissionGate: enter tool=\(call.name) id=\(payload.id)")
             let result = await GigiConfirmationPolicyEngine.shared.requestConfirmation(payload: payload)
             GigiDebugLogger.log("PermissionGate: exit tool=\(call.name) result=\(result.label)")
+            let approvedPayload: PermissionPayload
+            let wasEdited: Bool
             switch result {
             case .cancelled:
                 executedPermissionIds[payload.id] = now.addingTimeInterval(executedPermissionTTL)
                 return .success("User declined the action. Stop here and do not retry the same tool.", tokenEstimate: 5)
-            case .confirmed(let p), .edited(let p):
-                args = p.toolArgs
-                args["__approved"] = true
-                executedPermissionIds[payload.id] = now.addingTimeInterval(executedPermissionTTL)
-                if p.id != payload.id { executedPermissionIds[p.id] = now.addingTimeInterval(executedPermissionTTL) }
-                return await tool.execute(args: args)
+            case .confirmed(let p):
+                approvedPayload = p
+                wasEdited = false
+            case .edited(let p):
+                approvedPayload = p
+                wasEdited = true
             }
+            args = approvedPayload.toolArgs
+            args["__approved"] = true
+            executedPermissionIds[payload.id] = now.addingTimeInterval(executedPermissionTTL)
+            if approvedPayload.id != payload.id {
+                executedPermissionIds[approvedPayload.id] = now.addingTimeInterval(executedPermissionTTL)
+            }
+            let raw = await tool.execute(args: args)
+            // After an edit the original transcript is stale — give the LLM
+            // an authoritative summary so the spoken reply matches the time
+            // / fields that were actually committed.
+            if wasEdited, raw.error == nil {
+                let speech = "User edited the request before approval. \(approvedPayload.executionSummary). \(raw.value)"
+                return .success(speech, tokenEstimate: raw.tokenEstimate + 5)
+            }
+            return raw
         }
         return await tool.execute(args: args)
     }

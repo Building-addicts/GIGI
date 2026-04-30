@@ -95,6 +95,28 @@ extension PermissionPayload {
         }
     }
 
+    /// Authoritative summary the LLM should use to speak about the action it
+    /// just completed. Avoids the LLM falling back to time/wording from the
+    /// original transcript when the user edited the payload.
+    var executionSummary: String {
+        switch self {
+        case .message(let contact, let body, let platform):
+            return "Sent \(platform) message to \(contact): \"\(body)\""
+        case .calendarEvent(let title, let date, let time, let contact):
+            let attendee = contact.isEmpty ? "" : " with \(contact)"
+            return "Created calendar event \"\(title)\"\(attendee) on \(date) at \(time)"
+        case .reminder(let text, let date, let time):
+            let when = [date, time].filter { !$0.isEmpty }.joined(separator: " ")
+            return when.isEmpty
+                ? "Created reminder \"\(text)\""
+                : "Created reminder \"\(text)\" for \(when)"
+        case .followUpTask(let text):
+            return "Added follow-up task \"\(text)\""
+        case .scheduleSwap(let summary, let from, let to):
+            return "Scheduled swap: \(summary) (from \(from) to \(to))"
+        }
+    }
+
     /// Convert the (possibly edited) payload back into the args dict for tool execution.
     var toolArgs: [String: Any] {
         switch self {
