@@ -240,6 +240,14 @@ final class GigiClaudeBridge {
     func buildContextSnapshot() async -> String {
         var sections: [String] = []
 
+        // --- MVP Preferences (sub #52) — first so they sit at the top of the
+        //     8 KB snapshot Claude sees, where attention is highest ---
+        let mvpPrefs = await GigiUserProfile.shared.mvpPreferencesContext()
+        if !mvpPrefs.isEmpty {
+            sections.append(mvpPrefs)
+            GigiDebugLogger.log("LLM[bridge] systemPrompt prefix=\(mvpPrefs.prefix(80))")
+        }
+
         // --- Profile ---
         let profile = await GigiUserProfile.shared.load()
         var profileLines: [String] = []
