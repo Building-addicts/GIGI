@@ -135,3 +135,4 @@
 - `2026-04-30T14:49:05Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #91 _(branch: `feat/issue-56-day-plan-reasoner` · totale +156/-0)_
 - `2026-04-30T14:50:20Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #56: "[Sub #15 · 1/4] Create GigiDayPlanReasoner engine + LLM prompt"
 - `2026-04-30T14:50:27Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #91 "feat(ios): add GigiDayPlanReasoner engine + LLM prompt (Sub #15 1/4)" di @fc200490-sketch _(branch: `feat/issue-56-day-plan-reasoner` · +156/-0 · #56)_
+- `2026-04-30T14:53:42Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +78/-1)_
