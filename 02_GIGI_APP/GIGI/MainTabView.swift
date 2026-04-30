@@ -6,6 +6,7 @@ struct MainTabView: View {
     @ObservedObject private var orchestrator = GigiSmartOrchestrator.shared
     @ObservedObject private var presence = PresenceSessionController.shared
     @ObservedObject private var liveActivity = GigiLiveActivityController.shared
+    @ObservedObject private var permissionEngine = GigiConfirmationPolicyEngine.shared
 
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "gigi.onboarding.complete")
     @State private var showPresence = false
@@ -93,6 +94,11 @@ struct MainTabView: View {
         .sheet(isPresented: $showPairingSheet) {
             GigiPairingSheet { _ in
                 refreshHarnessConfiguredState()
+            }
+        }
+        .sheet(item: $permissionEngine.presentedPayload) { payload in
+            PermissionConfirmationSheet(payload: payload) { result in
+                permissionEngine.resolve(result)
             }
         }
         .onAppear { refreshHarnessConfiguredState() }

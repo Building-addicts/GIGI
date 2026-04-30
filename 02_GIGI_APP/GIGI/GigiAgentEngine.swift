@@ -431,7 +431,26 @@ final class GigiAgentEngine {
         guard let tool = GigiToolRegistry.shared.tool(named: call.name) else {
             return .failure("Unknown tool: \(call.name)")
         }
-        return await tool.execute(args: call.asArgs)
+
+        // Permission gate (issue #77): meaningful actions route through the
+        // PermissionConfirmationSheet for explicit user approval. Legacy tools
+        // not covered by PermissionPayload (web_book_restaurant, computer_use)
+        // fall through to the existing ToolResult.confirm() voice path.
+        var args = call.asArgs
+        if tool.requiresConfirmation,
+           (args["__approved"] as? Bool) != true,
+           let payload = PermissionPayload.from(toolName: call.name, args: args) {
+            let result = await GigiConfirmationPolicyEngine.shared.requestConfirmation(payload: payload)
+            switch result {
+            case .cancelled:
+                return .success("Cancelled.", tokenEstimate: 5)
+            case .confirmed(let p), .edited(let p):
+                args = p.toolArgs
+                args["__approved"] = true
+                return await tool.execute(args: args)
+            }
+        }
+        return await tool.execute(args: args)
     }
 
     // MARK: - Confirmation flow

@@ -115,7 +115,7 @@ struct MakeCallTool: GigiTool {
 
 struct SendMessageTool: GigiTool {
     let name = "send_message"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["message", "text", "sms", "imessage", "whatsapp", "telegram", "manda", "scrivi", "messaggio"]
 
     let declaration = FunctionDeclaration(
@@ -188,7 +188,7 @@ struct PlayMusicTool: GigiTool {
 
 struct SetReminderTool: GigiTool {
     let name = "set_reminder"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["reminder", "remind", "promemoria", "ricordami", "remember", "non dimenticare"]
 
     let declaration = FunctionDeclaration(
@@ -212,7 +212,7 @@ struct SetReminderTool: GigiTool {
 
 struct CreateEventTool: GigiTool {
     let name = "create_event"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["calendar", "event", "meeting", "appointment", "schedule", "agenda", "crea", "evento", "riunione", "appuntamento"]
 
     let declaration = FunctionDeclaration(
@@ -926,7 +926,7 @@ struct SearchGroupsTool: GigiTool {
 
 struct WebWhatsAppTool: GigiTool {
     let name = "web_whatsapp"
-    let requiresConfirmation = false
+    let requiresConfirmation = true
     let tags = ["whatsapp", "wa", "whatsapp web", "messaggio whatsapp"]
 
     let declaration = FunctionDeclaration(

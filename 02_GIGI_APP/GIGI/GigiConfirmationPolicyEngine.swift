@@ -1,12 +1,14 @@
 import Foundation
+import SwiftUI
 
 // MARK: - GigiConfirmationPolicyEngine
 //
-// Evaluates whether an AgentResult requires user confirmation.
-// Per-tool `requiresConfirmation` flag takes priority over category policy.
+// Owns the "permission before execution" boundary:
+// - Per-tool policy matrix for legacy voice-confirmation flow.
+// - Async sheet-driven approval surface used by the iOS UI (issue #77).
 
 @MainActor
-final class GigiConfirmationPolicyEngine {
+final class GigiConfirmationPolicyEngine: ObservableObject {
     static let shared = GigiConfirmationPolicyEngine()
 
     // Override policy per tool name. Populated at init with sensible defaults.
@@ -26,13 +28,45 @@ final class GigiConfirmationPolicyEngine {
         "homekit_unlock":      .modify,
     ]
 
-    // Returns a ConfirmRequest if this result requires approval, nil otherwise.
+    // MARK: - Sheet-driven approval (issue #77)
+
+    /// Currently presented payload. SwiftUI binds `.sheet(item:)` to this.
+    @Published var presentedPayload: PermissionPayload?
+
+    private var pendingContinuation: CheckedContinuation<ConfirmationResult, Never>?
+
+    /// Suspends until the user confirms / edits / cancels via the sheet.
+    /// Cancellation of the surrounding task resolves to `.cancelled` to keep
+    /// the engine state consistent.
+    func requestConfirmation(payload: PermissionPayload) async -> ConfirmationResult {
+        // Defensive: collapse any stale request before starting a new one.
+        if let prior = pendingContinuation {
+            pendingContinuation = nil
+            prior.resume(returning: .cancelled)
+        }
+        return await withCheckedContinuation { (cont: CheckedContinuation<ConfirmationResult, Never>) in
+            pendingContinuation = cont
+            presentedPayload = payload
+        }
+    }
+
+    /// Called by the sheet's button handlers.
+    func resolve(_ result: ConfirmationResult) {
+        let cont = pendingContinuation
+        pendingContinuation = nil
+        presentedPayload = nil
+        cont?.resume(returning: result)
+    }
+
+    // MARK: - Legacy voice-confirmation policy
+
+    /// Returns a ConfirmRequest if this result requires approval, nil otherwise.
     func evaluate(result: AgentResult, utterance: String) -> ConfirmRequest? {
         guard let existing = result.requiresConfirm else { return nil }
         return existing
     }
 
-    // Checks if a tool name requires confirmation according to the policy matrix.
+    /// Checks if a tool name requires confirmation according to the policy matrix.
     func requiresConfirmation(toolName: String) -> Bool {
         guard let policy = policyOverrides[toolName] else { return false }
         return policy != .never
