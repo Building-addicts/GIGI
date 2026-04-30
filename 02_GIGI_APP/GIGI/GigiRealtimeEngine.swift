@@ -317,23 +317,31 @@ final class GigiRealtimeEngine: @unchecked Sendable {
             ],
         ]
 
-        let setup: [String: Any] = [
-            "setup": [
-                "model": modelName,
-                "generation_config": [
-                    "response_modalities": ["AUDIO"],
-                ],
-                "system_instruction": [
-                    "parts": [
-                        ["text": GigiFoundationAgent.systemPrompt],
+        // Sub #52: inject MVPPreferences into the voice session system prompt.
+        // Done in a Task because the injection is async (CloudKit-backed) and
+        // sendSetupMessage is sync; the WebSocket buffers writes anyway, so a
+        // ~ms delay before the setup frame is dispatched is harmless.
+        Task { [weak self] in
+            guard let self else { return }
+            let injected = await GigiUserProfile.shared.injectMVPContext(into: GigiFoundationAgent.systemPrompt)
+            GigiDebugLogger.log("LLM[realtime] systemPrompt prefix=\(injected.prefix(80))")
+            let setup: [String: Any] = [
+                "setup": [
+                    "model": modelName,
+                    "generation_config": [
+                        "response_modalities": ["AUDIO"],
                     ],
+                    "system_instruction": [
+                        "parts": [
+                            ["text": injected],
+                        ],
+                    ],
+                    "tools": tools,
+                    "output_audio_transcription": [String: Any]()
                 ],
-                "tools": tools,
-                "output_audio_transcription": [String: Any]()
-            ],
-        ]
-
-        sendJSONDictionary(setup)
+            ]
+            self.sendJSONDictionary(setup)
+        }
     }
 
     /// Tool declarations aligned with `GigiActionBridge` / orchestrator intents.

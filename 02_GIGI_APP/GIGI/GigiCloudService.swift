@@ -125,7 +125,7 @@ final class GigiCloudService {
     // MARK: - Agent: function calling (called by GigiAgentEngine)
 
     func callWithFunctions(
-        systemInstruction: String = GigiFoundationAgent.systemPrompt,
+        systemInstruction: String? = nil,
         contents: [GigiContent],
         tools: [FunctionDeclaration],
         cacheId: String? = nil,  // ignored — Groq has no context cache
@@ -134,7 +134,15 @@ final class GigiCloudService {
         let apiKey = GigiConfig.groqAPIKey
         guard !apiKey.isEmpty else { throw GigiCloudError.missingAPIKey }
 
-        let messages = buildMessages(system: systemInstruction, contents: contents)
+        // Sub #52: always inject MVPPreferences at the top, regardless of
+        // whether the caller supplied a custom systemInstruction. Agent loop
+        // and planner pass their own task-specific prompts, but the MVP
+        // demo requires their replies to also reflect user preferences
+        // (tone, VIP names, food, routine hints, ...).
+        let baseSystem = systemInstruction ?? GigiFoundationAgent.systemPrompt
+        let resolvedSystem = await GigiUserProfile.shared.injectMVPContext(into: baseSystem)
+        GigiDebugLogger.log("LLM[groq] systemPrompt prefix=\(resolvedSystem.prefix(80))")
+        let messages = buildMessages(system: resolvedSystem, contents: contents)
         let toolsJSON = buildToolsJSON(tools)
 
         var req = URLRequest(url: URL(string: groqEndpoint)!)
@@ -186,8 +194,10 @@ final class GigiCloudService {
             : "--- Conversation history ---\n\(history)\n--- End history ---\n\nCurrent message: \(text)"
 
         do {
+            let injectedSystem = await GigiUserProfile.shared.injectMVPContext(into: GigiFoundationAgent.systemPrompt)
+            GigiDebugLogger.log("LLM[groq-nlu] systemPrompt prefix=\(injectedSystem.prefix(80))")
             let raw = try await callGroqRaw(
-                system: GigiFoundationAgent.systemPrompt,
+                system: injectedSystem,
                 user: prompt,
                 model: agentModel,
                 maxTokens: 512,
