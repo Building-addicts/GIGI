@@ -137,3 +137,4 @@
 - `2026-04-30T14:50:27Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #91 "feat(ios): add GigiDayPlanReasoner engine + LLM prompt (Sub #15 1/4)" di @fc200490-sketch _(branch: `feat/issue-56-day-plan-reasoner` · +156/-0 · #56)_
 - `2026-04-30T14:53:42Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +78/-1)_
 - `2026-04-30T14:54:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #92 "feat(ios): wire read_week_calendar into Day Plan Reasoner (Sub #15 2/4)" di @fc200490-sketch _(branch: `feat/issue-57-day-plan-calendar` · +78/-1 · #57)_
+- `2026-04-30T15:07:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +118/-2)_
