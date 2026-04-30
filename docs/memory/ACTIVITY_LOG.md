@@ -134,3 +134,4 @@
 - `2026-04-30T14:40:54Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #87 "feat(ios): inject MVPPreferences in every LLM call (Sub #13 3/3)" di @fc200490-sketch _(branch: `feat/issue-52-mvp-preferences-injection` · +70/-18 · #52)_
 - `2026-04-30T14:49:05Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #91 _(branch: `feat/issue-56-day-plan-reasoner` · totale +156/-0)_
 - `2026-04-30T14:50:20Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #56: "[Sub #15 · 1/4] Create GigiDayPlanReasoner engine + LLM prompt"
+- `2026-04-30T14:50:27Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #91 "feat(ios): add GigiDayPlanReasoner engine + LLM prompt (Sub #15 1/4)" di @fc200490-sketch _(branch: `feat/issue-56-day-plan-reasoner` · +156/-0 · #56)_
