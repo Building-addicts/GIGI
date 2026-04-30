@@ -53,6 +53,12 @@ final class GigiAgentEngine {
     private var executedPermissionIds: [String: Date] = [:]
     private let executedPermissionTTL: TimeInterval = 90
 
+    // After the user edits a permission payload we cannot trust the LLM to
+    // speak the new values back — Groq 8b fallback under rate-limit ignores
+    // injected hints. We collect the deterministic execution summaries here
+    // and short-circuit the loop with them as the user-visible speech.
+    private var pendingEditedSummaries: [String] = []
+
     // MARK: - Callbacks
 
     var onInterimEvent: ((InterimEvent) -> Void)?
@@ -71,6 +77,7 @@ final class GigiAgentEngine {
     func process(text: String) async -> AgentResult {
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
+        pendingEditedSummaries.removeAll()
 
         // === Gate 1: Force Claude (Phase 2 — D4.a = YES, takes precedence over planner) ===
         // When Brain Mode → Force Claude is on, route the entire request to Claude
@@ -379,6 +386,25 @@ final class GigiAgentEngine {
                     .map { (call, r) in (name: call.name, result: r.error.map { "ERROR: \($0)" } ?? r.value) }
                 mem.addToolResults(toolResultPairs)
 
+                // Permission-edit short-circuit (issue #77): when the user
+                // edited a payload before approval the Groq fallback model
+                // tends to repeat the original transcript values. Build the
+                // chat reply ourselves from the authoritative summaries.
+                if !pendingEditedSummaries.isEmpty {
+                    let speech = pendingEditedSummaries.joined(separator: ". ") + "."
+                    pendingEditedSummaries.removeAll()
+                    GigiDebugLogger.log("PermissionGate: short-circuit speech=\(speech)")
+                    mem.addModelSpeech(speech)
+                    return AgentResult(
+                        speech:          speech,
+                        executedTools:   executedTools,
+                        isFollowUp:      false,
+                        costEstimate:    totalCost,
+                        requiresConfirm: nil,
+                        isError:         false
+                    )
+                }
+
                 // Build tool results content for next LLM turn
                 let toolResultTuples: [(name: String, value: String, error: String?)] =
                     zip(response.functionCalls, results).map { (call, r) in
@@ -479,10 +505,12 @@ final class GigiAgentEngine {
                 executedPermissionIds[approvedPayload.id] = now.addingTimeInterval(executedPermissionTTL)
             }
             let raw = await tool.execute(args: args)
-            // After an edit the original transcript is stale — give the LLM
-            // an authoritative summary so the spoken reply matches the time
-            // / fields that were actually committed.
+            // After an edit the original transcript is stale. Stash an
+            // authoritative summary so the agent loop can short-circuit
+            // and speak it deterministically (LLM under rate-limit fallback
+            // cannot be trusted to mirror the new values).
             if wasEdited, raw.error == nil {
+                pendingEditedSummaries.append(approvedPayload.executionSummary)
                 let speech = "User edited the request before approval. \(approvedPayload.executionSummary). \(raw.value)"
                 return .success(speech, tokenEstimate: raw.tokenEstimate + 5)
             }
