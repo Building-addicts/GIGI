@@ -129,3 +129,4 @@
 - `2026-04-30T10:14:08Z` · pr-closed · ⛔ @fc200490-sketch ha chiuso senza merge PR #142: "feat(ios): unify permission confirmation UI (#77)" _(branch: `feat/issue-77-permission-ui` · #77)_
 - `2026-04-30T14:37:58Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #86 _(branch: `feat/issue-51-mvp-preferences-seed` · totale +49/-0)_
 - `2026-04-30T14:38:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #86 "feat(ios): seed MVPPreferences first-launch + GigiMemory.awaitReady (Sub #13 2/3)" di @fc200490-sketch _(branch: `feat/issue-51-mvp-preferences-seed` · +49/-0 · #51)_
+- `2026-04-30T14:39:49Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #87 _(branch: `feat/issue-52-mvp-preferences-injection` · totale +70/-18)_
