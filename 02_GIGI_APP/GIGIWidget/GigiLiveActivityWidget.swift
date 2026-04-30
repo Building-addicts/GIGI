@@ -16,7 +16,7 @@ struct GigiLiveActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    ExpandedLeadingView(phase: context.state.phase)
+                    ExpandedLeadingView(phase: context.state.phase, audioLevel: context.state.audioLevel)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     ExpandedCenterView(
@@ -32,7 +32,7 @@ struct GigiLiveActivityWidget: Widget {
                     ExpandedBottomView(phase: context.state.phase)
                 }
             } compactLeading: {
-                CompactLeadingView(phase: context.state.phase)
+                CompactLeadingView(phase: context.state.phase, audioLevel: context.state.audioLevel)
             } compactTrailing: {
                 CompactTrailingView(
                     message: displayMessage(state: context.state, isStale: context.isStale),
@@ -136,7 +136,7 @@ private struct LockScreenBannerView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            LockScreenIconView(phase: context.state.phase)
+            LockScreenIconView(phase: context.state.phase, audioLevel: context.state.audioLevel)
 
             Text(message)
                 .font(.system(size: 15, weight: .medium, design: .rounded))
@@ -164,6 +164,7 @@ private struct LockScreenBannerView: View {
 
 private struct LockScreenIconView: View {
     let phase: GigiPhase
+    var audioLevel: Float? = nil
 
     var body: some View {
         ZStack {
@@ -180,7 +181,7 @@ private struct LockScreenIconView: View {
                     Circle()
                         .strokeBorder(GigiBrand.purple.opacity(0.35), lineWidth: 1)
                 }
-            PhaseIconView(phase: phase, size: 22)
+            PhaseIconView(phase: phase, size: 22, audioLevel: audioLevel)
         }
     }
 }
@@ -212,6 +213,7 @@ private struct LockScreenPhaseIndicator: View {
 
 private struct CompactLeadingView: View {
     let phase: GigiPhase
+    var audioLevel: Float? = nil
 
     var body: some View {
         ZStack {
@@ -222,7 +224,7 @@ private struct CompactLeadingView: View {
                     Circle()
                         .strokeBorder(GigiBrand.purple.opacity(0.45), lineWidth: 0.75)
                 }
-            PhaseIconView(phase: phase, size: 11, weight: .bold)
+            PhaseIconView(phase: phase, size: 11, weight: .bold, audioLevel: audioLevel)
         }
         .padding(.leading, 4)
     }
@@ -273,6 +275,7 @@ private struct MinimalIslandView: View {
 
 private struct ExpandedLeadingView: View {
     let phase: GigiPhase
+    var audioLevel: Float? = nil
 
     var body: some View {
         ZStack {
@@ -290,7 +293,7 @@ private struct ExpandedLeadingView: View {
                     Circle()
                         .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
                 }
-            PhaseIconView(phase: phase, size: 28)
+            PhaseIconView(phase: phase, size: 28, audioLevel: audioLevel)
         }
         .padding(.leading, 6)
     }
@@ -448,13 +451,28 @@ private struct PhaseIconView: View {
     let phase: GigiPhase
     var size: CGFloat = 22
     var weight: Font.Weight = .semibold
+    var audioLevel: Float? = nil
 
     var body: some View {
-        Image(systemName: phase.phaseSystemImage)
-            .font(.system(size: size, weight: weight))
-            .foregroundStyle(phase.phaseIconForeground)
-            .contentTransition(.symbolEffect(.replace))
-            .modifier(PhaseIconSymbolEffectModifier(phase: phase))
+        if phase == .listening {
+            // Audio-reactive waveform replaces the static SF symbol during listening.
+            // Bar geometry scales with the icon size so compact / expanded / lock-screen
+            // all look proportionate.
+            GigiWaveformView(
+                audioLevel: audioLevel,
+                tint: .white,
+                barCount: 5,
+                maxHeight: size,
+                barWidth: max(1.5, size * 0.13),
+                spacing: max(1.5, size * 0.13)
+            )
+        } else {
+            Image(systemName: phase.phaseSystemImage)
+                .font(.system(size: size, weight: weight))
+                .foregroundStyle(phase.phaseIconForeground)
+                .contentTransition(.symbolEffect(.replace))
+                .modifier(PhaseIconSymbolEffectModifier(phase: phase))
+        }
     }
 }
 

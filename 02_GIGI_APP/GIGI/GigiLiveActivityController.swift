@@ -307,6 +307,29 @@ final class GigiLiveActivityController: ObservableObject {
         }
     }
 
+    /// Push the latest mic input level (0.0–1.0) into the live `.listening`
+    /// activity so the Dynamic Island waveform animates with the user's
+    /// voice. No-op if no activity is running or the level is unchanged
+    /// at the encoded precision (avoids redundant ActivityKit churn).
+    @MainActor
+    func updateAudioLevel(_ level: Float) async {
+        guard enabled, lastPhase == .listening else { return }
+        guard let activity else { return }
+        let clamped = max(0.0, min(1.0, level))
+        // Quantize to 0.05 steps so we don't burn ActivityKit budget on noise.
+        let bucketed = (clamped * 20).rounded() / 20
+        let message = phaseMessage(for: .listening)
+        let content = ActivityContent(
+            state: GigiActivityAttributes.ContentState(
+                phase: .listening,
+                message: message,
+                audioLevel: bucketed
+            ),
+            staleDate: Date().addingTimeInterval(60)
+        )
+        await activity.update(content)
+    }
+
     @MainActor
     func transitionToThinking(transcript: String? = nil) async {
         lastPhase = .thinking
