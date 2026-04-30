@@ -124,3 +124,4 @@
 - `2026-04-29T19:33:13Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +635/-28)_
 - `2026-04-29T19:39:35Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +658/-28)_
 - `2026-04-29T19:43:01Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +665/-28)_
+- `2026-04-30T00:28:09Z` · issue-closed · ✅ @Leonardo-Corte ha chiuso issue #122: "[iOS][EPIC] In-app voice dispatch + Control Center quick listen (Shazam-style)"
