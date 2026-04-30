@@ -61,7 +61,10 @@ struct GIGIApp: App {
                     // Realtime engine connects lazily on first use to save battery at startup
                     // Pre-load semantic memory for top-priority namespaces (non-blocking)
                     await GigiVectorStore.shared.preload(namespaces: [.contacts, .preferences, .places])
+                    await GigiUserProfile.shared.seedMVPPreferencesIfNeeded()
                     #if DEBUG
+                    let mvpRoundTripOK = await GigiUserProfile.shared._debugMVPRoundTrip()
+                    GigiDebugLogger.log("AC5 MVPPreferences round-trip → \(mvpRoundTripOK ? "OK" : "FAIL")")
                     await GigiDayPlanReasoner.debugRunWithMockData()
                     await GigiDayPlanReasoner.debugRunWithRealCalendar()
                     #endif
