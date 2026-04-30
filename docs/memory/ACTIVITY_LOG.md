@@ -142,3 +142,4 @@
 - `2026-04-30T17:39:06Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #94 "feat(ios): register propose_day_plan tool — voice delivery (Sub #15 4/4)" di @fc200490-sketch _(branch: `feat/issue-59-propose-day-plan-tool` · +118/-2 · #59)_
 - `2026-04-30T17:39:12Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #59: "[Sub #15 · 4/4] Voice delivery + tool registration `propose_day_plan`"
 - `2026-04-30T17:41:02Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
+- `2026-04-30T17:42:15Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #121 "fix(ios): declare live activity support on widget extension" di @Leonardo-Corte _(branch: `fix/issue-119-activitykit-entitlement` · +4/-0 · #119)_
