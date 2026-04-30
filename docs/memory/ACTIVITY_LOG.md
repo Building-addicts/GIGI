@@ -126,3 +126,4 @@
 - `2026-04-29T19:43:01Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +665/-28)_
 - `2026-04-30T00:28:09Z` · issue-closed · ✅ @Leonardo-Corte ha chiuso issue #122: "[iOS][EPIC] In-app voice dispatch + Control Center quick listen (Shazam-style)"
 - `2026-04-30T03:59:23Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #17: "[QA] Pre-freeze QA gate (mercoledì 30 ore 16:00)"
+- `2026-04-30T10:14:08Z` · pr-closed · ⛔ @fc200490-sketch ha chiuso senza merge PR #142: "feat(ios): unify permission confirmation UI (#77)" _(branch: `feat/issue-77-permission-ui` · #77)_
