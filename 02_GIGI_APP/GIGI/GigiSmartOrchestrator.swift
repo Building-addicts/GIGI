@@ -78,6 +78,27 @@ class GigiSmartOrchestrator: ObservableObject {
         GigiAudioManager.shared.onSpeakingFinished = { [weak self] in
             Task { @MainActor [weak self] in self?.fireDone() }
         }
+        // T8: empty-speech safety net. If any call site (DashboardView intro/outro,
+        // ActionDispatcher confirms, WebAgent) passes "" to speak(), force the pill
+        // to close so it does not dangle in .thinking forever.
+        GigiSpeechService.shared.onEmptyText = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                GigiDebugLogger.voiceEvent("orchestrator.onEmptyText", turnId: self.currentVoiceTurnId)
+                self.pendingDoneMessage = nil
+                self.doneSafetyTask?.cancel()
+                self.doneSafetyTask = nil
+                // In presence / quickTalk the AudioManager follow-up window owns the pill —
+                // forcing completeWithDone here races and leaves the pill stuck (#99).
+                // Mirror finalizeTurnNow's policy: only close the pill outside those modes.
+                if !GigiAudioManager.shared.presenceMode && !self.isQuickTalkSession {
+                    await GigiLiveActivityController.shared.completeWithDone(message: "Done.")
+                }
+                self.status = "GIGI: Ready"
+                self.isThinking = false
+                self.currentVoiceTurnId = nil
+            }
+        }
         GigiRealtimeEngine.shared.onStreamingUtteranceComplete = { [weak self] text in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -154,14 +175,14 @@ class GigiSmartOrchestrator: ObservableObject {
         stopMicCapture()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            GigiDebugLogger.voiceEvent("orchestrator.emptyTranscript", currentVoiceTurnId)
+            GigiDebugLogger.voiceEvent("orchestrator.emptyTranscript", turnId: currentVoiceTurnId)
             isThinking = false
             currentVoiceTurnId = nil
             return
         }
 
         let turnId = ensureVoiceTurn(reason: "transcript")
-        GigiDebugLogger.voiceEvent("orchestrator.transcript", turnId, ["length": "\(trimmed.count)"])
+        GigiDebugLogger.voiceEvent("orchestrator.transcript", turnId: turnId, ["length": "\(trimmed.count)"])
 
         await GigiLiveActivityController.shared.transitionToThinking(transcript: trimmed)
         status = "GIGI: Sto pensando..."
@@ -248,7 +269,7 @@ class GigiSmartOrchestrator: ObservableObject {
     // MARK: - Deferred turn close (T4)
 
     private func scheduleDoneAfterTTS(message: String) {
-        GigiDebugLogger.voiceEvent("orchestrator.scheduleDoneAfterTTS", currentVoiceTurnId)
+        GigiDebugLogger.voiceEvent("orchestrator.scheduleDoneAfterTTS", turnId: currentVoiceTurnId)
         pendingDoneMessage = message
         doneSafetyTask?.cancel()
         // Safety: if AVSpeechSynthesizer never reports finish (cancel storms, hardware
@@ -262,7 +283,7 @@ class GigiSmartOrchestrator: ObservableObject {
 
     private func fireDone() {
         guard let msg = pendingDoneMessage else { return }
-        GigiDebugLogger.voiceEvent("orchestrator.fireDone", currentVoiceTurnId)
+        GigiDebugLogger.voiceEvent("orchestrator.fireDone", turnId: currentVoiceTurnId)
         pendingDoneMessage = nil
         doneSafetyTask?.cancel()
         doneSafetyTask = nil
@@ -271,7 +292,7 @@ class GigiSmartOrchestrator: ObservableObject {
     }
 
     private func finalizeTurnNow(message: String) {
-        GigiDebugLogger.voiceEvent("orchestrator.finalizeTurn", currentVoiceTurnId, ["presenceMode": "\(GigiAudioManager.shared.presenceMode)", "quickTalk": "\(isQuickTalkSession)"])
+        GigiDebugLogger.voiceEvent("orchestrator.finalizeTurn", turnId: currentVoiceTurnId, ["presenceMode": "\(GigiAudioManager.shared.presenceMode)", "quickTalk": "\(isQuickTalkSession)"])
         SoundEngine.releaseSession()
 
         if isQuickTalkSession {
@@ -383,7 +404,7 @@ class GigiSmartOrchestrator: ObservableObject {
     func interruptAndListen(source: String) {
         let turnId = ensureVoiceTurn(reason: "interrupt.\(source)")
         clearPendingDone(reason: "bargeIn.\(source)")
-        GigiDebugLogger.voiceEvent("orchestrator.interruptAndListen", turnId, ["source": source, "audioState": "\(GigiAudioManager.shared.state)"])
+        GigiDebugLogger.voiceEvent("orchestrator.interruptAndListen", turnId: turnId, ["source": source, "audioState": "\(GigiAudioManager.shared.state)"])
 
         SoundEngine.play(.wakeWord)
         if isQuickTalkSession { onQuickTalkStateChange?(.listening) }
@@ -426,12 +447,12 @@ class GigiSmartOrchestrator: ObservableObject {
         if let existing = currentVoiceTurnId { return existing }
         let id = UUID().uuidString.prefix(8).description
         currentVoiceTurnId = id
-        GigiDebugLogger.voiceEvent("orchestrator.turnStart", id, ["reason": reason])
+        GigiDebugLogger.voiceEvent("orchestrator.turnStart", turnId: id, ["reason": reason])
         return id
     }
 
     private func clearPendingDone(reason: String) {
-        GigiDebugLogger.voiceEvent("orchestrator.clearPendingDone", currentVoiceTurnId, ["reason": reason])
+        GigiDebugLogger.voiceEvent("orchestrator.clearPendingDone", turnId: currentVoiceTurnId, ["reason": reason])
         pendingDoneMessage = nil
         doneSafetyTask?.cancel()
         doneSafetyTask = nil
@@ -483,4 +504,5 @@ class GigiSmartOrchestrator: ObservableObject {
 
         return validParts.count >= 2 ? validParts : nil
     }
+
 }
