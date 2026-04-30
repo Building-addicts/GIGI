@@ -138,3 +138,4 @@
 - `2026-04-30T14:53:42Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +78/-1)_
 - `2026-04-30T14:54:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #92 "feat(ios): wire read_week_calendar into Day Plan Reasoner (Sub #15 2/4)" di @fc200490-sketch _(branch: `feat/issue-57-day-plan-calendar` · +78/-1 · #57)_
 - `2026-04-30T15:07:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +118/-2)_
+- `2026-04-30T18:08:04+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: test: switch GigiCloudService from Groq to NVIDIA NIM Llama 3.3 70B) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
