@@ -394,7 +394,9 @@ final class GigiAgentEngine {
                     let speech = pendingEditedSummaries.joined(separator: ". ") + "."
                     pendingEditedSummaries.removeAll()
                     GigiDebugLogger.log("PermissionGate: short-circuit speech=\(speech)")
-                    mem.addModelSpeech(speech)
+                    // NB: orchestrator.handleResult calls memory.resolveThinking
+                    // with this AgentResult.speech, which is the canonical UI
+                    // update. Calling addModelSpeech here too would double-write.
                     return AgentResult(
                         speech:          speech,
                         executedTools:   executedTools,
