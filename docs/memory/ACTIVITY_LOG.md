@@ -146,3 +146,4 @@
 - `2026-04-30T18:44:56+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: fix(nvidia): bump timeouts (8/12/15→20/25/30s) for NVIDIA NIM variance + neutr) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
 - `2026-04-30T18:46:04+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: log(local): session ended on `feat/nvidia-nim-provider-test` (last commit: fix(n) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
 - `2026-04-30T18:47:56+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: log(local): session ended on `feat/nvidia-nim-provider-test` (last commit: log(l) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
+- `2026-04-30T18:51:31+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: revert(provider): back to Groq — NVIDIA NIM had 404s + malformed tool outputs ) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
