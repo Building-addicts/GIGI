@@ -131,3 +131,4 @@
 - `2026-04-30T14:38:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #86 "feat(ios): seed MVPPreferences first-launch + GigiMemory.awaitReady (Sub #13 2/3)" di @fc200490-sketch _(branch: `feat/issue-51-mvp-preferences-seed` · +49/-0 · #51)_
 - `2026-04-30T14:39:49Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #87 _(branch: `feat/issue-52-mvp-preferences-injection` · totale +70/-18)_
 - `2026-04-30T14:40:49Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #52: "[Sub #13 · 3/3] Inject `MVPPreferences` in every LLM call (Groq + Claude bridge + Realtime)"
+- `2026-04-30T14:40:54Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #87 "feat(ios): inject MVPPreferences in every LLM call (Sub #13 3/3)" di @fc200490-sketch _(branch: `feat/issue-52-mvp-preferences-injection` · +70/-18 · #52)_
