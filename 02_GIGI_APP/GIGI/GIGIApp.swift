@@ -66,6 +66,7 @@ struct GIGIApp: App {
                     let mvpRoundTripOK = await GigiUserProfile.shared._debugMVPRoundTrip()
                     GigiDebugLogger.log("AC5 MVPPreferences round-trip → \(mvpRoundTripOK ? "OK" : "FAIL")")
                     await GigiDayPlanReasoner.debugRunWithMockData()
+                    await GigiDayPlanReasoner.debugRunWithRealCalendar()
                     #endif
                     GigiDebugLogger.log("MainTabView .task finished")
                 }
