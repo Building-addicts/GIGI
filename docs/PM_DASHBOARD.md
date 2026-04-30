@@ -62,8 +62,6 @@ Installa GitHub Mobile su iPhone se non l'hai. Setup notifiche:
 ## 📝 Contesto della settimana
 
 - **Goal**: `docs/MVP_SCOPE.md` — demo convincente di GIGI "Siri ma personale e agentic" venerdì 1 maggio
-- **Code freeze**: mercoledì 30 aprile ore 18:00
-- **QA gate**: issue #17 (mercoledì pomeriggio 14-18)
 - **Demo Day**: venerdì 1 maggio
 - **Stato Phase 1 (Claude Bridge)**: P1.1-P1.6 ✅ verificati 25/04
 - **Stato Phase 4 (QR pairing)**: ✅ commit `ca8a599`
