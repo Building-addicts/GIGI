@@ -5,16 +5,24 @@ enum GigiConfig {
     // MARK: - Groq API key (primary brain)
 
     static var groqAPIKey: String {
-        // Provider switch (NVIDIA NIM test branch): Info.plist FIRST so the
-        // build-time injected key always wins over a stale Keychain value left
-        // by a previous Groq install. Reverts to legacy Keychain-first lookup
-        // only if Info.plist slot is empty.
+        // Info.plist FIRST so the build-time injected key always wins over a
+        // stale Keychain value left by a previous install. Reverts to legacy
+        // Keychain-first lookup only if Info.plist slot is empty.
         let raw = Bundle.main.object(forInfoDictionaryKey: "GROQ_API_KEY") as? String ?? ""
         let plistKey = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if !plistKey.isEmpty { return plistKey }
         if let k = GigiKeychain.load(forKey: GigiKeychain.Key.groqAPIKey), !k.isEmpty { return k }
         if let k = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !k.isEmpty { return k }
         return ""
+    }
+
+    /// Secondary Groq key (different account) used by GigiCloudService as
+    /// automatic fallback when the primary key hits HTTP 429 (rate limit).
+    /// Build pipeline injects it in Info.plist as GROQ_API_KEY_2.
+    /// Returns empty string when no fallback is configured.
+    static var groqAPIKeyFallback: String {
+        let raw = Bundle.main.object(forInfoDictionaryKey: "GROQ_API_KEY_2") as? String ?? ""
+        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func setGroqAPIKey(_ key: String) {

@@ -170,7 +170,18 @@ final class GigiCloudService {
 
         return try await withThrowingTaskGroup(of: GigiLLMResponse.self) { group in
             group.addTask {
-                let (data, response) = try await URLSession.shared.data(for: req)
+                var (data, response) = try await URLSession.shared.data(for: req)
+                if let http = response as? HTTPURLResponse, http.statusCode == 429 {
+                    // Primary key hit rate-limit. Retry once with fallback key
+                    // (second Groq account) if configured.
+                    let fallback = GigiConfig.groqAPIKeyFallback
+                    if !fallback.isEmpty {
+                        var retryReq = req
+                        retryReq.setValue("Bearer \(fallback)", forHTTPHeaderField: "Authorization")
+                        GigiDebugLogger.log("LLM[groq] 429 on primary — retrying with fallback key")
+                        (data, response) = try await URLSession.shared.data(for: retryReq)
+                    }
+                }
                 if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                     let body = String(data: data, encoding: .utf8) ?? ""
                     throw GigiCloudError.httpError(http.statusCode, body)
@@ -178,7 +189,7 @@ final class GigiCloudService {
                 return try self.parseGroqResponse(from: data)
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: 13_000_000_000)
+                try await Task.sleep(nanoseconds: 28_000_000_000)
                 throw GigiCloudError.timeout
             }
             let result = try await group.next()!
@@ -344,7 +355,17 @@ final class GigiCloudService {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: req)
+        var (data, response) = try await URLSession.shared.data(for: req)
+        if let http = response as? HTTPURLResponse, http.statusCode == 429 {
+            // 429 fallback: retry once with secondary Groq key if configured.
+            let fallback = GigiConfig.groqAPIKeyFallback
+            if !fallback.isEmpty {
+                var retryReq = req
+                retryReq.setValue("Bearer \(fallback)", forHTTPHeaderField: "Authorization")
+                GigiDebugLogger.log("LLM[groq-raw] 429 on primary — retrying with fallback key")
+                (data, response) = try await URLSession.shared.data(for: retryReq)
+            }
+        }
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw GigiCloudError.httpError(http.statusCode, body)
