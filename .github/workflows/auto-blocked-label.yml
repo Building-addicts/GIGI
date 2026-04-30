@@ -1,0 +1,107 @@
+# Auto-add `blocked` label to issues that reference other open issues with
+# patterns like "Blocked by #N", "Depends on #N", "Waiting on #N", "Aspetto #N".
+#
+# Trigger: issue.opened/edited + issue_comment.created/edited
+# - Reads issue body + last 5 comments
+# - Extracts referenced issue numbers via regex
+# - Applies `blocked` label if at least ONE referenced issue is still OPEN
+# - No-op if label already present, or if all references are closed
+#
+# Sister workflows:
+# - auto-unblock.yml          (removes label when dependency closes)
+# - auto-clear-pr-blocking-marker.yml  (PR <!-- BLOCKING --> marker cleanup)
+
+name: Auto Blocked Label
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  detect-blocked:
+    runs-on: ubuntu-latest
+    # Skip on PR comments (issue_comment fires on PRs too — we only care issues)
+    if: ${{ !github.event.issue.pull_request }}
+    steps:
+      - name: Detect blocked-by references and apply label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number;
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+
+            // 1. Fetch issue + last 5 comments
+            const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number });
+
+            const comments_resp = await github.rest.issues.listComments({
+              owner, repo, issue_number,
+              per_page: 100,
+            });
+            const last_comments = comments_resp.data.slice(-5);
+            const text = (issue.body || '') + '\n' + last_comments.map(c => c.body || '').join('\n');
+
+            // 2. Match patterns
+            const patterns = [
+              /\bblocked\s*(?:by|from)\s*[:#]?\s*#?(\d+)/gi,
+              /\bdepends?\s+on\s+#?(\d+)/gi,
+              /\bwaiting\s+(?:on|for)\s+#?(\d+)/gi,
+              /\baspetto\s+(?:la\s+)?(?:issue\s+|chiusura\s+(?:di\s+)?)?#(\d+)/gi,
+              /\bstand-?by\s+(?:on|finch[eé]|fino\s+a)\s+#?(\d+)/gi,
+            ];
+
+            const refs = new Set();
+            for (const p of patterns) {
+              for (const m of text.matchAll(p)) {
+                const n = parseInt(m[1] ?? m[2], 10);
+                if (!isNaN(n) && n !== issue_number) refs.add(n);
+              }
+            }
+
+            console.log(`Issue #${issue_number}: extracted refs = [${[...refs].join(', ')}]`);
+
+            if (refs.size === 0) {
+              console.log('No blocked-by references detected — no-op.');
+              return;
+            }
+
+            // 3. Check if at least one reference is still OPEN
+            let any_open = false;
+            for (const n of refs) {
+              try {
+                const { data: ref_issue } = await github.rest.issues.get({ owner, repo, issue_number: n });
+                if (ref_issue.state === 'open') {
+                  any_open = true;
+                  console.log(`  ref #${n}: OPEN → blocking confirmed`);
+                  break;
+                } else {
+                  console.log(`  ref #${n}: CLOSED → not blocking`);
+                }
+              } catch (e) {
+                console.log(`  ref #${n}: NOT FOUND or inaccessible (${e.message}) → skip`);
+              }
+            }
+
+            if (!any_open) {
+              console.log('All referenced issues are closed — no-op.');
+              return;
+            }
+
+            // 4. Apply `blocked` label if not already present
+            const current_labels = (issue.labels || []).map(l => typeof l === 'string' ? l : l.name);
+            if (current_labels.includes('blocked')) {
+              console.log('Label `blocked` already present — no-op.');
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number,
+              labels: ['blocked'],
+            });
+            console.log(`✓ Applied label \`blocked\` to issue #${issue_number}`);
