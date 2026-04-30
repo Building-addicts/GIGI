@@ -17,6 +17,11 @@ final class GigiSpeechService: NSObject {
 
     private let synthesizer = AVSpeechSynthesizer()
 
+    /// Optional callback invoked when speak() is called with empty/whitespace-only text.
+    /// Use to short-circuit the Live Activity state machine to .done so the pill does
+    /// not dangle in .thinking/.speaking forever. Wired by GigiSmartOrchestrator.
+    var onEmptyText: (() -> Void)?
+
     private override init() {
         super.init()
         synthesizer.delegate = self
@@ -25,10 +30,19 @@ final class GigiSpeechService: NSObject {
     // MARK: - Primary speak
 
     func speak(_ text: String, tone: SpeechTone = .normal) {
-        guard !text.isEmpty else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            // T8: empty speech guard. Without this, callers outside the orchestrator's
+            // own short-circuit (DashboardView intro/outro, ActionDispatcher, WebAgent)
+            // would leave the pill stuck because didFinish never fires for "".
+            GigiDebugLogger.log("GigiSpeechService.speak: empty/whitespace text — skipping TTS, notifying done")
+            GigiAudioManager.shared.notifySpeakingFinished()
+            onEmptyText?()
+            return
+        }
         synthesizer.stopSpeaking(at: .immediate)
 
-        let utterance = AVSpeechUtterance(string: text)
+        let utterance = AVSpeechUtterance(string: trimmed)
         utterance.voice = preferredVoice()
         utterance.volume = 1.0
 
