@@ -41,12 +41,16 @@ struct SettingsView: View {
     @State private var pairedDeviceName: String? = nil
     @State private var forceClaude: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
     @State private var autoFallback: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
+    // Try It (DEBUG — remove post-MVP, see issue #151)
+    @State private var tryItRunning = false
+    @State private var tryItAlertText: String? = nil
     @FocusState var focusedField: SettingsField?
 
     var body: some View {
         NavigationStack {
             List {
                 brainSection
+                tryItDebugSection
                 brainModeSection
                 harnessSection
                 whatsAppSection
@@ -75,6 +79,15 @@ struct SettingsView: View {
             .task { await loadState() }
             .sheet(item: $activeSheet) { sheet in
                 settingsSheet(sheet)
+            }
+            .alert("GIGI debug result", isPresented: Binding(
+                get: { tryItAlertText != nil },
+                set: { if !$0 { tryItAlertText = nil } })
+            ) {
+                Button("OK", role: .cancel) { tryItAlertText = nil }
+            } message: {
+                Text(tryItAlertText ?? "")
+                    .font(.system(.body, design: .monospaced))
             }
         }
     }
@@ -133,6 +146,60 @@ struct SettingsView: View {
         } footer: {
             Text("Free key at console.groq.com — stored securely in your Keychain.")
                 .font(.caption)
+        }
+    }
+
+    // MARK: - Try It (DEBUG — remove post-MVP, see issue #151)
+
+    private var tryItDebugSection: some View {
+        Section {
+            Button(action: runTryIt) {
+                HStack {
+                    if tryItRunning {
+                        ProgressView().scaleEffect(0.85)
+                        Text("Listening…")
+                    } else {
+                        Image(systemName: "play.circle.fill")
+                            .foregroundColor(.purple)
+                        Text("Try GIGI now (debug)")
+                            .fontWeight(.medium)
+                    }
+                    Spacer()
+                }
+            }
+            .disabled(tryItRunning)
+        } header: {
+            Text("🧪 Try GIGI (debug)")
+        } footer: {
+            Text("Runs the full Action Button → DI → Orchestrator chain in-app, without going through a Shortcut. Requires a Groq API key. Speak after the Dynamic Island descends.")
+                .font(.caption)
+        }
+    }
+
+    private func runTryIt() {
+        guard !tryItRunning else { return }
+        tryItRunning = true
+        tryItAlertText = nil
+        Task {
+            do {
+                let outcome = try await GigiTryItDebugRunner.shared.run()
+                let text = """
+                Transcript: \(outcome.transcript)
+
+                Marker: \(outcome.marker)
+
+                Elapsed: \(String(format: "%.2f", outcome.elapsedTotal))s
+                """
+                await MainActor.run {
+                    tryItAlertText = text
+                    tryItRunning = false
+                }
+            } catch {
+                await MainActor.run {
+                    tryItAlertText = "FAILED: \(error.localizedDescription)"
+                    tryItRunning = false
+                }
+            }
         }
     }
 
