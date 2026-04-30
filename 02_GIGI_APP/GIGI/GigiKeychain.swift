@@ -76,6 +76,7 @@ enum GigiKeychain {
 
     enum Key {
         static let groqAPIKey        = "groq_api_key"
+        static let anthropicAPIKey   = "anthropic_api_key"   // GigiOrchestratorClient fallback provider
         static let geminiAPIKey      = "gemini_api_key"   // kept for migration; unused after Groq switch
         static let harnessBaseURL    = "harness_base_url"   // e.g. http://10.0.0.5:7779
         static let harnessSecret     = "harness_shared_secret"

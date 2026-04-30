@@ -5,7 +5,7 @@ import SwiftUI
 // All configuration in one place: API keys, wake word, privacy, debug.
 
 enum SettingsField: Hashable {
-    case groqKey, geminiKey, harnessURL, harnessSecret
+    case groqKey, geminiKey, anthropicKey, harnessURL, harnessSecret
 }
 
 private enum SettingsSheet: String, Identifiable {
@@ -19,6 +19,9 @@ private enum SettingsSheet: String, Identifiable {
 
 struct SettingsView: View {
     @State private var groqKey = ""
+    @State private var anthropicKey = ""
+    @State private var anthropicSavedAck = ""
+    @State private var showAnthropicKey = false
     @State private var geminiKey = ""
     @State private var showQRScanner = false
     @State private var showKey = false
@@ -47,6 +50,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 brainSection
+                orchestratorKeysSection
                 brainModeSection
                 harnessSection
                 whatsAppSection
@@ -132,6 +136,74 @@ struct SettingsView: View {
             Text("🧠 AI Brain (Groq)")
         } footer: {
             Text("Free key at console.groq.com — stored securely in your Keychain.")
+                .font(.caption)
+        }
+    }
+
+    // MARK: - Orchestrator Keys section (#143 — direct LLM router for Action Button flow)
+
+    private var orchestratorKeysSection: some View {
+        Section {
+            // Groq orchestrator status (reuses the brainSection key — informational only)
+            HStack {
+                Image(systemName: groqKey.isEmpty ? "circle" : "checkmark.circle.fill")
+                    .foregroundColor(groqKey.isEmpty ? .red : .green)
+                Text("Groq")
+                    .fontWeight(.medium)
+                Spacer()
+                Text(groqKey.isEmpty ? "Not set" : "Ready")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
+            // Anthropic key (fallback provider for orchestrator)
+            HStack {
+                if showAnthropicKey {
+                    TextField("sk-ant-...", text: $anthropicKey)
+                        .font(.system(.body, design: .monospaced))
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .focused($focusedField, equals: .anthropicKey)
+                        .onSubmit { saveAnthropicKey() }
+                } else {
+                    SecureField("Anthropic API Key", text: $anthropicKey)
+                        .font(.system(.body, design: .monospaced))
+                        .submitLabel(.done)
+                        .focused($focusedField, equals: .anthropicKey)
+                        .onSubmit { saveAnthropicKey() }
+                }
+                Button(action: { showAnthropicKey.toggle() }) {
+                    Image(systemName: showAnthropicKey ? "eye.slash" : "eye")
+                        .foregroundColor(.secondary)
+                }
+                Button(action: saveAnthropicKey) {
+                    Text("Save")
+                        .foregroundColor(.purple)
+                        .fontWeight(.semibold)
+                }
+                .disabled(anthropicKey.isEmpty)
+            }
+
+            HStack {
+                Image(systemName: anthropicKey.isEmpty ? "circle" : "checkmark.circle.fill")
+                    .foregroundColor(anthropicKey.isEmpty ? .red : .green)
+                Text("Anthropic")
+                    .fontWeight(.medium)
+                Spacer()
+                if !anthropicSavedAck.isEmpty {
+                    Text(anthropicSavedAck)
+                        .font(.subheadline)
+                        .foregroundColor(.green)
+                } else {
+                    Text(anthropicKey.isEmpty ? "Not set" : "Ready")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+        } header: {
+            Text("🎙 Orchestrator Keys")
+        } footer: {
+            Text("Used by the Action Button flow (issue #143). Groq is the primary router; Anthropic Haiku is the configurable fallback.")
                 .font(.caption)
         }
     }
@@ -628,6 +700,10 @@ struct SettingsView: View {
         accessoryList = await GigiHomeKit.shared.accessoryNames()
         let existing = GigiConfig.groqAPIKey
         if !existing.isEmpty { groqKey = existing }
+        if let anth = GigiKeychain.load(forKey: GigiKeychain.Key.anthropicAPIKey),
+           !anth.isEmpty {
+            anthropicKey = anth
+        }
         harnessURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) ?? ""
         harnessSecret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? ""
         let pairingState = GigiHarnessClient.shared.pairingState
@@ -685,6 +761,17 @@ struct SettingsView: View {
         guard !trimmed.isEmpty else { return }
         GigiConfig.setGroqAPIKey(trimmed)
         connectionStatus = "Key saved"
+    }
+
+    private func saveAnthropicKey() {
+        let trimmed = anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        GigiKeychain.save(trimmed, forKey: GigiKeychain.Key.anthropicAPIKey)
+        anthropicSavedAck = "✓ Saved"
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run { anthropicSavedAck = "" }
+        }
     }
 
     private func saveGeminiKey() {
