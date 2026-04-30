@@ -27,6 +27,42 @@ struct DayPlanOutput {
     let latencyMs: Int
 }
 
+// MARK: - Sources (sub #58)
+//
+// Protocollo + Live impl per disaccoppiare l'engine da #13 (Preferences) e
+// #14 (Task Extraction): la sub 3/4 può mergiare anche prima che quelle epic
+// chiudano. Live impl legge da UserDefaults come fallback "leggero" in attesa
+// del wiring real-source via TODO.
+
+protocol DayPlanPreferenceSource {
+    func currentPreferences() -> [String]
+}
+
+protocol DayPlanTaskSource {
+    func currentSessionTasks() -> [String]
+}
+
+struct LivePreferenceSource: DayPlanPreferenceSource {
+    static let userDefaultsKey = "mvp.preferences.array"
+
+    func currentPreferences() -> [String] {
+        // TODO(#13): sostituire con `await GigiUserProfile.shared.loadMVPPreferences()`
+        // serializzata a frasi quando il parent #13 mergia. Per ora UserDefaults
+        // come seed leggero non-async (il source è chiamato da contesti sync).
+        return UserDefaults.standard.stringArray(forKey: Self.userDefaultsKey) ?? []
+    }
+}
+
+struct LiveTaskSource: DayPlanTaskSource {
+    static let userDefaultsKey = "mvp.tasks.array"
+
+    func currentSessionTasks() -> [String] {
+        // TODO(#14): sostituire con `GigiConversationMemory.recentExtractedTasks()`
+        // quando il parent #14 mergia il task store della session corrente.
+        return UserDefaults.standard.stringArray(forKey: Self.userDefaultsKey) ?? []
+    }
+}
+
 @MainActor
 final class GigiDayPlanReasoner {
     static let shared = GigiDayPlanReasoner()
@@ -36,12 +72,24 @@ final class GigiDayPlanReasoner {
 
     /// Compone un piano per OGGI usando il calendario utente reale via tool
     /// `read_week_calendar` (preferito) o `read_calendar` (fallback). Il
-    /// caller passa pref + task — la sub 3/4 (#58) li raccoglierà davvero.
+    /// caller passa pref + task espliciti.
     func reasonForToday(preferences: [String], tasks: [String]) async -> DayPlanOutput? {
         let events = await loadCalendarEvents()
         let nowISO = ISO8601DateFormatter().string(from: Date())
         let input = DayPlanInput(events: events, preferences: preferences, tasks: tasks, nowISO: nowISO)
         return await reason(input: input)
+    }
+
+    /// Sub #58 (3/4): variant che usa Live sources per pref + task. Equivalente
+    /// a `reasonForToday(preferences: live.prefs, tasks: live.tasks)` — chiave
+    /// per il path runtime una volta che la sub 4/4 (#59) registrerà il tool.
+    func reasonForTodayLive(
+        preferenceSource: DayPlanPreferenceSource = LivePreferenceSource(),
+        taskSource: DayPlanTaskSource = LiveTaskSource()
+    ) async -> DayPlanOutput? {
+        let prefs = preferenceSource.currentPreferences()
+        let tasks = taskSource.currentSessionTasks()
+        return await reasonForToday(preferences: prefs, tasks: tasks)
     }
 
     private func loadCalendarEvents() async -> [String] {
@@ -199,6 +247,28 @@ extension GigiDayPlanReasoner {
             GigiDebugLogger.log("DayPlanReasoner mock spokenText: \(o.spokenText)")
         } else {
             GigiDebugLogger.log("DayPlanReasoner mock: nil output (LLM empty or error)")
+        }
+        return output
+    }
+
+    /// Sub #58: seed UserDefaults con pref + task demo, poi invoca
+    /// reasonForTodayLive(). Valida AC2-AC5.
+    @discardableResult
+    static func debugRunWithLiveSources() async -> DayPlanOutput? {
+        UserDefaults.standard.set(
+            ["Preferisce deep-work la mattina", "Pranzo veloce alle 13"],
+            forKey: LivePreferenceSource.userDefaultsKey
+        )
+        UserDefaults.standard.set(
+            ["Finire pitch deck"],
+            forKey: LiveTaskSource.userDefaultsKey
+        )
+        let output = await GigiDayPlanReasoner.shared.reasonForTodayLive()
+        if let o = output {
+            GigiDebugLogger.log("DayPlanReasoner live: latency=\(o.latencyMs)ms · citedPrefs=\(o.citedPreferences.count) · citedTasks=\(o.citedTasks.count)")
+            GigiDebugLogger.log("DayPlanReasoner live spokenText: \(o.spokenText)")
+        } else {
+            GigiDebugLogger.log("DayPlanReasoner live: nil output (LLM empty/error)")
         }
         return output
     }
