@@ -1198,6 +1198,46 @@ struct AskClaudeTool: GigiTool {
     }
 }
 
+// MARK: - ProposeDayPlanTool (sub #59 — chiusura parent #15)
+//
+// Espone `GigiDayPlanReasoner.reasonForTodayLive()` come tool LLM
+// `propose_day_plan` invocabile dall'agent loop quando l'utente chiede
+// un piano giornata ("che cosa devo fare oggi?", "proponi un piano",
+// "what should I do today"). Il tool, oltre a ritornare lo spokenText
+// come success value (per il context dell'agent loop), invoca
+// direttamente `GigiSpeechService.speak(...)` con tono `.calm` per la
+// voice delivery — è un tool VOCALE-FIRST, non testuale.
+
+struct ProposeDayPlanTool: GigiTool {
+    let name = "propose_day_plan"
+    let requiresConfirmation = false
+    let tags = [
+        "plan", "piano", "oggi", "today", "schedule", "day", "giornata",
+        "agenda", "cosa devo fare", "what should i do", "propose a plan",
+        "proponi un piano", "day plan"
+    ]
+
+    let declaration = FunctionDeclaration(
+        name: "propose_day_plan",
+        description: "Suggest a coherent day plan combining the user's calendar, preferences, and current session tasks. Use when the user asks 'what should I do today', 'propose a plan', or anytime a structured day suggestion is appropriate. The tool also speaks the plan aloud via TTS in Italian, so the agent's text reply can be brief.",
+        parameters: JSONSchema(type: "object", properties: [:], required: [])
+    )
+
+    func execute(args: [String: Any]) async -> ToolResult {
+        guard let plan = await GigiDayPlanReasoner.shared.reasonForTodayLive() else {
+            return .failure("Day plan engine returned no result.")
+        }
+        // Voice-first: speakare PRIMA di ritornare al loop, così la voce
+        // parte appena il tool risolve (≤ 5s end-to-end target).
+        await MainActor.run {
+            GigiSpeechService.shared.speak(plan.spokenText, tone: .calm)
+        }
+        let elapsed = plan.latencyMs
+        GigiDebugLogger.log("propose_day_plan: spoken (latencyMs=\(elapsed) citedPrefs=\(plan.citedPreferences.count) citedTasks=\(plan.citedTasks.count))")
+        return .success(plan.spokenText, tokenEstimate: 80)
+    }
+}
+
 // MARK: - GigiToolRegistry
 
 @MainActor
@@ -1211,6 +1251,7 @@ final class GigiToolRegistry {
         TorchOnTool(), TorchOffTool(), FaceTimeTool(), FaceTimeAudioTool(),
         MediaPlayPauseTool(), MediaNextTool(), MediaPreviousTool(),
         ReadCalendarTool(), ReadWeekCalendarTool(), FindFreeSlotTool(),
+        ProposeDayPlanTool(),
         SearchWebTool(), ReadNewsTool(), SendEmailTool(),
         ToggleWifiTool(), ToggleBluetoothTool(),
         HomekitOnTool(), HomekitOffTool(), HomekitDimTool(),
@@ -1232,7 +1273,11 @@ final class GigiToolRegistry {
         "toggle_wifi", "toggle_bluetooth",
         "media_next", "media_previous", "media_play_pause",
         "read_calendar",
-        "ask_claude"
+        "ask_claude",
+        // Sub #59: chiave demo scene 5. Tag-match già presente, ma sempre
+        // incluso per garantire che l'agent loop possa proporre il piano
+        // anche su query laterali ("organizziamo la giornata", etc.).
+        "propose_day_plan"
     ]
 
     private lazy var byName: [String: any GigiTool] = {
