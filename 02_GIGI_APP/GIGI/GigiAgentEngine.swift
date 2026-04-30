@@ -301,13 +301,13 @@ final class GigiAgentEngine {
                 switch error {
                 case GigiCloudError.httpError(let status, let body):
                     let snippet = body.prefix(160)
-                    speech = "Groq error \(status). \(snippet)"
+                    speech = "LLM error \(status). \(snippet)"
                 case GigiCloudError.missingAPIKey:
-                    speech = "Groq API key missing — add it in Settings."
+                    speech = "LLM API key missing — add it in Settings."
                 case GigiCloudError.timeout:
-                    speech = "Groq timed out — try again."
+                    speech = "LLM timed out — try again."
                 case GigiCloudError.emptyResponse:
-                    speech = "Groq returned an empty response."
+                    speech = "LLM returned an empty response."
                 default:
                     speech = "Network error: \(error.localizedDescription)"
                 }

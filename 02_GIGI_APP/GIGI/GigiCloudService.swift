@@ -152,7 +152,7 @@ final class GigiCloudService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        req.timeoutInterval = 15
+        req.timeoutInterval = 30  // NVIDIA NIM cold start can hit 5-10s on free tier
 
         var body: [String: Any] = [
             "model":       model ?? agentModel,
@@ -288,7 +288,7 @@ final class GigiCloudService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        req.timeoutInterval = 8
+        req.timeoutInterval = 20  // NVIDIA NIM cold start tolerance
         req.httpBody = try? JSONSerialization.data(withJSONObject: [
             "model": fastModel,
             "messages": [["role": "user", "content": "hi"]],
@@ -330,7 +330,7 @@ final class GigiCloudService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(GigiConfig.groqAPIKey)", forHTTPHeaderField: "Authorization")
-        req.timeoutInterval = 12
+        req.timeoutInterval = 25  // NVIDIA NIM cold start tolerance
 
         let body: [String: Any] = [
             "model": model,
