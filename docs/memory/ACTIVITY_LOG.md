@@ -140,3 +140,4 @@
 - `2026-04-30T15:07:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +118/-2)_
 - `2026-04-30T18:08:04+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: test: switch GigiCloudService from Groq to NVIDIA NIM Llama 3.3 70B) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
 - `2026-04-30T18:13:19+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: log(local): session ended on `feat/nvidia-nim-provider-test` (last commit: test:) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
+- `2026-04-30T18:17:34+0200` · local · session ended on `feat/nvidia-nim-provider-test` (last commit: fix(config): Info.plist key wins over Keychain (NVIDIA test) — overrides stale) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
