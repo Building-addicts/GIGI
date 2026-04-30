@@ -139,3 +139,4 @@
 - `2026-04-30T14:54:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #92 "feat(ios): wire read_week_calendar into Day Plan Reasoner (Sub #15 2/4)" di @fc200490-sketch _(branch: `feat/issue-57-day-plan-calendar` · +78/-1 · #57)_
 - `2026-04-30T15:07:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +118/-2)_
 - `2026-04-30T16:38:55Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #152: "[BUG] Voice action auto-replays when returning to app from external action (iMessage / x-callback)" _(parent: (no parent))_
+- `2026-04-30T17:39:06Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #94 "feat(ios): register propose_day_plan tool — voice delivery (Sub #15 4/4)" di @fc200490-sketch _(branch: `feat/issue-59-propose-day-plan-tool` · +118/-2 · #59)_
