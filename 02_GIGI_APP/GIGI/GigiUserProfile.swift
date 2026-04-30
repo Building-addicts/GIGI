@@ -194,6 +194,32 @@ final class GigiUserProfile {
         GigiDebugLogger.log("MVPPreferences seeded ✓")
     }
 
+    // Sub-issue #52 (3/3 di #13). Helper per costruire il blocco markdown
+    // `## USER PREFERENCES` da iniettare nei system prompt LLM (Claude bridge,
+    // Groq agent, Realtime voice). Solo campi non-empty entrano nel blocco —
+    // ritorna stringa vuota se il seed non è stato caricato (no-op safe).
+    func mvpPreferencesContext() async -> String {
+        let p = await loadMVPPreferences()
+        guard p != .empty else { return "" }
+        var lines: [String] = []
+        if !p.communicationTone.isEmpty { lines.append("- Tone: \(p.communicationTone)") }
+        if !p.workHours.isEmpty         { lines.append("- Work hours: \(p.workHours)") }
+        lines.append("- Morning focus (deep work AM): \(p.morningFocus)")
+        if !p.vipContacts.isEmpty       { lines.append("- VIP contacts: \(p.vipContacts.joined(separator: ", "))") }
+        lines.append("- Travel buffer: \(p.travelBufferMinutes) min")
+        if !p.foodPreference.isEmpty    { lines.append("- Food: \(p.foodPreference)") }
+        if !p.routineHints.isEmpty      { lines.append("- Routines: \(p.routineHints.joined(separator: "; "))") }
+        return "## USER PREFERENCES\n" + lines.joined(separator: "\n")
+    }
+
+    /// Wraps a system prompt with the `## USER PREFERENCES` block. No-op if
+    /// preferences are empty (returns the original prompt unchanged).
+    func injectMVPContext(into systemPrompt: String) async -> String {
+        let prefs = await mvpPreferencesContext()
+        guard !prefs.isEmpty else { return systemPrompt }
+        return prefs + "\n\n" + systemPrompt
+    }
+
     // CSV codec: GigiMemory è key-value String puro, niente JSON.
     // Le virgole interne vengono escapate come `\,` per round-trip integro.
     private static func encodeCSV(_ items: [String]) -> String {
