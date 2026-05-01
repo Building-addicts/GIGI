@@ -143,3 +143,4 @@
 - `2026-04-30T17:39:12Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #59: "[Sub #15 · 4/4] Voice delivery + tool registration `propose_day_plan`"
 - `2026-04-30T17:41:02Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
 - `2026-04-30T19:46:39+0200` · local · session ended on `feat/issue-88-core-reliability` (last commit: merge(main): combine #106 fast-path always-included tools with #94 propose_day_p) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
+- `2026-05-01T20:08:34+0200` · local · session ended on `feat/issue-88-core-reliability` (last commit: log(local): session ended on `feat/issue-88-core-reliability` (last commit: merg) _(modified: docs/SETUP_LEO_FEDE.md,docs/TEST_E2E.md)_
