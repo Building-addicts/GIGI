@@ -144,6 +144,23 @@ gh issue edit <N> --add-label blocked    # forza in 🟡
 gh issue edit <N> --remove-label blocked # forza out
 ```
 
+## Label `post-mvp` — scope deescalation dal PM (issue #153)
+
+Oltre alla label `blocked` (dipendenza tecnica), il sistema riconosce anche **`post-mvp`** come trigger 🟡 WAITING:
+
+| Label | Significato | Chi la applica | Chi la rimuove |
+|---|---|---|---|
+| `blocked` | Dipendenza tecnica concreta su altra issue/PR. Auto-detected dai pattern `Blocked by #N` etc. | Action 1 `auto-blocked-label.yml` | Action 2 `auto-unblock.yml` quando dependency closes |
+| `post-mvp` | Decisione PM di spostare scope a v1.1. Es. "wake word post-mvp" | Claude del PM su comando vocale (vedi CLAUDE.md §"Procedura deescalation scope") | Claude del PM su "ripristino X" |
+
+Issue con `post-mvp` mostrano: `⏸️ post-mvp (deescalated to v1.1)` nel dashboard 🟡, distinguibile da `blocked` che mostra solo `⏸️ blocked`.
+
+### Comando vocale PM
+
+> *"sposto wake word a fine"* → Claude del PM identifica issue/PR collegate, chiede conferma, applica label + comment standard.
+
+Vedi `CLAUDE.md` §"🎚️ Procedura deescalation scope" per details.
+
 ## Convention future (parking lot)
 
 Se serve in futuro:
@@ -154,4 +171,6 @@ Se serve in futuro:
 - File hook: `.claude/hooks/session-start.sh` — Python embedded section ~163-260
 - Decisione architetturale: issue #130
 - Automazione: issue #136
+- Convention OBBLIGO Claude del dev: issue #139
+- Scope deescalation `post-mvp`: issue #153
 - Background motivante: PM feedback 2026-04-29 ore 03:30 — "ranking sembra a caso"
