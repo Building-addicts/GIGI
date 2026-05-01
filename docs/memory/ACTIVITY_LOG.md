@@ -153,3 +153,4 @@
 - `2026-05-01T15:23:02+0200` · local · session ended on `feat/issue-132-sys-catalog` (last commit: chore(ios): remove dead-code orphan engines) _(modified: 02_GIGI_APP/GIGI/GigiBackgroundTalkIntent.swift,02_GIGI_APP/GIGI/GigiConfig.swift docs/runbooks/talk-to-gigi-universal-shortcut.md,docs/runbooks/talk-to-gigi-build-step-by-step.md docs/runbooks/talk-to-gigi-sys-branch.md)_
 - `2026-05-01T15:25:53+0200` · local · session ended on `feat/issue-132-sys-catalog` (last commit: docs(ios): point Shortcut to v4 (SYS branch) + add build runbooks)
 - `2026-05-01T15:25:58+0200` · local · session ended on `feat/issue-132-sys-catalog` (last commit: log(local): session ended on `feat/issue-132-sys-catalog` (last commit: docs(ios)
+- `2026-05-01T18:08:36+0200` · local · session ended on `feat/issue-132-sys-catalog` (last commit: log(local): session ended on `feat/issue-132-sys-catalog` (last commit: log(loca)
