@@ -166,6 +166,75 @@ Prima di postare comment/body issue/PR che menzionano una dipendenza, Claude DEV
 
 Vedi `docs/runbooks/session-start-dashboard.md` per details + GitHub Actions logic.
 
+### 🎚️ Procedura deescalation scope — comando vocale del PM
+
+**Quando il PM (@ArmandoBattaglino) dice una frase come**:
+
+| Trigger riconosciuti | Esempio |
+|---|---|
+| `"sposto X a fine"` / `"X a fine"` | *"sposto wake word a fine"* |
+| `"deferred X"` / `"X deferred"` | *"deferred always-listening"* |
+| `"X post-mvp"` / `"post-mvp X"` | *"wake word post-mvp"* |
+| `"metto in pausa X"` | *"metto in pausa il NLU"* |
+| `"deescala X"` / `"deescalate X"` | *"deescala wake word"* |
+
+**Claude del PM DEVE eseguire questa sequenza**:
+
+1. **Identifica scope X**: keyword da matchare nel titolo/body delle issue/PR open. Esempi:
+   - "wake word" → grep `wake|wake-word|hey gigi` in titoli
+   - "always listening" → grep `always.listen|always-listening`
+   - "NLU" → grep `nlu|intent`
+
+2. **Esegui search**:
+   ```bash
+   gh search issues --repo Building-addicts/GIGI --state open "<keyword>" --json number,title,labels
+   gh search prs --repo Building-addicts/GIGI --state open "<keyword>" --json number,title
+   ```
+
+3. **Mostra al PM lista deduplicata** delle issue/PR trovate, con label corrente:
+   ```
+   Trovate 13 issue/PR che toccano "wake word":
+     #65 (no label)        Voice & Wake — W2/W3/W4...
+     #66 (no label)        Dynamic Island D1 + Follow-up...
+     ...
+     #115 [post-mvp] (già) voice: barge-in inconsistente
+     PR #85 (no label)     always-listening consent flow
+     PR #103 (no label)    wake word de-scope
+     PR #106 (no label)    NLU intents
+
+   Procedo ad applicare label `post-mvp` a tutte (escluso #115 già marcata)?
+   ```
+
+4. **Su conferma PM** ("sì" / "vai" / "ok"):
+   - Per ogni issue/PR senza label `post-mvp`:
+     ```bash
+     gh issue edit <N> --repo Building-addicts/GIGI --add-label post-mvp
+     ```
+     (per PR: `gh pr edit <N> --add-label post-mvp`)
+   - Posta comment standardizzato:
+     ```
+     ⏸️ Deescalated to post-MVP by PM @ArmandoBattaglino YYYY-MM-DD —
+     "<scope X>" feature resumes in v1.1.
+     ```
+
+5. **Conferma al PM**: `✅ <N> issue/PR ora in 🟡 WAITING al prossimo session-start dei dev.`
+
+#### Comando inverso — "ripristino X" / "riprendiamo X"
+
+Stessa logica al contrario:
+1. Search issue/PR con label `post-mvp` + keyword scope
+2. Mostra lista al PM
+3. Su conferma: `gh issue edit N --remove-label post-mvp` + comment `▶️ Resumed from post-MVP by @ArmandoBattaglino YYYY-MM-DD — back to active queue.`
+
+#### Differenza `blocked` vs `post-mvp`
+
+| Label | Quando usarla | Riprende quando |
+|---|---|---|
+| `blocked` | Dipendenza tecnica concreta da altra issue/PR aperta. Pattern auto-detected. | Dependency closes (Action 2 rimuove auto) |
+| `post-mvp` | Decisione di scope dal PM. Feature spostata a v1.1. | PM dice "ripristino X" (manuale, non auto) |
+
+Entrambe finiscono in 🟡 WAITING dashboard, ma con label diversa per chiarezza.
+
 ### Flusso completo per ogni issue (da seguire alla lettera)
 
 #### 1. Onboarding sessione (auto via SessionStart hook)
