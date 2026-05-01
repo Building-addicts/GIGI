@@ -144,3 +144,4 @@
 - `2026-04-30T17:41:02Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
 - `2026-04-30T17:42:15Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #121 "fix(ios): declare live activity support on widget extension" di @Leonardo-Corte _(branch: `fix/issue-119-activitykit-entitlement` · +4/-0 · #119)_
 - `2026-04-30T17:45:52Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #106 _(branch: `feat/issue-88-core-reliability` · totale +146/-12)_
+- `2026-05-01T17:48:42Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #154: "feat(infra): post-mvp scope deescalation — Claude PM auto-applies label on voice command" _(branch: `feat/issue-153-post-mvp-deescalation` · 1 commit · +106/-4 · 3 file · #153)_
