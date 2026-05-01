@@ -166,9 +166,20 @@ Prima di postare comment/body issue/PR che menzionano una dipendenza, Claude DEV
 
 Vedi `docs/runbooks/session-start-dashboard.md` per details + GitHub Actions logic.
 
-### 🎚️ Procedura deescalation scope — comando vocale del PM
+### 🎚️ Procedura deescalation scope — varianti per ruolo
 
-**Quando il PM (@ArmandoBattaglino) dice una frase come**:
+**Decisione di scope MVP (sposta feature X a post-MVP) è autorità del PM (@ArmandoBattaglino).** I dev (Leo, Fede) possono **proporla** ma non eseguirla unilateralmente.
+
+Il branch dipende da `$HANDLE` settato dal SessionStart hook (`.claude/hooks/session-start.sh`):
+
+| Ruolo dev attuale | Comando vocale | Cosa fa Claude |
+|---|---|---|
+| **PM** (`HANDLE == "ArmandoBattaglino"`) | "sposto X a fine" | **Full apply**: search + label + comment auto |
+| **Dev** (Leo / Fede / altri) | "sposto X a fine" | **Proposal mode**: search + comment su #19 con cc @ArmandoBattaglino, NO label change |
+
+#### Variante A — PM full apply
+
+Quando il PM (@ArmandoBattaglino) dice una frase come:
 
 | Trigger riconosciuti | Esempio |
 |---|---|
@@ -219,12 +230,53 @@ Vedi `docs/runbooks/session-start-dashboard.md` per details + GitHub Actions log
 
 5. **Conferma al PM**: `✅ <N> issue/PR ora in 🟡 WAITING al prossimo session-start dei dev.`
 
+#### Variante B — Dev proposal mode
+
+**Quando un dev NON-PM** (Leo, Fede, o qualsiasi `HANDLE != "ArmandoBattaglino"`) dice una frase di deescalation, Claude del dev DEVE eseguire la sequenza **proposal**, NON la full-apply:
+
+1. **Identifica scope X**: stesso grep di Variante A
+2. **Esegui search**: stessa
+3. **Mostra al dev** lista issue/PR + spiega:
+   ```
+   Trovate N issue/PR che toccano "<scope>".
+
+   ⚠️ Decisione di scope MVP è autorità del PM. Posso aprire un comment di proposal su #19 (LIVE FEED) chiedendo approval ad @ArmandoBattaglino.
+
+   Procedo? (sì/no)
+   ```
+4. **Su conferma del dev** ("sì"):
+   - Posta comment su issue **#19** (LIVE FEED) usando `gh issue comment 19 --body "..."`:
+     ```
+     [HH:MM] @<dev_handle> · proposal-deescalation
+     🎚️ Propongo di spostare "<scope X>" a post-MVP.
+
+     Issue/PR coinvolte (N totali):
+     - #65 — Voice & Wake W2/W3...
+     - #66 — Dynamic Island D1...
+     - PR #103 — wake word de-scope
+     - ...
+
+     Razionale dev: <breve spiegazione che il dev fornisce o Claude deduce dalla frase>
+
+     cc @ArmandoBattaglino — se approvi, di' al tuo Claude *"sposto <scope X> a fine"* per applicare label automaticamente.
+     ```
+   - **NON applica label `post-mvp`**
+5. **Comunica al dev**: `✅ Proposta postata su #19 LIVE FEED. Quando @ArmandoBattaglino approva nella sua sessione, label e auto-move partono.`
+
+Razionale: i dev hanno repo write access e tecnicamente potrebbero applicare label `post-mvp` direttamente, ma la convention vuole che ogni decisione di scope passi dal PM. Claude del dev è il guardiano della convention.
+
 #### Comando inverso — "ripristino X" / "riprendiamo X"
 
-Stessa logica al contrario:
+**Stessa asimmetria PM/Dev**:
+- Se PM lo dice → Claude PM: search + remove label + comment auto
+- Se Dev lo dice → Claude Dev: proposal su #19 con cc PM, NO label change
+
+PM full apply:
 1. Search issue/PR con label `post-mvp` + keyword scope
 2. Mostra lista al PM
 3. Su conferma: `gh issue edit N --remove-label post-mvp` + comment `▶️ Resumed from post-MVP by @ArmandoBattaglino YYYY-MM-DD — back to active queue.`
+
+Dev proposal: stesso pattern di Variante B sopra ma testo `Propongo di RIPRISTINARE "<scope>"`.
 
 #### Differenza `blocked` vs `post-mvp`
 
