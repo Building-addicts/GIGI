@@ -150,3 +150,4 @@
 - `2026-05-01T17:59:55Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #155: "feat(infra): GitHub Project — Post-MVP column + auto-move on label" _(branch: `feat/post-mvp-project-column` · 1 commit · +230/-1 · 2 file · #153)_
 - `2026-05-01T18:06:51Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #156: "fix(workflows): graphql query Projects v2 — field(id:) not supported" _(branch: `fix/post-mvp-graphql` · 1 commit · +23/-15 · 2 file · (no link))_
 - `2026-05-01T18:06:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #156 "fix(workflows): graphql query Projects v2 — field(id:) not supported" di @ArmandoBattaglino _(branch: `fix/post-mvp-graphql` · +23/-15 · (no link))_
+- `2026-05-01T18:27:05Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #158 "docs(claude.md): scope deescalation — split PM full-apply vs Dev proposal-mode" di @ArmandoBattaglino _(branch: `feat/issue-157-deescalation-roles` · +63/-6 · #157)_
