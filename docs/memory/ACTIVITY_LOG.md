@@ -149,3 +149,4 @@
 - `2026-05-01T17:48:51Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #153: "feat(infra): scope deescalation procedure — 'post-mvp' label included in 🟡 WAITING + Claude PM auto-applies on PM voice command"
 - `2026-05-01T17:59:55Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #155: "feat(infra): GitHub Project — Post-MVP column + auto-move on label" _(branch: `feat/post-mvp-project-column` · 1 commit · +230/-1 · 2 file · #153)_
 - `2026-05-01T18:06:51Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #156: "fix(workflows): graphql query Projects v2 — field(id:) not supported" _(branch: `fix/post-mvp-graphql` · 1 commit · +23/-15 · 2 file · (no link))_
+- `2026-05-01T18:06:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #156 "fix(workflows): graphql query Projects v2 — field(id:) not supported" di @ArmandoBattaglino _(branch: `fix/post-mvp-graphql` · +23/-15 · (no link))_
