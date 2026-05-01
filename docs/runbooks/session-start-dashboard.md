@@ -155,11 +155,16 @@ Oltre alla label `blocked` (dipendenza tecnica), il sistema riconosce anche **`p
 
 Issue con `post-mvp` mostrano: `⏸️ post-mvp (deescalated to v1.1)` nel dashboard 🟡, distinguibile da `blocked` che mostra solo `⏸️ blocked`.
 
-### Comando vocale PM
+### Comando vocale — varianti per ruolo (issue #157)
 
-> *"sposto wake word a fine"* → Claude del PM identifica issue/PR collegate, chiede conferma, applica label + comment standard.
+| Ruolo | Cosa succede |
+|---|---|
+| **PM** (@ArmandoBattaglino) dice "sposto X a fine" | Full apply: search + label + comment auto |
+| **Dev** (Leo, Fede, ecc.) dice stessa frase | Proposal mode: comment di proposta su #19 LIVE FEED con cc PM, NO label change |
 
-Vedi `CLAUDE.md` §"🎚️ Procedura deescalation scope" per details.
+Razionale: scope MVP è autorità PM. Dev possono proporre, PM esegue. Claude del dev è il guardiano della convention.
+
+Vedi `CLAUDE.md` §"🎚️ Procedura deescalation scope" per details + esempio template proposal comment.
 
 ## Convention future (parking lot)
 
