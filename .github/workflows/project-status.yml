@@ -291,17 +291,19 @@ jobs:
           ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
           OPT_POST_MVP=$(gh api graphql -f query='
-            query($project: ID!, $field: ID!) {
+            query($project: ID!) {
               node(id: $project) {
                 ... on ProjectV2 {
-                  field(id: $field) {
-                    ... on ProjectV2SingleSelectField {
-                      options { id name }
+                  fields(first: 50) {
+                    nodes {
+                      ... on ProjectV2SingleSelectField {
+                        id options { id name }
+                      }
                     }
                   }
                 }
               }
-            }' -F project="$PROJECT_ID" -F field="$STATUS_FIELD" --jq '.data.node.field.options[] | select(.name == "Post-MVP") | .id')
+            }' -F project="$PROJECT_ID" --jq ".data.node.fields.nodes[] | select(.id == \"$STATUS_FIELD\") | .options[] | select(.name == \"Post-MVP\") | .id")
 
           if [ -z "$OPT_POST_MVP" ]; then
             echo "Post-MVP option not yet created in Project — run setup-post-mvp-status.yml first"
