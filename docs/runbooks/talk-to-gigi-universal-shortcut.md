@@ -8,12 +8,14 @@ native iOS action without opening the GIGI app.
 
 ## Top-Level Loop
 
-1. `Repeat` 50 times.
-2. `Dictate Text`.
-3. `If Dictated Text contains stop` -> `Exit Shortcut`.
-4. Run App Intent `Process speech with GIGI` with `Text = Dictated Text`.
-5. Save its output as `GIGI Result`.
-6. Route `GIGI Result` by prefix in this order:
+1. Before the loop, create `Text "no"` and set variable `Spoken` to it.
+2. `Repeat` 50 times.
+3. `Dictate Text`.
+4. `If Dictated Text contains stop` -> `Exit Shortcut`.
+5. Inside the loop, create a fresh `Text "no"` action, rename its output `Spoken Reset`, and set `Spoken = Spoken Reset`. Do not reuse a stale generic Magic Variable named `Text`; if Shortcuts jumps back to the first Text action, rewire this step.
+6. Run App Intent `Process speech with GIGI` with `Text = Dictated Text`.
+7. Save its output as `GIGI Result`.
+8. Route `GIGI Result` by prefix in this order:
    - `CALL:`
    - `SMS:`
    - `OPEN:`

@@ -52,7 +52,7 @@ enum GigiHardwareShortcut {
     static let shortcutName = "Talk to GIGI"
 
     // User-provided universal Shortcut link for the May 1 demo path.
-    private static let defaultICloudShortcutURL = "https://www.icloud.com/shortcuts/9789dedf6f714f2c8c20b205e815cd2d"
+    private static let defaultICloudShortcutURL = "https://www.icloud.com/shortcuts/4187a9575c6a4b9ca7af885e405bc7a9"
 
     static var iCloudDownloadURL: URL? {
         URL(string: defaultICloudShortcutURL)
