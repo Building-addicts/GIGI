@@ -53,18 +53,109 @@ import UIKit
 // background AppIntent context.
 
 private enum LocalAnswer {
+    private enum OnOff {
+        case on
+        case off
+
+        var markerValue: String {
+            switch self {
+            case .on: return "on"
+            case .off: return "off"
+            }
+        }
+    }
+
+    /// Every case here corresponds to a `SYS:<command>:<param>` marker the
+    /// universal Shortcut consumes. The catalog is deliberately closed: each
+    /// case must be both produced by `parseSystemAction` (or by an explicit
+    /// fallback like the battery branch in `tryAnswer`) AND consumed by a
+    /// branch in the Shortcut. Adding a case without wiring both sides leaves
+    /// the user hearing the literal marker string.
+    ///
+    /// Timer / reminder / event were previously listed here but deliberately
+    /// removed: timer + reminder are answered in-process via
+    /// `UNNotificationRequest` (no Shortcut round-trip needed) and event was
+    /// never parsed. Add them back only when the Shortcut grows the matching
+    /// branches.
+    private enum SystemAction {
+        case torch(OnOff)
+        case volume(Int)
+        case brightness(Int)
+        case wifi(OnOff)
+        case bluetooth(OnOff)
+        case airplane(OnOff)
+        case dnd(OnOff)
+        case silent(OnOff)
+        case lpm(OnOff)
+        case screenshot
+        case alarm(time: String)
+        case music(String)
+        case weather
+        case battery
+        case location
+        func toMarker() -> String {
+            switch self {
+            case .torch(let value):
+                return "SYS:torch:\(value.markerValue)"
+            case .volume(let value):
+                return "SYS:volume:\(value)"
+            case .brightness(let value):
+                return "SYS:brightness:\(value)"
+            case .wifi(let value):
+                return "SYS:wifi:\(value.markerValue)"
+            case .bluetooth(let value):
+                return "SYS:bluetooth:\(value.markerValue)"
+            case .airplane(let value):
+                return "SYS:airplane:\(value.markerValue)"
+            case .dnd(let value):
+                return "SYS:dnd:\(value.markerValue)"
+            case .silent(let value):
+                return "SYS:silent:\(value.markerValue)"
+            case .lpm(let value):
+                return "SYS:lpm:\(value.markerValue)"
+            case .screenshot:
+                return "SYS:screenshot:"
+            case .alarm(let time):
+                // The Shortcut splits the marker on `:`, so a raw `HH:MM`
+                // would be eaten by the splitter (only `HH` would survive).
+                // We emit `HH-MM` here; the SYS:alarm branch swaps `-` back
+                // to `:` before passing the value into the Create Alarm
+                // action.
+                return "SYS:alarm:\(time.replacingOccurrences(of: ":", with: "-"))"
+            case .music(let command):
+                return "SYS:music:\(command)"
+            case .weather:
+                return "SYS:weather:"
+            case .battery:
+                return "SYS:battery:"
+            case .location:
+                return "SYS:location:"
+            }
+        }
+    }
+
     static func tryAnswer(for raw: String) async -> String? {
         let lower = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lower.isEmpty else { return nil }
 
-        if matchesAny(lower, prefixes: ["hello", "hi gigi", "hey gigi", "ciao", "ciao gigi"]) {
+        // Greeting matches only when the utterance is the greeting itself
+        // (no intent attached). "hello" → "Hi!", but "hello turn on the
+        // flashlight" must fall through to `parseSystemAction` so the
+        // user's intent isn't shadowed by the salutation.
+        if isExactGreeting(lower) {
             return "Hi! What can I help with?"
+        }
+
+        if let action = parseSystemAction(raw: raw, lower: lower) {
+            return action.toMarker()
         }
 
         // Battery level — UIDevice exposes this from a background AppIntent
         // once we flip the monitoring flag. Drains nothing since we read
         // once and let iOS turn the monitor back off when the process is
-        // suspended.
+        // suspended. When monitoring is unavailable (simulator, restricted
+        // process state) we fall back to `SYS:battery:` so the Shortcut can
+        // answer via its native Get Battery Level + Speak action.
         if containsAny(lower, phrases: ["battery", "batteria", "carica", "how much battery"]) {
             #if canImport(UIKit)
             UIDevice.current.isBatteryMonitoringEnabled = true
@@ -74,7 +165,7 @@ private enum LocalAnswer {
                 return "Battery is at \(percent)%."
             }
             #endif
-            return "I can't read the battery level right now."
+            return SystemAction.battery.toMarker()
         }
 
         // Timer / reminder. Scheduling a UNNotificationRequest works fully
@@ -100,9 +191,9 @@ private enum LocalAnswer {
         //             → Shortcut Call action → iOS native call confirmation
         //
         // That keeps GIGI closed even if the user started from Instagram, while
-        // still using Apple's compliant call-confirmation surface. `CALL:` is
-        // intentionally left as a legacy/unresolved fallback for manually-built
-        // Shortcuts that prefer Get Contact + Call.
+        // still using Apple's compliant call-confirmation surface. We only emit
+        // `CALL:` after resolving a real phone number: feeding a plain contact
+        // name into Shortcuts is flaky and can surface conversion errors.
         if let name = parseCallRequest(lower) {
             return await callMarker(for: name)
         }
@@ -163,12 +254,199 @@ private enum LocalAnswer {
         return nil
     }
 
-    private static func matchesAny(_ text: String, prefixes: [String]) -> Bool {
-        prefixes.contains { text == $0 || text.hasPrefix($0 + " ") || text.hasPrefix($0 + ",") }
-    }
-
     private static func containsAny(_ text: String, phrases: [String]) -> Bool {
         phrases.contains { text.contains($0) }
+    }
+
+    /// True only when the entire utterance is a bare greeting — no follow-up
+    /// intent attached. We strip trailing punctuation so "hello!" / "hi gigi."
+    /// still count as bare. Anything else (e.g. "hi gigi turn on the
+    /// flashlight") returns false and is routed to the action parsers.
+    private static func isExactGreeting(_ lower: String) -> Bool {
+        let greetings = ["hello", "hi", "hi gigi", "hey", "hey gigi", "ciao", "ciao gigi"]
+        let stripped = lower.trimmingCharacters(in: CharacterSet(charactersIn: ".,!?…"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return greetings.contains(stripped)
+    }
+
+    // MARK: - System action
+
+    /// Routes voice phrases to a `SYS:` marker the Shortcut consumes via its
+    /// SYS branch. Each sub-parser is keyword-gated first, then on/off cues
+    /// are matched, so generic words like "on" / "off" / digits don't trigger
+    /// false positives.
+    ///
+    /// Battery / timer / reminder are deliberately NOT handled here — they
+    /// have direct in-process handlers later in `tryAnswer` that answer locally
+    /// without round-tripping through the Shortcut.
+    ///
+    /// Keep this parser aligned with the manually-built SYS branch. If Swift
+    /// emits a `SYS:` command that the Shortcut does not consume, the final
+    /// `Stop this shortcut` in the SYS branch makes the request fail silently.
+    private static func parseSystemAction(raw: String, lower: String) -> SystemAction? {
+        if let a = parseTorch(lower) { return a }
+        if let a = parseVolume(lower) { return a }
+        if let a = parseBrightness(lower) { return a }
+        if let a = parseWifi(lower) { return a }
+        if let a = parseBluetooth(lower) { return a }
+        if let a = parseAirplane(lower) { return a }
+        if let a = parseDND(lower) { return a }
+        if let a = parseSilent(lower) { return a }
+        if let a = parseLPM(lower) { return a }
+
+        if let a = parseScreenshot(lower) { return a }
+        if let a = parseAlarm(lower) { return a }
+        if let a = parseMusic(lower) { return a }
+        if let a = parseWeather(lower) { return a }
+        if let a = parseLocationQuery(lower) { return a }
+
+        return nil
+    }
+
+    /// Looks for an explicit on/off cue in the phrase. Cues that need a word
+    /// boundary (`" on"`, `" off"`) are space-prefixed so they don't match
+    /// inside compound words.
+    private static func explicitOnOff(in lower: String) -> OnOff? {
+        let offCues = ["turn off", "switch off", "disable", "spegni", "disattiva", "disabilita", " off"]
+        let onCues = ["turn on", "switch on", "enable", "accendi", "attiva", "abilita", " on"]
+        if offCues.contains(where: lower.contains) { return .off }
+        if onCues.contains(where: lower.contains) { return .on }
+        return nil
+    }
+
+    /// True when an off cue is present. Used by toggles whose default
+    /// (when only the keyword is present) is "on".
+    private static func hasOffCue(_ lower: String) -> Bool {
+        let offCues = ["turn off", "switch off", "disable", "spegni", "disattiva", "disabilita", " off"]
+        return offCues.contains(where: lower.contains)
+    }
+
+    /// First positive integer in the string, decoupled from any specific
+    /// keyword. Used by `parseVolume` / `parseBrightness` after the keyword
+    /// gate has already matched.
+    private static func firstInt(in text: String) -> Int? {
+        let scanner = Scanner(string: text)
+        scanner.charactersToBeSkipped = .alphanumerics.subtracting(.decimalDigits)
+            .union(.whitespaces).union(.punctuationCharacters)
+        var value: Int = 0
+        return scanner.scanInt(&value) ? value : nil
+    }
+
+    private static func parseTorch(_ lower: String) -> SystemAction? {
+        let keywords = ["flashlight", "torch", "torcia"]
+        guard keywords.contains(where: lower.contains) else { return nil }
+        return explicitOnOff(in: lower).map { .torch($0) }
+    }
+
+    private static func parseVolume(_ lower: String) -> SystemAction? {
+        guard lower.contains("volume") else { return nil }
+        guard let n = firstInt(in: lower), (0...100).contains(n) else { return nil }
+        return .volume(n)
+    }
+
+    private static func parseBrightness(_ lower: String) -> SystemAction? {
+        let keywords = ["brightness", "luminosità", "luminosita"]
+        guard keywords.contains(where: lower.contains) else { return nil }
+        guard let n = firstInt(in: lower), (0...100).contains(n) else { return nil }
+        return .brightness(n)
+    }
+
+    private static func parseWifi(_ lower: String) -> SystemAction? {
+        let keywords = ["wifi", "wi-fi", "wireless"]
+        guard keywords.contains(where: lower.contains) else { return nil }
+        return explicitOnOff(in: lower).map { .wifi($0) }
+    }
+
+    private static func parseBluetooth(_ lower: String) -> SystemAction? {
+        guard lower.contains("bluetooth") else { return nil }
+        return explicitOnOff(in: lower).map { .bluetooth($0) }
+    }
+
+    private static func parseAirplane(_ lower: String) -> SystemAction? {
+        let keywords = ["airplane mode", "flight mode", "modalità aereo", "modalita aereo", "modalità volo"]
+        guard keywords.contains(where: lower.contains) else { return nil }
+        return .airplane(hasOffCue(lower) ? .off : .on)
+    }
+
+    private static func parseDND(_ lower: String) -> SystemAction? {
+        let phrases = ["do not disturb", "non disturbare"]
+        // `dnd` needs explicit handling because `lower.contains("dnd")` also
+        // matches inside arbitrary words. Accept it only as a whole token.
+        let dndAlone = lower == "dnd" || lower.hasPrefix("dnd ") || lower.hasSuffix(" dnd") || lower.contains(" dnd ")
+        guard phrases.contains(where: lower.contains) || dndAlone else { return nil }
+        return .dnd(hasOffCue(lower) ? .off : .on)
+    }
+
+    private static func parseSilent(_ lower: String) -> SystemAction? {
+        let keywords = ["silent mode", "modalità silenziosa", "modalita silenziosa", "silenzioso"]
+        guard keywords.contains(where: lower.contains) else { return nil }
+        return .silent(hasOffCue(lower) ? .off : .on)
+    }
+
+    private static func parseLPM(_ lower: String) -> SystemAction? {
+        let keywords = ["low power mode", "battery saver", "risparmio energetico", "risparmio batteria"]
+        guard keywords.contains(where: lower.contains) else { return nil }
+        return .lpm(hasOffCue(lower) ? .off : .on)
+    }
+
+    private static func parseScreenshot(_ lower: String) -> SystemAction? {
+        let phrases = ["screenshot", "screen shot", "fai uno screenshot", "scatta screenshot", "cattura schermo"]
+        return phrases.contains(where: lower.contains) ? .screenshot : nil
+    }
+
+    /// Tries to extract a time from the phrase. Match order matters because
+    /// `\b\d{1,2}\b` would otherwise eat the hour out of `8:30` or `7am`.
+    /// Bare-hour ("wake me at 7") normalizes to `HH:00` so the Shortcut's
+    /// Create Alarm action gets a valid HH:MM input.
+    private static func parseAlarm(_ lower: String) -> SystemAction? {
+        let keywords = ["set alarm", "set an alarm", "alarm at", "alarm for", "wake me", "sveglia alle", "imposta sveglia", "metti sveglia"]
+        guard keywords.contains(where: lower.contains) else { return nil }
+        if let range = lower.range(of: "\\b\\d{1,2}:\\d{2}\\b", options: .regularExpression) {
+            return .alarm(time: String(lower[range]))
+        }
+        if let range = lower.range(of: "\\b\\d{1,2}\\s*(?:am|pm)\\b", options: .regularExpression) {
+            return .alarm(time: String(lower[range]).replacingOccurrences(of: " ", with: ""))
+        }
+        if let range = lower.range(of: "\\b\\d{1,2}\\b", options: .regularExpression) {
+            let hour = String(lower[range])
+            return .alarm(time: "\(hour):00")
+        }
+        return nil
+    }
+
+    private static func parseMusic(_ lower: String) -> SystemAction? {
+        if containsAny(lower, phrases: ["next track", "next song", "skip song", "skip track", "prossima canzone", "prossimo brano", "salta canzone"]) {
+            return .music("next")
+        }
+        if containsAny(lower, phrases: ["previous track", "previous song", "prev song", "prev track", "brano precedente", "canzone precedente"]) {
+            return .music("prev")
+        }
+        if containsAny(lower, phrases: ["pause music", "pause song", "pause the music", "pausa musica", "metti in pausa", "ferma musica"]) {
+            return .music("pause")
+        }
+        if containsAny(lower, phrases: ["play music", "resume music", "start music", "metti musica", "riproduci musica", "fai partire la musica"]) {
+            return .music("play")
+        }
+        // Bare-word commands as a last resort, only when the phrase is exactly
+        // the verb. Avoids stealing "play <song> on spotify" or "pause and
+        // wait" — those are claimed by deep-link search or fall through.
+        switch lower {
+        case "play", "resume": return .music("play")
+        case "pause", "stop": return .music("pause")
+        case "next", "skip": return .music("next")
+        case "previous", "prev": return .music("prev")
+        default: return nil
+        }
+    }
+
+    private static func parseWeather(_ lower: String) -> SystemAction? {
+        let phrases = ["what's the weather", "what is the weather", "how's the weather", "weather today", "che tempo fa", "che tempo c'è", "meteo", "previsioni meteo"]
+        return phrases.contains(where: lower.contains) ? .weather : nil
+    }
+
+    private static func parseLocationQuery(_ lower: String) -> SystemAction? {
+        let phrases = ["where am i", "current location", "my location", "what's my location", "dove sono", "posizione attuale", "la mia posizione"]
+        return phrases.contains(where: lower.contains) ? .location : nil
     }
 
     // MARK: - Message marker
@@ -217,23 +495,31 @@ private enum LocalAnswer {
     }
 
     private static func messageMarker(for message: (contact: String, body: String, platform: MessagePlatform)) async -> String {
-        let recipient: String
-        if await ensureContactsAccessForBackgroundAction(),
-           let resolved = await GigiContactsEngine.shared.resolve(message.contact),
-           let phone = shortcutDialablePhoneNumber(from: resolved.phone) {
-            recipient = phone
-        } else {
-            recipient = message.contact
+        let body = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else {
+            return "Tell me what message to send to \(message.contact)."
+        }
+
+        guard await ensureContactsAccessForBackgroundAction() else {
+            return "I need Contacts permission before I can send a message to \(message.contact). Open GIGI once, allow Contacts, then try again."
+        }
+
+        guard let resolved = await GigiContactsEngine.shared.resolve(message.contact) else {
+            return "I couldn't find \(message.contact) in Contacts."
+        }
+
+        guard let recipient = shortcutDialablePhoneNumber(from: resolved.phone) else {
+            return "I found \(resolved.name), but the phone number doesn't look messageable."
         }
 
         switch message.platform {
         case .sms:
-            return "SMS:\(recipient)|\(message.body)"
+            return "SMS:\(recipient)|\(body)"
         case .whatsapp:
             guard let phone = whatsappPhoneNumber(from: recipient) else {
-                return "SMS:\(recipient)|\(message.body)"
+                return "I found \(resolved.name), but the phone number doesn't look WhatsApp-compatible."
             }
-            let encoded = urlQueryValue(message.body)
+            let encoded = urlQueryValue(body)
             return "OPEN:whatsapp://send?phone=\(phone)&text=\(encoded)"
         }
     }
@@ -316,9 +602,7 @@ private enum LocalAnswer {
         }
 
         guard let resolved = await GigiContactsEngine.shared.resolve(contactName) else {
-            // Legacy fallback: if the user-built Shortcut has a Get Contact +
-            // Call branch it can still try iOS' own contact picker/resolver.
-            return "CALL:\(contactName)"
+            return "I couldn't find \(contactName) in Contacts."
         }
 
         guard let phoneNumber = shortcutDialablePhoneNumber(from: resolved.phone) else {
@@ -362,9 +646,14 @@ private enum LocalAnswer {
         return digits.count >= 6 ? digits : nil
     }
 
+    /// Percent-encodes a value for use as the `<param>` segment of a SYS or
+    /// OPEN marker. We strip the standard URL-significant characters
+    /// (`+&=#?`) and additionally `:` and `|`, which are the SYS / SMS marker
+    /// separators — leaving them raw would let a Spotify URI like
+    /// `track:abc:xyz` break the Shortcut's split-by-colon parser.
     private static func urlQueryValue(_ value: String) -> String {
         var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "+&=#?")
+        allowed.remove(charactersIn: "+&=#?:|")
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
