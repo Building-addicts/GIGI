@@ -156,3 +156,4 @@
 - `2026-05-02T13:40:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #61: "[Sub #16 · 2/4] Harness reachability monitor + diagnostics state"
 - `2026-05-02T13:59:22Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #124 "feat(ios): persistent harness offline banner + dashboard status pill (#62)" di @fc200490-sketch _(branch: `feat/issue-62-offline-banner` · +141/-3 · #62)_
 - `2026-05-02T14:30:08Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #128 _(branch: `feat/issue-63-claude-fallback` · totale +136/-5)_
+- `2026-05-02T14:31:35Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #63: "[Sub #16 · 4/4] Claude bridge fallback to Gemini direct on harness failure"
