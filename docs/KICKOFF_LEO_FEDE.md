@@ -9,7 +9,7 @@
 
 Ciao ragazzi 👋
 
-Settimana del lancio. Deadline **venerdì 1 maggio**. Da oggi a giovedì costruiamo, mercoledì 30 alle 16:00 facciamo il QA gate finale, venerdì demo.
+Settimana del lancio. Deadline **venerdì 1 maggio** — demo MVP.
 
 Ho passato la giornata a setup-pare TUTTO il workflow per voi. L'idea è: **voi aprite Claude Code, dite "sì", e lui fa tutto il resto**. Niente comandi git, niente UI GitHub, niente PR a mano. Vi serve solo il vostro telefono, un Mac (per build iOS) e Claude Code.
 
@@ -23,7 +23,7 @@ Ognuno di voi ha una lista di issue assegnate sul repo `Building-addicts/GIGI`:
 
 - **Leo (@Leonardo-Corte)** — 19 issue: tutto iOS lato app + Dynamic Island + Talking Session + WhatsApp draft + Active Help + NLU robusta
 - **Fede (@fc200490-sketch)** — 20 issue: Preferences + Day Plan + Task extraction live + Resilience + Permission UI + Memory affordance
-- **#17 (QA gate) e #18 (Demo)** — condivise tra noi 3 (giovedì/venerdì)
+- **#17 (QA gate) e #18 (Demo)** — condivise tra noi 3
 
 Le issue sono **organizzate gerarchicamente**:
 - 13 PARENT epic (tipo "[iOS] Dynamic Island fase Speaking durante TTS")
@@ -146,11 +146,7 @@ Se durante il lavoro vi succede una di queste:
 
 **Da ora**. Aprite Claude Code, fate session start, vedrete la vostra issue più urgente. Iniziamo a chiudere sub-issue.
 
-Target ipotetico:
-- **Lunedì-martedì**: chiudere il 60% delle sub-issue P0 di voi due (no QA, no demo)
-- **Mercoledì 30**: ultime sub + QA gate alle 16:00 (tutti e 3, max 2 ore)
-- **Giovedì 1**: stability pass + freeze
-- **Venerdì 2 maggio**: demo MVP
+Target: chiudere il grosso delle sub-issue P0 in settimana, demo venerdì 1 maggio.
 
 Per qualsiasi cosa: chat o issue comment.
 

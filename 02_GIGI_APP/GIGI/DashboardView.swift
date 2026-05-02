@@ -176,6 +176,7 @@ struct DashboardView: View {
                     .clipShape(Capsule())
                     .transition(.opacity.combined(with: .scale))
                 }
+                harnessStatusPill
             }
             .animation(.easeInOut(duration: 0.2), value: diagnostics.lastTurnPath)
 
@@ -190,6 +191,29 @@ struct DashboardView: View {
                     .foregroundColor(groqReady ? .green : .red)
             }
         }
+    }
+
+    // MARK: - Harness reachability pill (#16 sub 3/4)
+
+    private var harnessStatusPill: some View {
+        let (label, color): (String, Color) = {
+            switch diagnostics.harnessStatus {
+            case .online:   return ("HARNESS ONLINE",   .green)
+            case .degraded: return ("HARNESS DEGRADED", .orange)
+            case .offline:  return ("HARNESS OFFLINE",  .red)
+            case .unknown:  return ("HARNESS …",        .gray)
+            }
+        }()
+        return HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
     }
 
     // MARK: - First-config banner
