@@ -409,7 +409,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Double-tap the back of your iPhone")
                         .font(.subheadline.weight(.semibold))
-                    Text("Bind your custom Talk to GIGI Shortcut (built in onboarding) under Accessibility → Touch → Back Tap → Double Tap → Shortcuts.")
+                    Text("Bind \(GigiHardwareShortcut.shortcutName) under Accessibility → Touch → Back Tap → Double Tap → Shortcuts.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -422,7 +422,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Action Button (iPhone 15 Pro+)")
                         .font(.subheadline.weight(.semibold))
-                    Text("Settings → Action Button → Shortcut → pick the Talk to GIGI Shortcut you built (NOT the Open GIGI App Shortcut). Its CALL: branch should pass the stripped phone number into Shortcuts' native Call action, so iOS owns the compliant call flow over your current app.")
+                    Text("Settings → Action Button → Shortcut → pick \(GigiHardwareShortcut.shortcutName) (NOT the Open GIGI App Shortcut). Its CALL: branch should pass the stripped phone number into Shortcuts' native Call action, so iOS owns the compliant call flow over your current app.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -435,7 +435,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Hey Siri")
                         .font(.subheadline.weight(.semibold))
-                    Text("Say \"Hey Siri, hey GIGI\" — opens the app in conversation mode, no setup.")
+                    Text("Say \"Hey Siri, talk to GIGI\" — or \"Ehi Siri, parla con GIGI\" on Italian Siri. GIGI opens in conversation mode.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
