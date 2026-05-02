@@ -160,3 +160,4 @@
 - `2026-05-02T14:32:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #128 "feat(ios): Claude bridge auto-fallback to Gemini direct on harness failure (#63)" di @fc200490-sketch _(branch: `feat/issue-63-claude-fallback` · +136/-5 · #63)_
 - `2026-05-02T15:01:07Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #53: "[Sub #14 · 1/3] Build `GigiTaskExtractor` engine (LLM call + dedup + state)"
 - `2026-05-02T15:01:11Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #134 "feat(ios): GigiTaskExtractor engine + Jaccard dedup (Sub #14 1/3)" di @fc200490-sketch _(branch: `feat/issue-53-task-extractor` · +132/-0 · #53)_
+- `2026-05-02T15:14:29Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #160: "[BUG] #54 AC#2/#3 — observeUserTurnsForExtraction sink Combine non triggera estrazione automatica" _(parent: #54)_
