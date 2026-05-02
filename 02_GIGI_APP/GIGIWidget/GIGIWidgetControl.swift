@@ -9,11 +9,12 @@ struct GIGIWidgetControl: ControlWidget {
         StaticControlConfiguration(
             kind: Self.kind
         ) {
-            // Use a dedicated AppIntent (openAppWhenRun = true) instead of
-            // OpenURLIntent. Control Center fires AppIntents reliably;
-            // OpenURLIntent for custom schemes can silently no-op on first
-            // invocation without a user permission round-trip.
-            ControlWidgetButton(action: GIGIControlListenIntent()) {
+            // OpenURLIntent uses iOS's native URL opening path (NOT the
+            // openAppWhenRun=true AppIntent path which fails with
+            // ChronoCore error 3 in this widget extension setup).
+            // `gigi://listen` is handled by GIGIApp.onOpenURL → starts
+            // PresenceSessionController + GigiSmartOrchestrator listening.
+            ControlWidgetButton(action: OpenURLIntent(URL(string: "gigi://listen")!)) {
                 Label("Talk to GIGI", systemImage: "mic.fill")
             }
         }
