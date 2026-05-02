@@ -24,7 +24,6 @@ struct SettingsView: View {
     @State private var showKey = false
     @State private var connectionStatus: String = "—"
     @State private var isTestingConnection = false
-    @AppStorage(GigiWakeWordEngine.userDefaultsEnabledKey) private var wakeWordEnabled = false
     @ObservedObject private var audioManager = GigiAudioManager.shared
     @ObservedObject private var presence = PresenceSessionController.shared
     @State private var ttsRate: Double = 0.52
@@ -51,7 +50,7 @@ struct SettingsView: View {
                 harnessSection
                 whatsAppSection
                 profileSection
-                wakeWordSection
+                hardwareTriggerSection
                 homeKitSection
                 voiceSection
                 privacySection
@@ -393,53 +392,66 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Wake word section
+    // MARK: - Hardware trigger section
+    //
+    // MVP (#102): wake word is disabled (iOS does not allow continuous background
+    // mic for non-VoIP apps). Replaced by hardware triggers — Back Tap on iPhone 14
+    // and earlier, Action Button on iPhone 15 Pro+, plus Siri AppIntent phrase.
+    // Setup walkthrough lives in Onboarding; this section explains the available
+    // triggers and lets the user re-run setup at any time.
 
-    private var wakeWordSection: some View {
+    private var hardwareTriggerSection: some View {
         Section {
-            Toggle("Presence: Always Available", isOn: $wakeWordEnabled)
-                .tint(.purple)
-                .onChange(of: wakeWordEnabled) { _, new in
-                    PresenceSessionController.shared.setAlwaysAvailable(new)
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.title3)
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Double-tap the back of your iPhone")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Bind your custom Talk to GIGI Shortcut (built in onboarding) under Accessibility → Touch → Back Tap → Double Tap → Shortcuts.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-
-            Text("Keeps a Presence session visible through the Live Activity. Wake word runs only while iOS keeps the app eligible; if iOS pauses it, tap the Live Activity or app shortcut to resume.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            HStack {
-                Text("Keyword")
-                Spacer()
-                Text("\"Hey GIGI\" / \"GIGI\"")
-                    .foregroundColor(.secondary)
-                    .font(.subheadline)
             }
 
-            HStack {
-                Text("Audio state")
-                Spacer()
-                Text(audioStateLabel)
-                    .foregroundColor(.secondary)
-                    .font(.subheadline.monospaced())
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "button.programmable")
+                    .font(.title3)
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Action Button (iPhone 15 Pro+)")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Settings → Action Button → Shortcut → pick the Talk to GIGI Shortcut you built (NOT the Open GIGI App Shortcut). Its CALL: branch should pass the stripped phone number into Shortcuts' native Call action, so iOS owns the compliant call flow over your current app.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
-            HStack {
-                Text("Wake engine")
-                Spacer()
-                Text(audioManager.wakeWordEngineRunning ? "Running" : "Stopped")
-                    .foregroundColor(audioManager.wakeWordEngineRunning ? .green : .secondary)
-                    .font(.subheadline)
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "mic.circle")
+                    .font(.title3)
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Hey Siri")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Say \"Hey Siri, hey GIGI\" — opens the app in conversation mode, no setup.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
-            if let err = audioManager.lastWakeWordError {
-                Label(err, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundColor(.orange)
+            Button {
+                UserDefaults.standard.set(false, forKey: "gigi.onboarding.complete")
+                NotificationCenter.default.post(name: .gigiReopenOnboarding, object: nil)
+            } label: {
+                Label("Run setup walkthrough", systemImage: "arrow.triangle.2.circlepath")
+                    .foregroundColor(.purple)
             }
         } header: {
-            Text("🎙️ Presence")
+            Text("🎙️ Talk to GIGI")
         } footer: {
-            Text("Say \"Hey GIGI\" or \"GIGI\" while Presence is Ready. Ready does not mean continuous recording; Listening appears only during active capture.")
+            Text("Wake word (\"Hey GIGI\") is paused for this release. iOS does not allow continuous background listening for non-VoIP apps; we will revisit it in v1.1 with a different approach. For now, hardware triggers open GIGI in under one second from anywhere — even with the screen locked.")
                 .font(.caption)
         }
     }

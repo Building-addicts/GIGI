@@ -45,6 +45,13 @@ final class QuickTalkController: ObservableObject {
     @Published var transcript: String = ""
     @Published var response: String = ""
 
+    /// When true, the controller chains another listening turn the moment
+    /// GIGI finishes speaking, instead of returning to idle. Set by `start()`
+    /// for hardware-trigger sessions; cleared by `stop()` and by spoken
+    /// "stop" / "exit" / "fine" / "ferma" commands picked up in the
+    /// transcript callback below.
+    @Published var continuousMode: Bool = false
+
     private var startedAt: Date?
 
     private init() {
@@ -57,7 +64,14 @@ final class QuickTalkController: ObservableObject {
         }
         GigiSmartOrchestrator.shared.onQuickTalkTranscript = { [weak self] text in
             Task { @MainActor [weak self] in
-                self?.transcript = text
+                guard let self else { return }
+                self.transcript = text
+                // Spoken exit phrases drop continuous mode so the next
+                // .idle transition truly ends the session instead of
+                // looping back into listening.
+                if Self.isExitPhrase(text) {
+                    self.continuousMode = false
+                }
             }
         }
         GigiSmartOrchestrator.shared.onQuickTalkResponse = { [weak self] text in
@@ -75,14 +89,47 @@ final class QuickTalkController: ObservableObject {
                     durationMs: elapsed,
                     success: success
                 )
-                self.phase = .idle
+                // Continuous-mode sessions chain straight back into a
+                // listening turn so the user can keep talking without
+                // re-triggering the Action Button. We only do this when
+                // the previous turn actually completed (success), to
+                // avoid hammering the orchestrator after a recoverable
+                // error path. `stop()` and exit-phrase detection clear
+                // continuousMode and route us through the normal idle
+                // transition instead.
+                if self.continuousMode && success {
+                    self.transcript = ""
+                    self.response = ""
+                    self.startedAt = Date()
+                    self.phase = .listening
+                    GigiSmartOrchestrator.shared.startQuickTalk()
+                } else {
+                    self.continuousMode = false
+                    self.phase = .idle
+                }
             }
         }
         GigiDebugLogger.log("QuickTalkController init END")
     }
 
+    /// Single-turn session. Used by the in-app Quick Talk button — fires one
+    /// listening cycle and returns to idle.
     func start() {
         guard phase == .idle else { return }
+        continuousMode = false
+        transcript = ""
+        response = ""
+        startedAt = Date()
+        phase = .listening
+        GigiSmartOrchestrator.shared.startQuickTalk()
+    }
+
+    /// Multi-turn conversation session. Used by hardware triggers (Action
+    /// Button, deeplink) so the user can keep talking back-and-forth until
+    /// they tap stop or say an exit phrase.
+    func startContinuous() {
+        guard phase == .idle else { return }
+        continuousMode = true
         transcript = ""
         response = ""
         startedAt = Date()
@@ -91,6 +138,7 @@ final class QuickTalkController: ObservableObject {
     }
 
     func stop() {
+        continuousMode = false
         guard phase != .idle else { return }
         GigiSmartOrchestrator.shared.stopQuickTalk()
         phase = .idle
@@ -98,6 +146,19 @@ final class QuickTalkController: ObservableObject {
 
     func interrupt() {
         GigiSpeechService.shared.stopSpeaking()
+        continuousMode = false
         phase = .idle
+    }
+
+    private static func isExitPhrase(_ text: String) -> Bool {
+        let normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return false }
+        // Single-word triggers — must match exactly so a sentence containing
+        // "stop" doesn't accidentally end the session.
+        let exact: Set<String> = ["stop", "fine", "ferma", "basta", "exit", "quit", "bye"]
+        if exact.contains(normalized) { return true }
+        // Two-word polite forms.
+        let prefixes = ["that's all", "that is all", "stop please", "fine grazie", "basta cosi", "basta così"]
+        return prefixes.contains(where: { normalized.hasPrefix($0) })
     }
 }

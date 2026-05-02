@@ -33,6 +33,13 @@ final class GigiWakeWordEngine {
     static let shared = GigiWakeWordEngine()
     static let userDefaultsEnabledKey = "gigi.wakeWord.enabled"
 
+    /// MVP de-scope kill switch (#102). When `true`, the engine never starts
+    /// recognition and `applyPreferredState` becomes a no-op. iOS does not
+    /// allow continuous background mic for non-VoIP apps; wake is replaced by
+    /// hardware triggers (Back Tap, Action Button) and AppIntent / Siri phrase.
+    /// Flip to `false` in v1.1 to reactivate without re-implementing.
+    static let isDisabledForMVP = true
+
     private(set) var isMonitoring = false
 
     var onMonitoringStarted: (() -> Void)?
@@ -140,6 +147,11 @@ final class GigiWakeWordEngine {
     // MARK: - Internal state management
 
     private func applyPreferredStateAsync() async {
+        // MVP de-scope (#102): kill switch — never engage recognition.
+        if Self.isDisabledForMVP {
+            if isMonitoring { stopMonitoringHard(reason: "wake disabled for MVP") }
+            return
+        }
         // Wake word is only valid inside Presence Mode. This prevents the old
         // standalone wake-word path from racing the Presence/Live Activity pipeline.
         let presenceActive = GigiSmartOrchestrator.shared.isPresenceActive
