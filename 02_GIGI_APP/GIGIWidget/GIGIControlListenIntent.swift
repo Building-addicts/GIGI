@@ -11,12 +11,14 @@ struct GIGIControlListenIntent: AppIntent {
     static var description = IntentDescription(
         "Open GIGI and start a voice conversation."
     )
-    static var openAppWhenRun: Bool = true
+    static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {
-        // Minimal perform — diagnostic step. If app opens with this empty
-        // body, the issue is in the side effect (App Group write). If iOS
-        // still throws CHSErrorDomain 1107, the issue is structural.
+        // DIAGNOSTIC: openAppWhenRun=false to isolate whether ChronoCore
+        // error 3 is caused by the "open app from CC" path. Just write a
+        // flag so we can confirm perform() ran at all.
+        let defaults = UserDefaults(suiteName: "group.com.gigi.presence")
+        defaults?.set(Date().timeIntervalSince1970, forKey: "gigi.cc.diag.performRanAt")
         return .result()
     }
 }
