@@ -154,3 +154,4 @@
 - `2026-05-02T13:18:53Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #159: "[BUG] #122 AC#5 — Control Center toggle tap does nothing (no app launch / no listening)" _(parent: #122)_
 - `2026-05-02T13:26:13Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #106 "fix(ios): stabilize demo-critical voice intents" di @Leonardo-Corte _(branch: `feat/issue-88-core-reliability` · +146/-12 · #89)_
 - `2026-05-02T13:40:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #61: "[Sub #16 · 2/4] Harness reachability monitor + diagnostics state"
+- `2026-05-02T13:59:22Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #124 "feat(ios): persistent harness offline banner + dashboard status pill (#62)" di @fc200490-sketch _(branch: `feat/issue-62-offline-banner` · +141/-3 · #62)_
