@@ -151,3 +151,4 @@
 - `2026-05-01T18:06:51Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #156: "fix(workflows): graphql query Projects v2 — field(id:) not supported" _(branch: `fix/post-mvp-graphql` · 1 commit · +23/-15 · 2 file · (no link))_
 - `2026-05-01T18:06:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #156 "fix(workflows): graphql query Projects v2 — field(id:) not supported" di @ArmandoBattaglino _(branch: `fix/post-mvp-graphql` · +23/-15 · (no link))_
 - `2026-05-01T18:27:05Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #158 "docs(claude.md): scope deescalation — split PM full-apply vs Dev proposal-mode" di @ArmandoBattaglino _(branch: `feat/issue-157-deescalation-roles` · +63/-6 · #157)_
+- `2026-05-02T13:18:53Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #159: "[BUG] #122 AC#5 — Control Center toggle tap does nothing (no app launch / no listening)" _(parent: #122)_
