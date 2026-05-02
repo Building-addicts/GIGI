@@ -50,7 +50,13 @@ struct GigiAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Hey \(.applicationName)",
                 "Open \(.applicationName)",
-                "Ask \(.applicationName)"
+                "Ask \(.applicationName)",
+                "Talk to \(.applicationName)",
+                "Start talking with \(.applicationName)",
+                "Start a conversation with \(.applicationName)",
+                "Apri \(.applicationName)",
+                "Chiedi a \(.applicationName)",
+                "Parla con \(.applicationName)"
             ],
             shortTitle: "Open GIGI",
             systemImageName: "mic.fill"

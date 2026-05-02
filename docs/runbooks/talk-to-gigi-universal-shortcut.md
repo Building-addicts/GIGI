@@ -1,6 +1,6 @@
 # Talk to GIGI Universal Shortcut
 
-Target Shortcut name: `Talk to GIGI`
+Target Shortcut name: `gigi-talk-to-gigi-v3`
 
 This is the canonical Action Button / Back Tap Shortcut contract for the MVP demo.
 GIGI is the brain: it returns a marker. Shortcuts is the arm: it executes the

@@ -49,7 +49,8 @@ enum GigiGateway {
 
 // MARK: - Hardware-trigger Shortcut (Action Button / Back Tap)
 enum GigiHardwareShortcut {
-    static let shortcutName = "Talk to GIGI"
+    static let shortcutName = "gigi-talk-to-gigi-v3"
+    static let displayName = "Talk to GIGI"
 
     // User-provided universal Shortcut link for the May 1 demo path.
     private static let defaultICloudShortcutURL = "https://www.icloud.com/shortcuts/9789dedf6f714f2c8c20b205e815cd2d"
