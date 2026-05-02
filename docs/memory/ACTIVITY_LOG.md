@@ -163,3 +163,4 @@
 - `2026-05-02T15:14:29Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #160: "[BUG] #54 AC#2/#3 — observeUserTurnsForExtraction sink Combine non triggera estrazione automatica" _(parent: #54)_
 - `2026-05-02T15:25:07Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
 - `2026-05-02T15:30:20Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #161: "[BUG] #102 AC#6 — Test the Shortcut launches the installed Shortcut" _(parent: #102)_
+- `2026-05-02T15:35:00Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #102: "[BUG] Wake word "hey gigi" non risponde su iPhone PM (Armando)"
