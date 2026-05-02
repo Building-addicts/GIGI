@@ -382,6 +382,11 @@ final class PresenceSessionController: ObservableObject {
                 case .wakeWordListening:
                     if self.state != .muted {
                         self.state = .sleeping
+                        // GIGI issue #88: post-TTS the audio manager returns to wake-word standby.
+                        // Reset the inactivity timer so a 5-min silence after a reply doesn't
+                        // tear down legacy (non-always-available) sessions. In always-available
+                        // mode resetInactivityTimer() is a no-op (early return on the guard).
+                        self.resetInactivityTimer()
                         await GigiLiveActivityController.shared.updatePresence(state: .sleeping, message: "Ready — say Hey GIGI")
                     }
                 case .idle:

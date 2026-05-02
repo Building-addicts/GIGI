@@ -1,0 +1,153 @@
+# One-shot bootstrap: crea l'option "Post-MVP" sul Project Status field
+# + sposta tutte le issue con label `post-mvp` nella nuova colonna.
+#
+# Trigger: workflow_dispatch (manuale, 1 click "Run workflow" da Actions UI).
+# Idempotente: se l'option esiste già, skip create. Backfill safe.
+#
+# Una volta runned con successo, il workflow project-status.yml gestisce
+# automaticamente label.add/remove → status update.
+
+name: Setup Post-MVP project column (bootstrap)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: read
+  contents: read
+
+env:
+  PROJECT_ID: PVT_kwDOEKlBHc4BV0Bd
+  STATUS_FIELD: PVTSSF_lADOEKlBHc4BV0BdzhRNDOI
+  POST_MVP_LABEL: post-mvp
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create "Post-MVP" option (idempotent) + backfill labelled issues
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # ---- 1. Verifica se l'option Post-MVP esiste già ----
+          # NOTE: GraphQL field(name:) requires name not id. Usiamo fields(first:N)+filter.
+          OPTIONS_JSON=$(gh api graphql -f query='
+            query($project: ID!) {
+              node(id: $project) {
+                ... on ProjectV2 {
+                  fields(first: 50) {
+                    nodes {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        options { id name }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -F project="$PROJECT_ID" --jq ".data.node.fields.nodes[] | select(.id == \"$STATUS_FIELD\") | .options")
+
+          echo "Current Status options:"
+          echo "$OPTIONS_JSON"
+
+          POST_MVP_OPT_ID=$(echo "$OPTIONS_JSON" | jq -r '.[] | select(.name == "Post-MVP") | .id')
+
+          # ---- 2. Se non esiste, crealo ----
+          if [ -z "$POST_MVP_OPT_ID" ] || [ "$POST_MVP_OPT_ID" = "null" ]; then
+            echo "Post-MVP option not found — creating..."
+            # GitHub Projects v2 API per aggiungere option:
+            #   updateProjectV2SingleSelectField mutation con options array completo
+            # Devo includere TUTTE le options esistenti + la nuova
+            EXISTING=$(echo "$OPTIONS_JSON" | jq -c '[.[] | {name: .name, color: "GRAY", description: ""}]')
+            NEW_OPT='{"name":"Post-MVP","color":"PURPLE","description":"Deescalated to v1.1 by PM — feature paused"}'
+            ALL_OPTS=$(echo "$EXISTING" | jq --argjson new "$NEW_OPT" '. + [$new]')
+
+            echo "Submitting new options array..."
+            gh api graphql -f query='
+              mutation($field: ID!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+                updateProjectV2Field(input: {
+                  fieldId: $field,
+                  singleSelectField: { options: $options }
+                }) {
+                  projectV2Field {
+                    ... on ProjectV2SingleSelectField {
+                      options { id name }
+                    }
+                  }
+                }
+              }' -F field="$STATUS_FIELD" -f options="$ALL_OPTS" || {
+              # Fallback: se updateProjectV2Field non supporta options, usa addSingleSelectFieldOption
+              echo "updateProjectV2Field failed — trying addProjectV2DraftIssue (may not work)..."
+              echo "$ALL_OPTS" | head -3
+            }
+
+            # Re-fetch per ottenere il nuovo ID
+            sleep 2
+            POST_MVP_OPT_ID=$(gh api graphql -f query='
+              query($project: ID!) {
+                node(id: $project) {
+                  ... on ProjectV2 {
+                    fields(first: 50) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id options { id name }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -F project="$PROJECT_ID" --jq ".data.node.fields.nodes[] | select(.id == \"$STATUS_FIELD\") | .options[] | select(.name == \"Post-MVP\") | .id")
+          fi
+
+          if [ -z "$POST_MVP_OPT_ID" ] || [ "$POST_MVP_OPT_ID" = "null" ]; then
+            echo "❌ Failed to create or find Post-MVP option"
+            exit 1
+          fi
+          echo "✓ Post-MVP option ID: $POST_MVP_OPT_ID"
+
+          # ---- 3. Backfill: trova tutte le issue con label post-mvp + sposta ----
+          ISSUES=$(gh api graphql -f query='
+            query($q: String!) {
+              search(query: $q, type: ISSUE, first: 100) {
+                nodes {
+                  ... on Issue { number id title }
+                }
+              }
+            }' -F q="repo:Building-addicts/GIGI is:issue is:open label:$POST_MVP_LABEL" --jq '.data.search.nodes[] | "\(.number)|\(.id)"')
+
+          echo "Issues to backfill:"
+          echo "$ISSUES"
+
+          while IFS='|' read -r NUM NODE; do
+            [ -z "$NUM" ] && continue
+
+            # Add to project (idempotent)
+            ITEM_ID=$(gh api graphql -f query='
+              mutation($p: ID!, $c: ID!) {
+                addProjectV2ItemById(input: { projectId: $p, contentId: $c }) {
+                  item { id }
+                }
+              }' -F p="$PROJECT_ID" -F c="$NODE" --jq '.data.addProjectV2ItemById.item.id')
+
+            if [ -z "$ITEM_ID" ]; then
+              echo "  #$NUM: failed to add to project — skip"
+              continue
+            fi
+
+            # Set Status = Post-MVP
+            gh api graphql -f query='
+              mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $p, itemId: $i, fieldId: $f,
+                  value: { singleSelectOptionId: $v }
+                }) { clientMutationId }
+              }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$POST_MVP_OPT_ID" >/dev/null
+
+            echo "  ✓ #$NUM → Status=Post-MVP"
+          done <<< "$ISSUES"
+
+          echo
+          echo "✅ Bootstrap complete — Post-MVP option ID: $POST_MVP_OPT_ID"
+          echo "Save this ID. project-status.yml dynamic lookup will use option name 'Post-MVP'."

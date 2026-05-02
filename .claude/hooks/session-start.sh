@@ -150,7 +150,7 @@ LOCAL_MD="$ROOT/CLAUDE.local.md"
 HAS_LOCAL_MD="false"
 [ -f "$LOCAL_MD" ] && HAS_LOCAL_MD="true"
 
-# 4. Recupera issue aperte assegnate al dev
+# 4. Recupera issue aperte assegnate al dev + PR aperte del repo (condivise tra tutti)
 ISSUES_JSON="$(gh issue list --repo Building-addicts/GIGI \
   --assignee "$HANDLE" --state open --limit 30 \
   --json number,title,labels 2>/dev/null)"
@@ -159,13 +159,31 @@ if [ -z "$ISSUES_JSON" ]; then
   ISSUES_JSON="[]"
 fi
 
-# 5. Format con python (sort per priorità, top 8). Forza UTF-8 per emoji su Windows.
-FORMATTED="$(ISSUES_JSON_ENV="$ISSUES_JSON" PYTHONIOENCODING=utf-8 "$PY" - <<'PYEOF'
+# Le PR aperte sono visibili a tutti i dev — non filtrate per author. Top 2 per relevance.
+PRS_JSON="$(gh pr list --repo Building-addicts/GIGI --state open --limit 20 \
+  --json number,title,author,reviewDecision,statusCheckRollup 2>/dev/null)"
+
+if [ -z "$PRS_JSON" ]; then
+  PRS_JSON="[]"
+fi
+
+# 5. Format con python — dashboard a 3 colonne (Actionable / Waiting / PR Review).
+#    Forza UTF-8 per emoji su Windows.
+FORMATTED="$(ISSUES_JSON_ENV="$ISSUES_JSON" PRS_JSON_ENV="$PRS_JSON" HANDLE_ENV="$HANDLE" \
+  PYTHONIOENCODING=utf-8 "$PY" - <<'PYEOF'
 import json, os, sys
+
 try:
     issues = json.loads(os.environ.get('ISSUES_JSON_ENV', '[]'))
 except Exception:
     issues = []
+
+try:
+    prs = json.loads(os.environ.get('PRS_JSON_ENV', '[]'))
+except Exception:
+    prs = []
+
+handle = os.environ.get('HANDLE_ENV', '')
 
 def priority_score(issue):
     labels = [l['name'] for l in issue.get('labels', [])]
@@ -174,35 +192,96 @@ def priority_score(issue):
         if p in labels: return 1 + i
     return 99
 
-issues.sort(key=lambda i: (priority_score(i), i['number']))
+def is_blocked(issue):
+    """Issue è in 🟡 WAITING se ha label 'blocked' (dipendenza tecnica) o
+    'post-mvp' (scope deescalato dal PM, riprende v1.1).
+    Entrambe semanticamente = "non actionable adesso, non proporre al dev"."""
+    labels = [l['name'] for l in issue.get('labels', [])]
+    return 'blocked' in labels or 'post-mvp' in labels
 
-emoji_map = {
-    'priority:P0': '🔴',
-    'priority:P1': '🟧',
-    'priority:P2': '🟨',
-    'priority:P3': '🟩',
-}
+def blocked_reason(issue):
+    """Etichetta della ragione di blocco — usata nel render."""
+    labels = [l['name'] for l in issue.get('labels', [])]
+    if 'post-mvp' in labels:
+        return 'post-mvp'
+    if 'blocked' in labels:
+        return 'blocked'
+    return ''
 
-lines = []
-for issue in issues[:8]:
+def render_issue_line(issue, with_blocked_hint=False):
     labels = [l['name'] for l in issue.get('labels', [])]
     pri_label = next((l for l in labels if l.startswith('priority:')), '')
-    pri_emoji = emoji_map.get(pri_label, '⚪')
+    pri_emoji = {'priority:P0':'🔴','priority:P1':'🟧','priority:P2':'🟨','priority:P3':'🟩'}.get(pri_label, '⚪')
     blocker = '🚨' if 'release-blocker' in labels else ''
     bug = '🐛' if 'bug' in labels else ''
-    title = issue['title'][:80]
-    lines.append(f"  {pri_emoji}{blocker}{bug} #{issue['number']} — {title}")
+    title = issue['title'][:75]
+    line = f"  {pri_emoji}{blocker}{bug} #{issue['number']} — {title}"
+    if with_blocked_hint:
+        reason = blocked_reason(issue)
+        if reason == 'post-mvp':
+            line += "  ⏸️ post-mvp (deescalated to v1.1)"
+        else:
+            line += "  ⏸️ blocked"
+    return line
 
-# Stampa righe seguite da una marker line con il count (così bash sa dove tagliare)
-for line in lines:
+def render_pr_status(pr):
+    review = pr.get('reviewDecision') or ''
+    if review == 'CHANGES_REQUESTED':
+        return '🔴 changes requested'
+    if review == 'APPROVED':
+        return '✅ approved'
+    checks = pr.get('statusCheckRollup') or []
+    if any(c.get('conclusion') == 'FAILURE' for c in checks):
+        return '🔴 CI failing'
+    if checks and all((c.get('conclusion') == 'SUCCESS' or c.get('status') == 'COMPLETED') for c in checks):
+        return '✅ CI green'
+    return '⏳ pending'
+
+def render_pr_line(pr):
+    title = pr['title'][:55]
+    author = (pr.get('author') or {}).get('login', '?')
+    is_mine = '👤 ' if author == handle else ''
+    return f"  {is_mine}PR #{pr['number']} — {title} (by @{author}) [{render_pr_status(pr)}]"
+
+# Sort issue per priority, poi numero
+issues.sort(key=lambda i: (priority_score(i), i['number']))
+
+# Categorize: actionable vs waiting
+actionable = [i for i in issues if not is_blocked(i)][:3]
+waiting    = [i for i in issues if     is_blocked(i)][:3]
+
+# PR rilevanti: prima quelle del dev attuale, poi le altre. Max 2.
+prs_sorted = sorted(prs, key=lambda p: (0 if (p.get('author') or {}).get('login') == handle else 1, -int(p['number'])))
+prs_top    = prs_sorted[:2]
+
+# Render output
+out_lines = []
+if actionable:
+    out_lines.append("🟢 ACTIONABLE NOW")
+    for i in actionable:
+        out_lines.append(render_issue_line(i))
+if waiting:
+    if out_lines: out_lines.append("")
+    out_lines.append("🟡 WAITING (blocked by dependency)")
+    for i in waiting:
+        out_lines.append(render_issue_line(i, with_blocked_hint=True))
+if prs_top:
+    if out_lines: out_lines.append("")
+    out_lines.append("🔴 PR IN REVIEW (shared, all devs)")
+    for p in prs_top:
+        out_lines.append(render_pr_line(p))
+
+for line in out_lines:
     print(line)
 print(f"__ISSUE_COUNT__={len(issues)}")
+print(f"__ACTIONABLE_FIRST__={actionable[0]['number'] if actionable else ''}")
 PYEOF
 )"
 
-# Estrai count dalla marker line, e issue lines = tutto prima del marker
+# Estrai metadata dalle marker line
 ISSUE_COUNT="$(echo "$FORMATTED" | grep -oE '^__ISSUE_COUNT__=[0-9]+$' | tail -1 | cut -d= -f2)"
-ISSUE_LINES="$(echo "$FORMATTED" | grep -v '^__ISSUE_COUNT__=')"
+FIRST_ACTIONABLE="$(echo "$FORMATTED" | grep -oE '^__ACTIONABLE_FIRST__=[0-9]*$' | tail -1 | cut -d= -f2)"
+ISSUE_LINES="$(echo "$FORMATTED" | grep -v '^__ISSUE_COUNT__=' | grep -v '^__ACTIONABLE_FIRST__=')"
 
 # 6. Componi messaggio di benvenuto + istruzioni di workflow
 echo "[GIGI session-start] — context per Claude"
@@ -227,14 +306,19 @@ ISTRUZIONI per Claude in questa sessione:
 - Digli: "Ciao $FULL_NAME 👋 Non hai issue aperte assegnate al momento. Vuoi che controlliamo il Project board cosa è disponibile? https://github.com/orgs/Building-addicts/projects/1"
 EOF
 else
+  FIRST_DISPLAY="${FIRST_ACTIONABLE:-N}"
   cat <<EOF
-Issue aperte assegnate ($ISSUE_COUNT totali, top 8 per priorità):
+Dashboard ($ISSUE_COUNT issue assegnate · max 3+3+2 righe):
+
 $ISSUE_LINES
 
 ISTRUZIONI VINCOLANTI per Claude in questa sessione:
 
-1. Quando il dev scrive il primo messaggio, SALUTALO per nome e mostragli la prima issue in cima:
-   "Ciao $FULL_NAME 👋 Hai $ISSUE_COUNT issue aperte. La più urgente è #N. Vuoi che la facciamo? (rispondi 'sì')"
+1. Quando il dev scrive il primo messaggio, SALUTALO per nome e mostragli la prima issue ACTIONABLE (🟢):
+   "Ciao $FULL_NAME 👋 Hai $ISSUE_COUNT issue assegnate. La prossima actionable è #${FIRST_DISPLAY}. Vuoi che la facciamo? (rispondi 'sì')"
+
+   Le issue in 🟡 WAITING sono bloccate da dipendenze — non proporle finché il blocker non è risolto.
+   Le PR in 🔴 PR REVIEW sono per visibilità condivisa: il dev può commentarle / fare review se vuole, ma non sono "issue da iniziare".
 
 2. Se il dev dice "sì" / "vai" / "ok": segui il DEV WORKFLOW in CLAUDE.md §"Workflow per dev (vibe-coder mode)". Passi:
    a. Crea worktree: git worktree add ../GIGI-work/issue-<N>-<slug> -b feat/issue-<N>-<slug> main
