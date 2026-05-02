@@ -164,3 +164,4 @@
 - `2026-05-02T15:25:07Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
 - `2026-05-02T15:30:20Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #161: "[BUG] #102 AC#6 — Test the Shortcut launches the installed Shortcut" _(parent: #102)_
 - `2026-05-02T15:35:00Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #102: "[BUG] Wake word "hey gigi" non risponde su iPhone PM (Armando)"
+- `2026-05-02T15:50:31Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #163: "fix(ios): task extraction wiring + overlay UI bundled (Closes #54 #55)" _(branch: `fix/issue-54-55-task-extraction-bundled` · 12 commit · +224/-0 · 6 file · #54)_
