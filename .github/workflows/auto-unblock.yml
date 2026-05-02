@@ -1,0 +1,110 @@
+# Auto-remove `blocked` label from issues that referenced this issue when
+# this issue gets closed.
+#
+# Trigger: issues.closed
+# - Searches all open issues with label `blocked`
+# - For each: re-runs the detection logic (same patterns as auto-blocked-label.yml)
+# - If NO open dependency remains, removes label + posts clearance comment
+#
+# Multi-dep safe: if issue A is blocked by both #1 and #2, closing #1 leaves
+# the label intact because #2 is still open.
+
+name: Auto Unblock
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  unblock-dependents:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.issue.pull_request }}
+    steps:
+      - name: Find dependents and remove blocked label if all deps closed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const closed_issue_number = context.payload.issue.number;
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+
+            console.log(`Issue #${closed_issue_number} closed — searching dependents`);
+
+            // 1. Search open issues with label `blocked`
+            const search_q = `repo:${owner}/${repo} is:issue is:open label:blocked`;
+            const search_resp = await github.rest.search.issuesAndPullRequests({
+              q: search_q,
+              per_page: 100,
+            });
+            const blocked_issues = search_resp.data.items || [];
+            console.log(`Found ${blocked_issues.length} open blocked issues`);
+
+            // 2. Re-run detection logic on each
+            const patterns = [
+              /\bblocked\s*(?:by|from)\s*[:#]?\s*#?(\d+)/gi,
+              /\bdepends?\s+on\s+#?(\d+)/gi,
+              /\bwaiting\s+(?:on|for)\s+#?(\d+)/gi,
+              /\baspetto\s+(?:la\s+)?(?:issue\s+|chiusura\s+(?:di\s+)?)?#(\d+)/gi,
+              /\bstand-?by\s+(?:on|finch[eé]|fino\s+a)\s+#?(\d+)/gi,
+            ];
+
+            for (const item of blocked_issues) {
+              const n = item.number;
+              if (n === closed_issue_number) continue;
+
+              // Fetch full issue + comments
+              const { data: full } = await github.rest.issues.get({ owner, repo, issue_number: n });
+              const comments_resp = await github.rest.issues.listComments({ owner, repo, issue_number: n, per_page: 100 });
+              const last_comments = comments_resp.data.slice(-10);
+              const text = (full.body || '') + '\n' + last_comments.map(c => c.body || '').join('\n');
+
+              // Extract refs
+              const refs = new Set();
+              for (const p of patterns) {
+                for (const m of text.matchAll(p)) {
+                  const r = parseInt(m[1] ?? m[2], 10);
+                  if (!isNaN(r) && r !== n) refs.add(r);
+                }
+              }
+
+              if (!refs.has(closed_issue_number)) {
+                console.log(`  #${n}: no ref to closed #${closed_issue_number} — skip`);
+                continue;
+              }
+
+              // Check if any other ref is still OPEN
+              let any_other_open = false;
+              for (const r of refs) {
+                if (r === closed_issue_number) continue; // skip the one just closed
+                try {
+                  const { data: rissue } = await github.rest.issues.get({ owner, repo, issue_number: r });
+                  if (rissue.state === 'open') {
+                    any_other_open = true;
+                    console.log(`  #${n}: ref #${r} still OPEN — keep blocked`);
+                    break;
+                  }
+                } catch (e) {
+                  // Ignore not-found
+                }
+              }
+
+              if (any_other_open) continue;
+
+              // Remove label + post comment
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: n, name: 'blocked' });
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: n,
+                  body: `✅ Blocked-by #${closed_issue_number} resolved — \`blocked\` label removed automatically. Issue ready to work on.`,
+                });
+                console.log(`  #${n}: ✓ unblocked`);
+              } catch (e) {
+                console.log(`  #${n}: failed to unblock: ${e.message}`);
+              }
+            }
+
+            console.log('auto-unblock done');

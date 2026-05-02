@@ -1,0 +1,9 @@
+{
+  "communicationTone": "warm",
+  "workHours": "09:00-19:00",
+  "morningFocus": true,
+  "vipContacts": ["Fede", "Leo", "Armando", "mamma"],
+  "travelBufferMinutes": 20,
+  "foodPreference": "no carne rossa, pasta sì",
+  "routineHints": ["palestra 7:30 lun-mer-ven", "lunch sempre 13:00", "deep work 9-12"]
+}

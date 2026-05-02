@@ -14,13 +14,15 @@ name: Project Status Auto-Move
 #   pull_request:closed && !merged   → linked issue → Status=Todo   (rollback)
 #   pull_request:reopened            → linked issue → Status=In review
 #   create branch feat/issue-N-*     → issue N → Status=In Progress
+#   issues:labeled post-mvp          → Status=Post-MVP   (deescalation dal PM)
+#   issues:unlabeled post-mvp        → Status=Todo (se assignee) o Backlog
 
 on:
   pull_request:
     types: [opened, ready_for_review, converted_to_draft, closed, reopened]
   create:
   issues:
-    types: [opened, closed, reopened, assigned]
+    types: [opened, closed, reopened, assigned, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -276,6 +278,88 @@ jobs:
               }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_TODO" >/dev/null
             echo "✓ Issue #$N → Todo (PR closed unmerged)"
           done
+
+      # ─────────────────────────────────────────────────────
+      # ISSUE: labeled `post-mvp` → Status=Post-MVP (deescalation dal PM)
+      # Option ID resolved dinamicamente da name (resilient se Project options cambiano)
+      # ─────────────────────────────────────────────────────
+      - name: Issue labeled post-mvp → Post-MVP
+        if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'post-mvp'
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          ISSUE_NODE: ${{ github.event.issue.node_id }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+        run: |
+          OPT_POST_MVP=$(gh api graphql -f query='
+            query($project: ID!) {
+              node(id: $project) {
+                ... on ProjectV2 {
+                  fields(first: 50) {
+                    nodes {
+                      ... on ProjectV2SingleSelectField {
+                        id options { id name }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -F project="$PROJECT_ID" --jq ".data.node.fields.nodes[] | select(.id == \"$STATUS_FIELD\") | .options[] | select(.name == \"Post-MVP\") | .id")
+
+          if [ -z "$OPT_POST_MVP" ]; then
+            echo "Post-MVP option not yet created in Project — run setup-post-mvp-status.yml first"
+            exit 0
+          fi
+
+          ITEM_ID=$(gh api graphql -f query='
+            mutation($p: ID!, $c: ID!) {
+              addProjectV2ItemById(input: { projectId: $p, contentId: $c }) {
+                item { id }
+              }
+            }' -F p="$PROJECT_ID" -F c="$ISSUE_NODE" --jq '.data.addProjectV2ItemById.item.id')
+
+          gh api graphql -f query='
+            mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $p, itemId: $i, fieldId: $f,
+                value: { singleSelectOptionId: $v }
+              }) { clientMutationId }
+            }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$OPT_POST_MVP" >/dev/null
+          echo "✓ Issue #$ISSUE_NUM → Post-MVP (label post-mvp added)"
+
+      # ─────────────────────────────────────────────────────
+      # ISSUE: unlabeled `post-mvp` → Status=Todo (se assignee) o Backlog
+      # Riprende lavoro quando PM dice "ripristino X"
+      # ─────────────────────────────────────────────────────
+      - name: Issue unlabeled post-mvp → Todo/Backlog
+        if: github.event_name == 'issues' && github.event.action == 'unlabeled' && github.event.label.name == 'post-mvp'
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          REPO_NODE: ${{ github.event.repository.node_id }}
+          HAS_ASSIGNEE: ${{ github.event.issue.assignees[0] != null }}
+        run: |
+          ITEM_ID=$(gh api graphql -f query='
+            query($repo: ID!, $num: Int!) {
+              node(id: $repo) {
+                ... on Repository { issue(number: $num) { projectItems(first: 5) { nodes { id project { id } } } } }
+              }
+            }' -F repo="$REPO_NODE" -F num=$ISSUE_NUM \
+            --jq ".data.node.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id" 2>/dev/null | head -1)
+          [ -z "$ITEM_ID" ] && { echo "issue #$ISSUE_NUM not in project"; exit 0; }
+
+          TARGET="$OPT_BACKLOG"; TARGET_NAME="Backlog"
+          if [ "$HAS_ASSIGNEE" = "true" ]; then
+            TARGET="$OPT_TODO"; TARGET_NAME="Todo"
+          fi
+
+          gh api graphql -f query='
+            mutation($p: ID!, $i: ID!, $f: ID!, $v: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $p, itemId: $i, fieldId: $f,
+                value: { singleSelectOptionId: $v }
+              }) { clientMutationId }
+            }' -F p="$PROJECT_ID" -F i="$ITEM_ID" -F f="$STATUS_FIELD" -F v="$TARGET" >/dev/null
+          echo "✓ Issue #$ISSUE_NUM → $TARGET_NAME (label post-mvp removed)"
 
       # ─────────────────────────────────────────────────────
       # Branch creato `feat/issue-N-*` → issue N → "In Progress"
