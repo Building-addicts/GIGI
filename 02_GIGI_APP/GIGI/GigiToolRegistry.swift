@@ -1268,6 +1268,11 @@ final class GigiToolRegistry {
     // request, not only those whose wording matches its tag list.
     private let alwaysIncluded: Set<String> = [
         "make_call", "send_message", "ask_time", "ask_date", "weather",
+        "torch_on", "torch_off",
+        "set_timer", "set_alarm",
+        "toggle_wifi", "toggle_bluetooth",
+        "media_next", "media_previous", "media_play_pause",
+        "read_calendar",
         "ask_claude",
         // Sub #59: chiave demo scene 5. Tag-match già presente, ma sempre
         // incluso per garantire che l'agent loop possa proporre il piano
@@ -1308,7 +1313,12 @@ final class GigiToolRegistry {
         }
 
         scored.sort { $0.score > $1.score }
-        return Array(scored.prefix(12).map(\.tool))
+        let selected = Array(scored.prefix(12))
+        let top3 = selected.prefix(3)
+            .map { "\($0.tool.name)=\($0.score)" }
+            .joined(separator: ", ")
+        GigiDebugLogger.log("GIGI tool selection: top3=[\(top3)] selected=\(selected.count)")
+        return selected.map(\.tool)
     }
 
     /// Lookup by name for execution in AgentEngine.
