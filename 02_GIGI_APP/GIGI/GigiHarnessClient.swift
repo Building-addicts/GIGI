@@ -456,6 +456,12 @@ final class GigiHarnessClient {
         return await getJSON(path: "/api/ios/health", as: HealthInfo.self, cfg: c)
     }
 
+    /// Boolean wrapper around `health()` for the reachability monitor.
+    func pingHealth() async -> Bool {
+        if case .success = await health() { return true }
+        return false
+    }
+
     // MARK: - Status snapshot (Phase 6C — rich Settings card)
 
     struct StatusSnapshot: Decodable, Equatable {
@@ -493,7 +499,7 @@ final class GigiHarnessClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
 
-        let backoffs: [UInt64] = [0, 500, 1_000, 2_000]    // ms — primo tentativo senza attesa, poi 0.5s, 1s, 2s
+        let backoffs: [UInt64] = [0, 1_000, 2_000, 4_000]    // ms — exponential 1s/2s/4s per #16 AC
         var lastError: Error = .transport(URLError(.unknown))
 
         for delayMs in backoffs {

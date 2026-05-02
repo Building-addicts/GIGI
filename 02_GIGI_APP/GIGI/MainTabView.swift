@@ -9,9 +9,11 @@ struct MainTabView: View {
 
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "gigi.onboarding.complete")
     @State private var showPresence = false
+    @State private var showQuickTalk = false
     @State private var selection: Int = 0
     @State private var showPairingSheet = false
     @State private var harnessConfigured = GigiHarnessClient.shared.pairingState.isConfigured
+    @ObservedObject private var quickTalk = QuickTalkController.shared
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -70,6 +72,13 @@ struct MainTabView: View {
                     .zIndex(50)
             }
 
+            // Harness reachability banner (#16 sub 3/4) — appears when paired but offline.
+            // Sits below the unpaired pairingBanner so the two never overlap visually.
+            if harnessConfigured && !showOnboarding {
+                HarnessOfflineBanner()
+                    .zIndex(48)
+            }
+
             if let err = liveActivity.lastActivityError, !showOnboarding {
                 liveActivityBanner(err)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -111,7 +120,33 @@ struct MainTabView: View {
                 refreshHarnessConfiguredState()
             }
         }
+        // Compact conversation card. Auto-presents whenever the
+        // QuickTalkController phase becomes active — covers the deeplink
+        // path (`gigi://listen`) and the AppIntent / Action Button path,
+        // both of which start the controller without owning UI of their
+        // own. The medium detent keeps the rest of the app dim but
+        // visible behind the card, mimicking the Siri overlay layout.
+        .sheet(isPresented: $showQuickTalk) {
+            QuickTalkView()
+                .presentationDetents([.fraction(0.55)])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.black)
+        }
+        .onChange(of: quickTalk.phase) { _, phase in
+            // Open as soon as the controller becomes active and close once
+            // the controller drops back to idle. Continuous-mode sessions
+            // stay active across listen → think → speak transitions, so
+            // the sheet only closes when stop()/exit-phrase fires.
+            if phase != .idle && !showQuickTalk {
+                showQuickTalk = true
+            } else if phase == .idle && showQuickTalk {
+                showQuickTalk = false
+            }
+        }
         .onAppear { refreshHarnessConfiguredState() }
+        .onReceive(NotificationCenter.default.publisher(for: .gigiReopenOnboarding)) { _ in
+            withAnimation { showOnboarding = true }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { refreshHarnessConfiguredState() }
         }

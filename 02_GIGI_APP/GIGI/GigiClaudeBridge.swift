@@ -70,27 +70,68 @@ final class GigiClaudeBridge {
     ///  4. Translate harness error cases into user-visible Italian strings
     ///     per AC-5 of the plan.
     func run(task: String, context: String?) async -> ToolResult {
+        // Pre-flight (Issue #63 AC1): if diagnostics has already declared the
+        // harness offline, skip the harness round-trip entirely and serve the
+        // turn from the local Groq path. Avoids wasting the user's 1-2s on a
+        // call we already know will fail.
+        if GigiBrainDiagnostics.shared.harnessStatus == .offline {
+            GigiDebugLogger.log("ClaudeBridge path=fallback (pre-flight: harnessStatus=offline) task='\(task.prefix(60))'")
+            return await runFallback(task: task, context: context)
+        }
+
+        let harnessResult = await runViaHarness(task: task, context: context)
+        if harnessResult.error != nil {
+            // AC2: harness call failed mid-turn → degrade gracefully to local
+            // path instead of bubbling the error up to the user.
+            GigiDebugLogger.log("ClaudeBridge path=fallback (harness call failed, retrying via local) task='\(task.prefix(60))'")
+            return await runFallback(task: task, context: context)
+        }
+        return harnessResult
+    }
+
+    private func runViaHarness(task: String, context: String?) async -> ToolResult {
         let snapshot = await buildContextSnapshot()
         let composedTask = composeTaskPayload(snapshot: snapshot, task: task, extra: context)
 
         ensureStreamConnected()
 
-        GigiDebugLogger.log("GigiClaudeBridge.run → task='\(task.prefix(60))' ctx=\(context?.count ?? 0)B snapshot=\(snapshot.count)B")
+        GigiDebugLogger.log("ClaudeBridge path=harness → task='\(task.prefix(60))' ctx=\(context?.count ?? 0)B snapshot=\(snapshot.count)B")
 
         let result = await GigiHarnessClient.shared.agentRun(text: composedTask, stream: true)
         switch result {
         case .success(let agentResult):
             let finalText = agentResult.result.trimmingCharacters(in: .whitespacesAndNewlines)
             let tokens = (agentResult.usage?.output_tokens ?? 0) + (agentResult.usage?.input_tokens ?? 0)
+            GigiBrainDiagnostics.shared.recordTurnPath(.harness)
             return ToolResult.success(finalText.isEmpty ? "(Claude returned an empty response)" : finalText,
                                       tokenEstimate: max(tokens, 50))
 
         case .failure(let err):
-            SoundEngine.play(.error)
-            let message = Self.userFacingError(for: err)
-            GigiDebugLogger.log("GigiClaudeBridge error — \(err)")
-            return ToolResult.failure(message)
+            // Note: SoundEngine.play(.error) and userFacingError(...) intentionally
+            // moved to runFallback's terminal branch — when the harness fails we
+            // try the local path first, and only emit the error chime if that
+            // also fails.
+            GigiDebugLogger.log("ClaudeBridge harness error — \(err)")
+            return ToolResult.failure(Self.userFacingError(for: err))
         }
+    }
+
+    private func runFallback(task: String, context: String?) async -> ToolResult {
+        // Mark the path *before* the call so the UI pill reflects fallback
+        // mode even when the local Groq attempt itself fails (e.g. rate-limit
+        // 429). The pill is a "we tried the local brain" signal, not a
+        // "succeeded" signal — keeps the demo audience honest about state.
+        GigiBrainDiagnostics.shared.recordTurnPath(.fallback)
+
+        if let text = await GigiFallbackEngine.shared.runComplexQuery(task: task, context: context) {
+            GigiDebugLogger.log("ClaudeBridge path=fallback OK (len=\(text.count))")
+            return ToolResult.success(text, tokenEstimate: 100)
+        }
+        // Local path also failed — surface a hard error, since at this point
+        // both Claude (cloud agent) and Groq (local LLM) are unreachable.
+        SoundEngine.play(.error)
+        GigiDebugLogger.log("ClaudeBridge path=fallback FAILED — local Groq unreachable too")
+        return ToolResult.failure("I'm offline and can't reach my fallback brain either. Please check your connection.")
     }
 
     // MARK: - Stream wiring
@@ -239,6 +280,14 @@ final class GigiClaudeBridge {
     /// CLLocationManager helper that only uses cached fixes.
     func buildContextSnapshot() async -> String {
         var sections: [String] = []
+
+        // --- MVP Preferences (sub #52) — first so they sit at the top of the
+        //     8 KB snapshot Claude sees, where attention is highest ---
+        let mvpPrefs = await GigiUserProfile.shared.mvpPreferencesContext()
+        if !mvpPrefs.isEmpty {
+            sections.append(mvpPrefs)
+            GigiDebugLogger.log("LLM[bridge] systemPrompt prefix=\(mvpPrefs.prefix(80))")
+        }
 
         // --- Profile ---
         let profile = await GigiUserProfile.shared.load()

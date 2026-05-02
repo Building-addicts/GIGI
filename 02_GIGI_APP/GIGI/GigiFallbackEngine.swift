@@ -38,4 +38,41 @@ final class GigiFallbackEngine {
         ]
         return options.randomElement() ?? options[0]
     }
+
+    // MARK: - Complex query fallback (Issue #63)
+    //
+    // Used by `GigiClaudeBridge.runFallback(...)` when the harness is
+    // unreachable or fails mid-turn. Routes the question to the same Groq
+    // path that `GigiCloudService.ask(_:)` already exercises, but with a
+    // system prompt that tells the model it's degraded-mode and must lean
+    // on its own knowledge without harness-side tools (calendar reads,
+    // memory, computer-use, etc.).
+    //
+    // Returns `nil` only on hard failure (network down on Groq too, no
+    // API key). Empty string is treated as failure as well so the bridge
+    // can decide whether to surface a generic apology to the user.
+    func runComplexQuery(task: String, context: String?) async -> String? {
+        let baseSystem = """
+        You are GIGI, a voice assistant on iPhone, currently running in offline \
+        fallback mode: the cloud agent harness is unreachable, so you must rely \
+        only on your own general knowledge — no calendar lookups, no memory \
+        recall, no tool calls. Be honest if a question would require live data \
+        you don't have. Reply in 1-3 short spoken sentences. No markdown.
+        """
+        let user: String = {
+            guard let context, !context.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return task
+            }
+            return "Context: \(context)\nTask: \(task)"
+        }()
+
+        do {
+            let answer = try await GigiCloudService.shared.askRaw(system: baseSystem, user: user)
+            let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        } catch {
+            GigiDebugLogger.log("GigiFallbackEngine.runComplexQuery — Groq path failed: \(error)")
+            return nil
+        }
+    }
 }

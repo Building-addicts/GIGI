@@ -137,6 +137,12 @@ final class GigiConversationMemory: ObservableObject {
 
     /// Call at the START of each agent turn, before invoking agentLoop.
     func addUserTurn(_ text: String) {
+        // Sync to UI-facing @Published messages so observers (e.g. live task
+        // extraction sink in PresenceSessionController) fire on every voice
+        // turn, including those routed through GigiAgentEngine. Without this
+        // the harness-route turns updated only the LLM history (contentsArray)
+        // while leaving the @Published messages array untouched.
+        messages.append(GigiMessage(role: .user, text: text))
         contentsArray.append(.user(text))
     }
 
