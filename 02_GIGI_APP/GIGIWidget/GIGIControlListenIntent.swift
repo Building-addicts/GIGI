@@ -14,8 +14,9 @@ struct GIGIControlListenIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        let defaults = UserDefaults(suiteName: "group.com.gigi.presence")
-        defaults?.set(Date().timeIntervalSince1970, forKey: "gigi.cc.listenRequestedAt")
+        // Minimal perform — diagnostic step. If app opens with this empty
+        // body, the issue is in the side effect (App Group write). If iOS
+        // still throws CHSErrorDomain 1107, the issue is structural.
         return .result()
     }
 }
