@@ -72,6 +72,13 @@ struct MainTabView: View {
                     .zIndex(50)
             }
 
+            // Harness reachability banner (#16 sub 3/4) — appears when paired but offline.
+            // Sits below the unpaired pairingBanner so the two never overlap visually.
+            if harnessConfigured && !showOnboarding {
+                HarnessOfflineBanner()
+                    .zIndex(48)
+            }
+
             if let err = liveActivity.lastActivityError, !showOnboarding {
                 liveActivityBanner(err)
                     .transition(.move(edge: .top).combined(with: .opacity))

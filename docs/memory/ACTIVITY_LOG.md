@@ -85,3 +85,79 @@
 - `2026-04-28T20:24:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
 - `2026-04-28T20:41:54Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #60: "[Sub #16 · 1/4] Empty speech guard + done state notify in GigiSpeechService"
 - `2026-04-28T20:42:09Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-28T20:42:23Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-04-28T20:53:13Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #118: "feat(ios): harness reachability monitor with HarnessStatus state machine (#61)" _(branch: `feat/issue-61-harness-reachability-monitor` · 1 commit · +79/-3 · 3 file · #61)_
+- `2026-04-28T21:14:05Z` · pr-opened · 📤 @Leonardo-Corte ha aperto PR #121: "fix(ios): declare live activity support on widget extension" _(branch: `fix/issue-119-activitykit-entitlement` · 1 commit · +4/-0 · 1 file · #119)_
+- `2026-04-28T21:15:59Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
+- `2026-04-28T22:28:14Z` · pr-synchronize · 🔄 @Leonardo-Corte ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-04-28T23:42:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #119: "investigate: Dynamic Island non visibile su iPhone 15 Pro PM (Sideloadly install)"
+- `2026-04-28T23:52:36Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-04-28T23:56:22Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #124: "feat(ios): persistent harness offline banner + dashboard status pill (#62)" _(branch: `feat/issue-62-offline-banner` · 3 commit · +141/-3 · 6 file · #62)_
+- `2026-04-29T00:40:11Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #125: "[BUG] #85 — Always Listening regression: wake doesn't fire in background + AC#5 Stop button missing" _(parent: #85)_
+- `2026-04-29T00:52:25Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #126: "[BUG critical] Always Listening: wake non funziona in background — SFSpeechRecognizer limit" _(parent: (no parent))_
+- `2026-04-29T00:53:17Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #127: "[BUG critical] Multiple stale Live Activities accumulate on Lock Screen — ensureIslandActivity lifecycle broken" _(parent: (no parent))_
+- `2026-04-29T00:54:08Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #125: "[BUG] #85 — Always Listening regression: wake doesn't fire in background + AC#5 Stop button missing"
+- `2026-04-29T01:39:49Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #128: "feat(ios): Claude bridge auto-fallback to Gemini direct on harness failure (#63)" _(branch: `feat/issue-63-claude-fallback` · 5 commit · +217/-8 · 7 file · #63)_
+- `2026-04-29T02:14:59Z` · issue-closed · ✅ @Leonardo-Corte ha chiuso issue #9: "[iOS] Dynamic Island: pill scende su wake (descendForListening)"
+- `2026-04-29T02:50:42Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #133: "feat(infra): smart session-start dashboard — 3 column layout (Actionable / Waiting / PR Review)" _(branch: `fix/issue-130-smart-dashboard` · 1 commit · +239/-26 · 3 file · #130)_
+- `2026-04-29T02:50:56Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #130: "feat(infra): smart session-start dashboard — Actionable / Waiting / In-progress columns"
+- `2026-04-29T13:46:09Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #134: "feat(ios): GigiTaskExtractor engine + Jaccard dedup (Sub #14 1/3)" _(branch: `feat/issue-53-task-extractor` · 2 commit · +132/-0 · 3 file · #53)_
+- `2026-04-29T14:35:28Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #135: "feat(ios): wire GigiTaskExtractor to PresenceSession via memory observer (Sub #14 2/3)" _(branch: `feat/issue-54-task-extractor-wiring` · 4 commit · +64/-0 · 3 file · #54)_
+- `2026-04-29T15:32:33Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #137: "feat(infra): GitHub Actions auto-blocked label + PR marker cleanup" _(branch: `feat/issue-136-auto-blocked-actions` · 1 commit · +350/-2 · 4 file · #136)_
+- `2026-04-29T15:33:05Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #137 _(branch: `feat/issue-136-auto-blocked-actions` · totale +350/-2)_
+- `2026-04-29T15:33:08Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #136: "feat(infra): GitHub Actions per gestione automatica label 'blocked' + PR blocking marker cleanup"
+- `2026-04-29T15:33:14Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #137 "feat(infra): GitHub Actions auto-blocked label + PR marker cleanup" di @ArmandoBattaglino _(branch: `feat/issue-136-auto-blocked-actions` · +350/-2 · #136)_
+- `2026-04-29T15:36:33Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #138: "[TEST] auto-blocked-label workflow validation — DELETE AFTER"
+- `2026-04-29T15:56:04Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #140: "docs(claude.md): blocking convention OBBLIGO per Claude del dev" _(branch: `feat/issue-141-claude-blocking-convention` · 1 commit · +60/-0 · 1 file · #139)_
+- `2026-04-29T15:56:18Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #140 "docs(claude.md): blocking convention OBBLIGO per Claude del dev" di @ArmandoBattaglino _(branch: `feat/issue-141-claude-blocking-convention` · +60/-0 · #139)_
+- `2026-04-29T15:56:26Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #139: "docs(claude.md): blocking convention OBBLIGO per Claude del dev"
+- `2026-04-29T17:02:08Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #141: "feat(ios): TalkingSessionTaskListView overlay laterale interattivo (Sub #14 3/3)" _(branch: `feat/issue-55-task-list-view` · 5 commit · +154/-0 · 3 file · #55)_
+- `2026-04-29T17:34:10Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +433/-6)_
+- `2026-04-29T17:45:29Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +481/-14)_
+- `2026-04-29T17:53:16Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +481/-14)_
+- `2026-04-29T17:57:30Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +493/-16)_
+- `2026-04-29T18:58:43Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +510/-18)_
+- `2026-04-29T19:03:21Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +578/-24)_
+- `2026-04-29T19:06:11Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +598/-24)_
+- `2026-04-29T19:09:59Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +612/-24)_
+- `2026-04-29T19:25:40Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +630/-28)_
+- `2026-04-29T19:33:13Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +635/-28)_
+- `2026-04-29T19:39:35Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +658/-28)_
+- `2026-04-29T19:43:01Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +665/-28)_
+- `2026-04-30T00:28:09Z` · issue-closed · ✅ @Leonardo-Corte ha chiuso issue #122: "[iOS][EPIC] In-app voice dispatch + Control Center quick listen (Shazam-style)"
+- `2026-04-30T03:59:23Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #17: "[QA] Pre-freeze QA gate (mercoledì 30 ore 16:00)"
+- `2026-04-30T10:14:08Z` · pr-closed · ⛔ @fc200490-sketch ha chiuso senza merge PR #142: "feat(ios): unify permission confirmation UI (#77)" _(branch: `feat/issue-77-permission-ui` · #77)_
+- `2026-04-30T14:37:58Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #86 _(branch: `feat/issue-51-mvp-preferences-seed` · totale +49/-0)_
+- `2026-04-30T14:38:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #86 "feat(ios): seed MVPPreferences first-launch + GigiMemory.awaitReady (Sub #13 2/3)" di @fc200490-sketch _(branch: `feat/issue-51-mvp-preferences-seed` · +49/-0 · #51)_
+- `2026-04-30T14:39:49Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #87 _(branch: `feat/issue-52-mvp-preferences-injection` · totale +70/-18)_
+- `2026-04-30T14:40:49Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #52: "[Sub #13 · 3/3] Inject `MVPPreferences` in every LLM call (Groq + Claude bridge + Realtime)"
+- `2026-04-30T14:40:54Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #87 "feat(ios): inject MVPPreferences in every LLM call (Sub #13 3/3)" di @fc200490-sketch _(branch: `feat/issue-52-mvp-preferences-injection` · +70/-18 · #52)_
+- `2026-04-30T14:49:05Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #91 _(branch: `feat/issue-56-day-plan-reasoner` · totale +156/-0)_
+- `2026-04-30T14:50:20Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #56: "[Sub #15 · 1/4] Create GigiDayPlanReasoner engine + LLM prompt"
+- `2026-04-30T14:50:27Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #91 "feat(ios): add GigiDayPlanReasoner engine + LLM prompt (Sub #15 1/4)" di @fc200490-sketch _(branch: `feat/issue-56-day-plan-reasoner` · +156/-0 · #56)_
+- `2026-04-30T14:53:42Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +78/-1)_
+- `2026-04-30T14:54:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #92 "feat(ios): wire read_week_calendar into Day Plan Reasoner (Sub #15 2/4)" di @fc200490-sketch _(branch: `feat/issue-57-day-plan-calendar` · +78/-1 · #57)_
+- `2026-04-30T15:07:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +118/-2)_
+- `2026-04-30T16:38:55Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #152: "[BUG] Voice action auto-replays when returning to app from external action (iMessage / x-callback)" _(parent: (no parent))_
+- `2026-04-30T17:39:06Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #94 "feat(ios): register propose_day_plan tool — voice delivery (Sub #15 4/4)" di @fc200490-sketch _(branch: `feat/issue-59-propose-day-plan-tool` · +118/-2 · #59)_
+- `2026-04-30T17:39:12Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #59: "[Sub #15 · 4/4] Voice delivery + tool registration `propose_day_plan`"
+- `2026-04-30T17:41:02Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
+- `2026-04-30T17:42:15Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #121 "fix(ios): declare live activity support on widget extension" di @Leonardo-Corte _(branch: `fix/issue-119-activitykit-entitlement` · +4/-0 · #119)_
+- `2026-04-30T17:45:52Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #106 _(branch: `feat/issue-88-core-reliability` · totale +146/-12)_
+- `2026-05-01T17:48:42Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #154: "feat(infra): post-mvp scope deescalation — Claude PM auto-applies label on voice command" _(branch: `feat/issue-153-post-mvp-deescalation` · 1 commit · +106/-4 · 3 file · #153)_
+- `2026-05-01T17:48:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #154 "feat(infra): post-mvp scope deescalation — Claude PM auto-applies label on voice command" di @ArmandoBattaglino _(branch: `feat/issue-153-post-mvp-deescalation` · +106/-4 · #153)_
+- `2026-05-01T17:48:51Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #153: "feat(infra): scope deescalation procedure — 'post-mvp' label included in 🟡 WAITING + Claude PM auto-applies on PM voice command"
+- `2026-05-01T17:59:55Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #155: "feat(infra): GitHub Project — Post-MVP column + auto-move on label" _(branch: `feat/post-mvp-project-column` · 1 commit · +230/-1 · 2 file · #153)_
+- `2026-05-01T18:06:51Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #156: "fix(workflows): graphql query Projects v2 — field(id:) not supported" _(branch: `fix/post-mvp-graphql` · 1 commit · +23/-15 · 2 file · (no link))_
+- `2026-05-01T18:06:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #156 "fix(workflows): graphql query Projects v2 — field(id:) not supported" di @ArmandoBattaglino _(branch: `fix/post-mvp-graphql` · +23/-15 · (no link))_
+- `2026-05-01T18:27:05Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #158 "docs(claude.md): scope deescalation — split PM full-apply vs Dev proposal-mode" di @ArmandoBattaglino _(branch: `feat/issue-157-deescalation-roles` · +63/-6 · #157)_
+- `2026-05-02T13:18:53Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #159: "[BUG] #122 AC#5 — Control Center toggle tap does nothing (no app launch / no listening)" _(parent: #122)_
+- `2026-05-02T13:26:13Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #106 "fix(ios): stabilize demo-critical voice intents" di @Leonardo-Corte _(branch: `feat/issue-88-core-reliability` · +146/-12 · #89)_
+- `2026-05-02T13:40:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #61: "[Sub #16 · 2/4] Harness reachability monitor + diagnostics state"
+- `2026-05-02T13:59:22Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #124 "feat(ios): persistent harness offline banner + dashboard status pill (#62)" di @fc200490-sketch _(branch: `feat/issue-62-offline-banner` · +141/-3 · #62)_
+- `2026-05-02T14:30:08Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #128 _(branch: `feat/issue-63-claude-fallback` · totale +136/-5)_
+- `2026-05-02T14:31:35Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #63: "[Sub #16 · 4/4] Claude bridge fallback to Gemini direct on harness failure"
+- `2026-05-02T14:32:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #128 "feat(ios): Claude bridge auto-fallback to Gemini direct on harness failure (#63)" di @fc200490-sketch _(branch: `feat/issue-63-claude-fallback` · +136/-5 · #63)_
+- `2026-05-02T15:01:07Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #53: "[Sub #14 · 1/3] Build `GigiTaskExtractor` engine (LLM call + dedup + state)"
+- `2026-05-02T15:01:11Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #134 "feat(ios): GigiTaskExtractor engine + Jaccard dedup (Sub #14 1/3)" di @fc200490-sketch _(branch: `feat/issue-53-task-extractor` · +132/-0 · #53)_
+- `2026-05-02T15:14:29Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #160: "[BUG] #54 AC#2/#3 — observeUserTurnsForExtraction sink Combine non triggera estrazione automatica" _(parent: #54)_

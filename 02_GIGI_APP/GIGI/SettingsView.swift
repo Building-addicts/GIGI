@@ -598,6 +598,37 @@ struct SettingsView: View {
             } message: {
                 Text("Restart the app to see onboarding again.")
             }
+
+            #if DEBUG
+            Button("Test Task Extractor") {
+                Task {
+                    let transcript = "I need to reply to Fede about the demo, prepare for the 3pm meeting, and book lunch with Marco tomorrow"
+                    await GigiTaskExtractor.shared.extract(from: transcript)
+                    let tasks = GigiTaskExtractor.shared.tasks
+                    print("GigiTaskExtractor TASKS (\(tasks.count)):")
+                    for t in tasks {
+                        print("  - title=\(t.title) deadline=\(t.deadline ?? "nil") vip=\(t.vipContact ?? "nil")")
+                    }
+                }
+            }
+            .foregroundColor(.purple)
+
+            Button("Test Extractor Dedup (run twice)") {
+                Task {
+                    let transcript = "reply to Fede about the demo and reply to Fede about the meeting"
+                    await GigiTaskExtractor.shared.extract(from: transcript)
+                    await GigiTaskExtractor.shared.extract(from: transcript)
+                    print("After 2x extract → tasks.count = \(GigiTaskExtractor.shared.tasks.count) (expect dedup ≤ 2)")
+                }
+            }
+            .foregroundColor(.purple)
+
+            Button("Clear Extractor Tasks") {
+                GigiTaskExtractor.shared.clear()
+                print("GigiTaskExtractor cleared → tasks.count = \(GigiTaskExtractor.shared.tasks.count)")
+            }
+            .foregroundColor(.purple)
+            #endif
         } header: {
             Text("🔧 Debug")
         }

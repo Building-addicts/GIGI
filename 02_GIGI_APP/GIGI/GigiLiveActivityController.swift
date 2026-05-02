@@ -504,6 +504,11 @@ final class GigiLiveActivityController: ObservableObject {
     // MARK: - Presence Mode session activity
 
     private var presenceActivity: Activity<GigiActivityAttributes>?
+    // GIGI issue #88: periodic refresh keeps the Live Activity banner from being
+    // silently dismissed by iOS after the original staleDate elapses. We push a
+    // fresh staleDate (Date()+1h) every 30 minutes for the lifetime of the
+    // presenceActivity. Cancelled in `endPresenceActivity()`.
+    private var refreshTask: Task<Void, Never>?
 
     @MainActor
     func startPresenceActivity(sessionId: String) async {
@@ -519,10 +524,38 @@ final class GigiLiveActivityController: ObservableObject {
             lastPhase = .sleeping
             lastActivityError = nil
             print("GIGI LiveActivity: presence Activity.request SUCCESS id=\(presenceActivity?.id ?? "nil")")
+            // GIGI issue #88: start periodic staleDate refresh so the pill persists
+            // across long-idle days. 30-min cadence is well below iOS' typical
+            // stale-dismissal window once `staleDate` has elapsed.
+            refreshTask?.cancel()
+            refreshTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 30 * 60 * 1_000_000_000)
+                    if Task.isCancelled { break }
+                    await self?.refreshPresenceStaleDate()
+                }
+            }
         } catch {
             print("GIGI Live Activity: presence start failed — \(error)")
             lastActivityError = "Failed to start Presence Live Activity: \(error.localizedDescription)"
         }
+    }
+
+    /// GIGI issue #88: refresh the presence Live Activity content with a new staleDate
+    /// so iOS does not silently dismiss the pill after the original stale window.
+    /// No-op when there is no active presence Live Activity.
+    @MainActor
+    private func refreshPresenceStaleDate() async {
+        guard let act = presenceActivity else { return }
+        let cs = GigiActivityAttributes.ContentState(
+            phase: lastPhase,
+            message: phaseMessage(for: lastPhase),
+            lastTranscript: nil,
+            sessionId: act.attributes.sessionID
+        )
+        let content = ActivityContent(state: cs, staleDate: Date().addingTimeInterval(3600))
+        await act.update(content)
+        print("GIGI LiveActivity: presence staleDate refreshed id=\(act.id)")
     }
 
     @MainActor
@@ -564,6 +597,12 @@ final class GigiLiveActivityController: ObservableObject {
 
     @MainActor
     func endPresenceActivity() async {
+        // GIGI issue #88: stop the periodic refresh whenever the presence
+        // activity is torn down (explicit stop OR cleanup-before-restart in
+        // `startPresenceActivity`). startPresenceActivity will spin up a new
+        // task on success.
+        refreshTask?.cancel()
+        refreshTask = nil
         guard let act = presenceActivity else { return }
         let cs = GigiActivityAttributes.ContentState(
             phase: .done, message: "Session ended", lastTranscript: nil, sessionId: nil

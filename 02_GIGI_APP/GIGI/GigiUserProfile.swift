@@ -72,6 +72,7 @@ final class GigiUserProfile {
         static let mvpBuffer       = "pref:mvp_travel_buffer_min"
         static let mvpFood         = "pref:mvp_food_preference"
         static let mvpRoutine      = "pref:mvp_routine_hints"
+        static let mvpSeeded       = "pref:mvp_seeded"
     }
 
     private enum KCKey {
@@ -165,6 +166,58 @@ final class GigiUserProfile {
         for (key, val) in pairs {
             await m.remember(key: key, value: val)
         }
+    }
+
+    // Sub-issue #51 (2/3 di #13). Carica `MVPPreferencesSeed.json` dal bundle al
+    // primo lancio dell'app, poi marca `pref:mvp_seeded=true`. Idempotente:
+    // i lanci successivi sono no-op. Fail-soft su seed mancante o JSON corrotto.
+    func seedMVPPreferencesIfNeeded() async {
+        let m = GigiMemory.shared
+        // Wait for CloudKit bootstrap so the cache is hydrated before we read
+        // the idempotency marker — otherwise launches before bootstrap finishes
+        // see a stale empty cache and re-run the seed every time.
+        let t0 = Date()
+        await m.awaitReady()
+        let waited = Int(Date().timeIntervalSince(t0) * 1000)
+        let markerValue = await m.recall(MemKey.mvpSeeded)
+        GigiDebugLogger.log("seed: awaitReady \(waited)ms · recall(\(MemKey.mvpSeeded)) = \(markerValue.map { "\"\($0)\"" } ?? "nil")")
+        if markerValue == "true" { return }
+        guard let url = Bundle.main.url(forResource: "MVPPreferencesSeed", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let seed = try? JSONDecoder().decode(MVPPreferences.self, from: data)
+        else {
+            GigiDebugLogger.log("MVPPreferences seed missing or invalid — first-launch defaults skipped")
+            return
+        }
+        await saveMVPPreferences(seed)
+        await m.remember(key: MemKey.mvpSeeded, value: "true")
+        GigiDebugLogger.log("MVPPreferences seeded ✓")
+    }
+
+    // Sub-issue #52 (3/3 di #13). Helper per costruire il blocco markdown
+    // `## USER PREFERENCES` da iniettare nei system prompt LLM (Claude bridge,
+    // Groq agent, Realtime voice). Solo campi non-empty entrano nel blocco —
+    // ritorna stringa vuota se il seed non è stato caricato (no-op safe).
+    func mvpPreferencesContext() async -> String {
+        let p = await loadMVPPreferences()
+        guard p != .empty else { return "" }
+        var lines: [String] = []
+        if !p.communicationTone.isEmpty { lines.append("- Tone: \(p.communicationTone)") }
+        if !p.workHours.isEmpty         { lines.append("- Work hours: \(p.workHours)") }
+        lines.append("- Morning focus (deep work AM): \(p.morningFocus)")
+        if !p.vipContacts.isEmpty       { lines.append("- VIP contacts: \(p.vipContacts.joined(separator: ", "))") }
+        lines.append("- Travel buffer: \(p.travelBufferMinutes) min")
+        if !p.foodPreference.isEmpty    { lines.append("- Food: \(p.foodPreference)") }
+        if !p.routineHints.isEmpty      { lines.append("- Routines: \(p.routineHints.joined(separator: "; "))") }
+        return "## USER PREFERENCES\n" + lines.joined(separator: "\n")
+    }
+
+    /// Wraps a system prompt with the `## USER PREFERENCES` block. No-op if
+    /// preferences are empty (returns the original prompt unchanged).
+    func injectMVPContext(into systemPrompt: String) async -> String {
+        let prefs = await mvpPreferencesContext()
+        guard !prefs.isEmpty else { return systemPrompt }
+        return prefs + "\n\n" + systemPrompt
     }
 
     // CSV codec: GigiMemory è key-value String puro, niente JSON.

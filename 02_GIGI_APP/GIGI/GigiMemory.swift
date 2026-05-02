@@ -28,6 +28,7 @@ final class GigiMemory {
     /// Mirrors CloudKit `useCount` for keys in `cache` (best-effort for `mostUsed` offline).
     private var useCountByKey: [String: Int64] = [:]
     private var iCloudAvailable = false
+    private var bootstrapped = false
 
     private init() {
         GigiDebugLogger.log("GigiMemory init started")
@@ -57,7 +58,18 @@ final class GigiMemory {
 
     // MARK: - Bootstrap
 
+    /// Suspends until bootstrap() has finished (success, fallback, or failure).
+    /// Safe to call repeatedly — no-op once ready. Required before reading
+    /// CloudKit-persisted keys at app launch (e.g. seed idempotency markers),
+    /// since cache is empty until loadAll() inside bootstrap() populates it.
+    func awaitReady() async {
+        while !bootstrapped {
+            try? await Task.sleep(nanoseconds: 25_000_000) // 25ms
+        }
+    }
+
     private func bootstrap() async {
+        defer { bootstrapped = true }
         // 1. We need a non-empty container identifier.
         guard !Self.cloudContainerID.isEmpty else {
             print("GIGI Memory: no bundle ID — local-only mode")
