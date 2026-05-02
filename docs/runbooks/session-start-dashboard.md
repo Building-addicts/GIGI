@@ -112,14 +112,70 @@ Limit attuale: max 3 actionable + 3 waiting + 2 PR = 8 righe issue + 3 header + 
 
 Causa: hook session-start gira **una sola volta all'apertura**. Per vedere stato fresh, riapri Claude Code (`Ctrl+D` poi rilancia).
 
+## Automazione GitHub Actions (post #136)
+
+Da issue #136 mergiata, la label `blocked` viene gestita **automaticamente** da 3 workflow:
+
+### `.github/workflows/auto-blocked-label.yml`
+- **Trigger**: issue opened/edited + comment created/edited
+- **Logic**: cerca pattern `Blocked by #N` / `Depends on #N` / `Waiting on #N` / `Aspetto #N` / `Stand-by on #N` (case-insensitive, italiano + inglese) nel body + ultimi 5 comment. Se almeno una issue referenziata è OPEN → applica label `blocked`.
+
+### `.github/workflows/auto-unblock.yml`
+- **Trigger**: issue closed
+- **Logic**: trova tutte le issue open con label `blocked` che la referenziano, ri-runna detection. Se NESSUNA dipendenza open resta → rimuove label `blocked` + posta `✅ Blocked-by #N resolved — unblocked` automatic.
+
+### `.github/workflows/auto-clear-pr-blocking-marker.yml`
+- **Trigger**: issue closed
+- **Logic**: scansiona PR aperte cercando marker `<!-- BLOCKING:N,M -->`. Se la issue chiusa è nel marker e TUTTI i numeri nel marker sono ora closed → posta `✅ All blocking issues resolved — PR ready for review`.
+
+### Quando NON funziona automatico
+
+I workflow girano solo se l'issue/comment usa un pattern riconosciuto. Se scrivi *"questa dipende dall'altra"* senza `#N`, niente è detected. Sempre meglio:
+
+```markdown
+⏸️ Blocked by #127 — multi-instance Live Activities pollution.
+Riprenderò dopo merge fix.
+```
+
+Per un fallback manuale (override automatic detection):
+
+```bash
+gh issue edit <N> --add-label blocked    # forza in 🟡
+gh issue edit <N> --remove-label blocked # forza out
+```
+
+## Label `post-mvp` — scope deescalation dal PM (issue #153)
+
+Oltre alla label `blocked` (dipendenza tecnica), il sistema riconosce anche **`post-mvp`** come trigger 🟡 WAITING:
+
+| Label | Significato | Chi la applica | Chi la rimuove |
+|---|---|---|---|
+| `blocked` | Dipendenza tecnica concreta su altra issue/PR. Auto-detected dai pattern `Blocked by #N` etc. | Action 1 `auto-blocked-label.yml` | Action 2 `auto-unblock.yml` quando dependency closes |
+| `post-mvp` | Decisione PM di spostare scope a v1.1. Es. "wake word post-mvp" | Claude del PM su comando vocale (vedi CLAUDE.md §"Procedura deescalation scope") | Claude del PM su "ripristino X" |
+
+Issue con `post-mvp` mostrano: `⏸️ post-mvp (deescalated to v1.1)` nel dashboard 🟡, distinguibile da `blocked` che mostra solo `⏸️ blocked`.
+
+### Comando vocale — varianti per ruolo (issue #157)
+
+| Ruolo | Cosa succede |
+|---|---|
+| **PM** (@ArmandoBattaglino) dice "sposto X a fine" | Full apply: search + label + comment auto |
+| **Dev** (Leo, Fede, ecc.) dice stessa frase | Proposal mode: comment di proposta su #19 LIVE FEED con cc PM, NO label change |
+
+Razionale: scope MVP è autorità PM. Dev possono proporre, PM esegue. Claude del dev è il guardiano della convention.
+
+Vedi `CLAUDE.md` §"🎚️ Procedura deescalation scope" per details + esempio template proposal comment.
+
 ## Convention future (parking lot)
 
 Se serve in futuro:
-- **Marker comment `<!-- BLOCKING:N,M -->`** automatico — costoso fetchare comment di ogni issue (1 API call extra per issue), valutare se vale per repo grandi
 - **Auto-detect parent epic con sub aperte** → 🟡 — decisione attuale (2026-04-29) PM: NON farlo, parent epic resta 🟢 release-blocker
-- **GitHub Action auto-clear blocked label** quando issue dipendenza chiude — utile ma scope separato
+- **Auto-detect Polish edge cases**: pattern in altre lingue (es. portuguese, francese) — solo se entra dev non it/en
 
 ## Riferimenti
 - File hook: `.claude/hooks/session-start.sh` — Python embedded section ~163-260
 - Decisione architetturale: issue #130
+- Automazione: issue #136
+- Convention OBBLIGO Claude del dev: issue #139
+- Scope deescalation `post-mvp`: issue #153
 - Background motivante: PM feedback 2026-04-29 ore 03:30 — "ranking sembra a caso"

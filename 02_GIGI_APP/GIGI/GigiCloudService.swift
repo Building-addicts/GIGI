@@ -125,7 +125,7 @@ final class GigiCloudService {
     // MARK: - Agent: function calling (called by GigiAgentEngine)
 
     func callWithFunctions(
-        systemInstruction: String = GigiFoundationAgent.systemPrompt,
+        systemInstruction: String? = nil,
         contents: [GigiContent],
         tools: [FunctionDeclaration],
         cacheId: String? = nil,  // ignored — Groq has no context cache
@@ -134,7 +134,15 @@ final class GigiCloudService {
         let apiKey = GigiConfig.groqAPIKey
         guard !apiKey.isEmpty else { throw GigiCloudError.missingAPIKey }
 
-        let messages = buildMessages(system: systemInstruction, contents: contents)
+        // Sub #52: always inject MVPPreferences at the top, regardless of
+        // whether the caller supplied a custom systemInstruction. Agent loop
+        // and planner pass their own task-specific prompts, but the MVP
+        // demo requires their replies to also reflect user preferences
+        // (tone, VIP names, food, routine hints, ...).
+        let baseSystem = systemInstruction ?? GigiFoundationAgent.systemPrompt
+        let resolvedSystem = await GigiUserProfile.shared.injectMVPContext(into: baseSystem)
+        GigiDebugLogger.log("LLM[groq] systemPrompt prefix=\(resolvedSystem.prefix(80))")
+        let messages = buildMessages(system: resolvedSystem, contents: contents)
         let toolsJSON = buildToolsJSON(tools)
 
         var req = URLRequest(url: URL(string: groqEndpoint)!)
@@ -154,7 +162,10 @@ final class GigiCloudService {
             body["tool_choice"] = "auto"
         }
 
+        print("GIGI Groq request: model=\(model ?? agentModel) tools=\(toolsJSON.count) tool_choice=\(body["tool_choice"] ?? "n/a") msgs=\(messages.count)")
+
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        GigiDebugLogger.log("Groq request: model=\(model ?? agentModel) messages=\(messages.count) tools=\(tools.count)")
 
         return try await withThrowingTaskGroup(of: GigiLLMResponse.self) { group in
             group.addTask {
@@ -186,8 +197,10 @@ final class GigiCloudService {
             : "--- Conversation history ---\n\(history)\n--- End history ---\n\nCurrent message: \(text)"
 
         do {
+            let injectedSystem = await GigiUserProfile.shared.injectMVPContext(into: GigiFoundationAgent.systemPrompt)
+            GigiDebugLogger.log("LLM[groq-nlu] systemPrompt prefix=\(injectedSystem.prefix(80))")
             let raw = try await callGroqRaw(
-                system: GigiFoundationAgent.systemPrompt,
+                system: injectedSystem,
                 user: prompt,
                 model: agentModel,
                 maxTokens: 512,
@@ -275,6 +288,26 @@ final class GigiCloudService {
             model: agentModel,
             maxTokens: 200,
             temperature: 0.7
+        )
+    }
+
+    /// Same Groq path as `ask(_:)` but with a caller-supplied system prompt.
+    /// Used by `GigiFallbackEngine.runComplexQuery` so the offline-mode
+    /// instructions can override the default agent persona.
+    ///
+    /// Routes through `fastModel` (llama-3.1-8b-instant) by default rather
+    /// than `agentModel`. Two reasons: (1) free-tier Groq splits quotas
+    /// per model, so when the agent loop has saturated the 70B TPM the
+    /// fallback can still serve answers from the 8B; (2) the fallback is
+    /// already a degraded path, and AC5 of #63 demands a voiced reply
+    /// within 8 seconds — the smaller model is materially faster.
+    func askRaw(system: String, user: String) async throws -> String {
+        try await callGroqRaw(
+            system: system,
+            user: user,
+            model: fastModel,
+            maxTokens: 220,
+            temperature: 0.5
         )
     }
 
@@ -460,7 +493,13 @@ final class GigiCloudService {
         let text         = message["content"] as? String
 
         var functionCalls: [FunctionCallBlock] = []
-        if let toolCalls = message["tool_calls"] as? [[String: Any]] {
+        let toolCalls = message["tool_calls"] as? [[String: Any]]
+        let rawJSON = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+        Task { @MainActor in
+            GigiDebugLogger.log("Groq response: finish=\(finishReason) tool_calls=\(toolCalls?.count ?? 0) raw=\(String(rawJSON.prefix(2000)))")
+        }
+
+        if let toolCalls {
             for tc in toolCalls {
                 guard let fn      = tc["function"] as? [String: Any],
                       let name    = fn["name"] as? String,
@@ -481,6 +520,8 @@ final class GigiCloudService {
                 functionCalls.append(FunctionCallBlock(name: name, args: args))
             }
         }
+
+        print("GIGI Groq response: finish_reason=\(finishReason) content_len=\(text?.count ?? 0) tool_calls=\(functionCalls.count)")
 
         return GigiLLMResponse(
             text:          (text?.isEmpty ?? true) ? nil : text,

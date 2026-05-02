@@ -106,6 +106,187 @@ Sotto questo blocco, i dettagli tecnici (Target files, Changes, Build verify, AC
 
 Il **Test E2E utente** deve rispecchiare letteralmente il "Risultato atteso" come AC#1 — dev e PM verificano la stessa promessa.
 
+### ⚠️ Convention blocking dependency — Claude OBBLIGO (auto-detected by GitHub Actions)
+
+**Quando Claude apre/edita una issue o posta un comment** che parla di una dipendenza da un'altra issue/PR ancora open, DEVE usare uno dei pattern riconosciuti dai workflow `auto-blocked-label.yml` / `auto-unblock.yml` / `auto-clear-pr-blocking-marker.yml`. Se Claude scrive linguaggio generico tipo *"questa è bloccata da quella"* senza un pattern + numero, le GitHub Actions non rilevano la dipendenza e il sistema dashboard (🟡 WAITING column) NON funziona.
+
+#### Pattern OBBLIGATORI da usare quando esiste una dipendenza
+
+```markdown
+Blocked by #N
+Blocked from #N
+Depends on #N
+Waiting on #N
+Waiting for #N
+Aspetto #N            ← italiano accettato
+Aspetto chiusura di #N
+Stand-by finché #N
+```
+
+Esempi corretti:
+- ✅ `"⏸️ Blocked by #127 — multi-instance Live Activities pollution. Riprenderò dopo merge."`
+- ✅ `"Questa issue depends on #89 (NLU fast-path) — aspetto fix prima di partire."`
+- ✅ `"Stand-by finché #127 non è chiuso, poi riprendo qui."`
+
+Esempi VIETATI (NON triggerano automation):
+- ❌ `"Questa è bloccata da quella issue"` (no number)
+- ❌ `"Aspetto che Leo finisca #127"` (verbo + nome dev, troppo informale)
+- ❌ `"Need #127 fix first"` (`need` non è nel pattern set)
+
+#### PR blocking marker
+
+Quando Claude posta un blocking comment su una PR, usa SEMPRE il marker HTML invisibile:
+
+```markdown
+⛔ Blocking comment <!-- BLOCKING:127,89 -->
+
+Questa PR resta in standby finché:
+- #127 — descrizione breve
+- #89 — descrizione breve
+
+cc @autore @ArmandoBattaglino
+```
+
+Il marker `<!-- BLOCKING:127,89 -->` è parsato da `auto-clear-pr-blocking-marker.yml` per postare clearance comment quando TUTTE le issue listate vengono chiuse. **Senza marker non c'è clearance automatica.**
+
+#### Override manuale (raro)
+
+Se la dipendenza è esterna (non una issue del repo) o vaga, Claude può forzare label via:
+```bash
+gh issue edit <N> --repo Building-addicts/GIGI --add-label blocked
+```
+Ma è eccezione, non default. Sempre preferire pattern esplicito.
+
+#### Auto-validazione prima di scrivere
+
+Prima di postare comment/body issue/PR che menzionano una dipendenza, Claude DEVE auto-revisionare:
+1. Sto parlando di una dipendenza? (presenza di parole tipo "blocca", "dipende", "aspetto", "waiting", "stand-by")
+2. Sì → la dipendenza è una issue di questo repo? Sì → menziono un `#N` con uno dei pattern obbligatori sopra?
+3. Se no → riformulo prima di postare.
+
+Vedi `docs/runbooks/session-start-dashboard.md` per details + GitHub Actions logic.
+
+### 🎚️ Procedura deescalation scope — varianti per ruolo
+
+**Decisione di scope MVP (sposta feature X a post-MVP) è autorità del PM (@ArmandoBattaglino).** I dev (Leo, Fede) possono **proporla** ma non eseguirla unilateralmente.
+
+Il branch dipende da `$HANDLE` settato dal SessionStart hook (`.claude/hooks/session-start.sh`):
+
+| Ruolo dev attuale | Comando vocale | Cosa fa Claude |
+|---|---|---|
+| **PM** (`HANDLE == "ArmandoBattaglino"`) | "sposto X a fine" | **Full apply**: search + label + comment auto |
+| **Dev** (Leo / Fede / altri) | "sposto X a fine" | **Proposal mode**: search + comment su #19 con cc @ArmandoBattaglino, NO label change |
+
+#### Variante A — PM full apply
+
+Quando il PM (@ArmandoBattaglino) dice una frase come:
+
+| Trigger riconosciuti | Esempio |
+|---|---|
+| `"sposto X a fine"` / `"X a fine"` | *"sposto wake word a fine"* |
+| `"deferred X"` / `"X deferred"` | *"deferred always-listening"* |
+| `"X post-mvp"` / `"post-mvp X"` | *"wake word post-mvp"* |
+| `"metto in pausa X"` | *"metto in pausa il NLU"* |
+| `"deescala X"` / `"deescalate X"` | *"deescala wake word"* |
+
+**Claude del PM DEVE eseguire questa sequenza**:
+
+1. **Identifica scope X**: keyword da matchare nel titolo/body delle issue/PR open. Esempi:
+   - "wake word" → grep `wake|wake-word|hey gigi` in titoli
+   - "always listening" → grep `always.listen|always-listening`
+   - "NLU" → grep `nlu|intent`
+
+2. **Esegui search**:
+   ```bash
+   gh search issues --repo Building-addicts/GIGI --state open "<keyword>" --json number,title,labels
+   gh search prs --repo Building-addicts/GIGI --state open "<keyword>" --json number,title
+   ```
+
+3. **Mostra al PM lista deduplicata** delle issue/PR trovate, con label corrente:
+   ```
+   Trovate 13 issue/PR che toccano "wake word":
+     #65 (no label)        Voice & Wake — W2/W3/W4...
+     #66 (no label)        Dynamic Island D1 + Follow-up...
+     ...
+     #115 [post-mvp] (già) voice: barge-in inconsistente
+     PR #85 (no label)     always-listening consent flow
+     PR #103 (no label)    wake word de-scope
+     PR #106 (no label)    NLU intents
+
+   Procedo ad applicare label `post-mvp` a tutte (escluso #115 già marcata)?
+   ```
+
+4. **Su conferma PM** ("sì" / "vai" / "ok"):
+   - Per ogni issue/PR senza label `post-mvp`:
+     ```bash
+     gh issue edit <N> --repo Building-addicts/GIGI --add-label post-mvp
+     ```
+     (per PR: `gh pr edit <N> --add-label post-mvp`)
+   - Posta comment standardizzato:
+     ```
+     ⏸️ Deescalated to post-MVP by PM @ArmandoBattaglino YYYY-MM-DD —
+     "<scope X>" feature resumes in v1.1.
+     ```
+
+5. **Conferma al PM**: `✅ <N> issue/PR ora in 🟡 WAITING al prossimo session-start dei dev.`
+
+#### Variante B — Dev proposal mode
+
+**Quando un dev NON-PM** (Leo, Fede, o qualsiasi `HANDLE != "ArmandoBattaglino"`) dice una frase di deescalation, Claude del dev DEVE eseguire la sequenza **proposal**, NON la full-apply:
+
+1. **Identifica scope X**: stesso grep di Variante A
+2. **Esegui search**: stessa
+3. **Mostra al dev** lista issue/PR + spiega:
+   ```
+   Trovate N issue/PR che toccano "<scope>".
+
+   ⚠️ Decisione di scope MVP è autorità del PM. Posso aprire un comment di proposal su #19 (LIVE FEED) chiedendo approval ad @ArmandoBattaglino.
+
+   Procedo? (sì/no)
+   ```
+4. **Su conferma del dev** ("sì"):
+   - Posta comment su issue **#19** (LIVE FEED) usando `gh issue comment 19 --body "..."`:
+     ```
+     [HH:MM] @<dev_handle> · proposal-deescalation
+     🎚️ Propongo di spostare "<scope X>" a post-MVP.
+
+     Issue/PR coinvolte (N totali):
+     - #65 — Voice & Wake W2/W3...
+     - #66 — Dynamic Island D1...
+     - PR #103 — wake word de-scope
+     - ...
+
+     Razionale dev: <breve spiegazione che il dev fornisce o Claude deduce dalla frase>
+
+     cc @ArmandoBattaglino — se approvi, di' al tuo Claude *"sposto <scope X> a fine"* per applicare label automaticamente.
+     ```
+   - **NON applica label `post-mvp`**
+5. **Comunica al dev**: `✅ Proposta postata su #19 LIVE FEED. Quando @ArmandoBattaglino approva nella sua sessione, label e auto-move partono.`
+
+Razionale: i dev hanno repo write access e tecnicamente potrebbero applicare label `post-mvp` direttamente, ma la convention vuole che ogni decisione di scope passi dal PM. Claude del dev è il guardiano della convention.
+
+#### Comando inverso — "ripristino X" / "riprendiamo X"
+
+**Stessa asimmetria PM/Dev**:
+- Se PM lo dice → Claude PM: search + remove label + comment auto
+- Se Dev lo dice → Claude Dev: proposal su #19 con cc PM, NO label change
+
+PM full apply:
+1. Search issue/PR con label `post-mvp` + keyword scope
+2. Mostra lista al PM
+3. Su conferma: `gh issue edit N --remove-label post-mvp` + comment `▶️ Resumed from post-MVP by @ArmandoBattaglino YYYY-MM-DD — back to active queue.`
+
+Dev proposal: stesso pattern di Variante B sopra ma testo `Propongo di RIPRISTINARE "<scope>"`.
+
+#### Differenza `blocked` vs `post-mvp`
+
+| Label | Quando usarla | Riprende quando |
+|---|---|---|
+| `blocked` | Dipendenza tecnica concreta da altra issue/PR aperta. Pattern auto-detected. | Dependency closes (Action 2 rimuove auto) |
+| `post-mvp` | Decisione di scope dal PM. Feature spostata a v1.1. | PM dice "ripristino X" (manuale, non auto) |
+
+Entrambe finiscono in 🟡 WAITING dashboard, ma con label diversa per chiarezza.
+
 ### Flusso completo per ogni issue (da seguire alla lettera)
 
 #### 1. Onboarding sessione (auto via SessionStart hook)
@@ -457,7 +638,7 @@ Se il dev ti dice qualcosa di rischioso/ambiguo (es. "fai tu", "decidi tu"), il 
 
 ## Stato corrente (2026-04-27)
 
-**Settimana lancio MVP** — deadline **venerdì 1 maggio 2026**. Code freeze mercoledì 30 ore 16:00 (QA gate #17), demo venerdì.
+**Settimana lancio MVP** — deadline **venerdì 1 maggio 2026**.
 
 Board GitHub: 51 issue strutturate + linkate native:
 - **13 PARENT epic** (#10-#18 + #76-#79) con header 🎯/🔧/✨

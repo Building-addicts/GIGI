@@ -193,10 +193,20 @@ def priority_score(issue):
     return 99
 
 def is_blocked(issue):
-    """Issue è blocked se ha label 'blocked' esplicita.
-    (Marker comment <!-- BLOCKING:N,M --> verrà aggiunto in futuro se serve — costoso fetchare comment per ogni issue.)"""
+    """Issue è in 🟡 WAITING se ha label 'blocked' (dipendenza tecnica) o
+    'post-mvp' (scope deescalato dal PM, riprende v1.1).
+    Entrambe semanticamente = "non actionable adesso, non proporre al dev"."""
     labels = [l['name'] for l in issue.get('labels', [])]
-    return 'blocked' in labels
+    return 'blocked' in labels or 'post-mvp' in labels
+
+def blocked_reason(issue):
+    """Etichetta della ragione di blocco — usata nel render."""
+    labels = [l['name'] for l in issue.get('labels', [])]
+    if 'post-mvp' in labels:
+        return 'post-mvp'
+    if 'blocked' in labels:
+        return 'blocked'
+    return ''
 
 def render_issue_line(issue, with_blocked_hint=False):
     labels = [l['name'] for l in issue.get('labels', [])]
@@ -207,7 +217,11 @@ def render_issue_line(issue, with_blocked_hint=False):
     title = issue['title'][:75]
     line = f"  {pri_emoji}{blocker}{bug} #{issue['number']} — {title}"
     if with_blocked_hint:
-        line += "  ⏸️ blocked"
+        reason = blocked_reason(issue)
+        if reason == 'post-mvp':
+            line += "  ⏸️ post-mvp (deescalated to v1.1)"
+        else:
+            line += "  ⏸️ blocked"
     return line
 
 def render_pr_status(pr):
