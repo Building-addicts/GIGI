@@ -167,3 +167,4 @@
 - `2026-05-02T15:50:31Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #163: "fix(ios): task extraction wiring + overlay UI bundled (Closes #54 #55)" _(branch: `fix/issue-54-55-task-extraction-bundled` · 12 commit · +224/-0 · 6 file · #54)_
 - `2026-05-02T15:52:27Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #164: "[BUG] #102 AC#9 — Hey Siri, hey GIGI opens foreground conversation mode" _(parent: #102)_
 - `2026-05-02T16:11:05Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #165: "fix(ios): align PR 103 device-tested shortcut and Siri triggers" _(branch: `fix/pr103-device-followup` · 1 commit · +25/-15 · 6 file · #161)_
+- `2026-05-02T16:12:42Z` · pr-merged · 🎉 @fc200490-sketch ha mergiato PR #165 "fix(ios): align PR 103 device-tested shortcut and Siri triggers" di @fc200490-sketch _(branch: `fix/pr103-device-followup` · +25/-15 · #103)_
