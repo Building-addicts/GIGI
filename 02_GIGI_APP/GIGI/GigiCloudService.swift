@@ -218,6 +218,31 @@ final class GigiCloudService {
         await processWithGroq(text, history: history)
     }
 
+    // MARK: - Task extraction (Sub #14 1/3)
+
+    func extractTasksRaw(transcript: String) async throws -> String {
+        let system = """
+        You are a task extraction engine. Extract ALL actionable tasks the user mentioned.
+        Output ONLY a JSON array, no prose, no markdown fences.
+        Each task: {"title": "short imperative phrase", "deadline": "today 18:00"?, "vipContact": "name"?}.
+        Examples:
+        - "reply to Fede and prepare the meeting" → [{"title":"Reply to Fede","vipContact":"Fede"},{"title":"Prepare the meeting"}]
+        - "no tasks here" → []
+        Rules:
+        - title MUST be in English, imperative form (Reply, Prepare, Book, Send...).
+        - deadline ONLY if explicitly mentioned by user.
+        - vipContact ONLY if a person name is mentioned.
+        - If no tasks: return [].
+        """
+        return try await callGroqRaw(
+            system: system,
+            user: "TRANSCRIPT:\n\(transcript)",
+            model: fastModel,
+            maxTokens: 400,
+            temperature: 0.0
+        )
+    }
+
     // MARK: - NLU intent classification
 
     func classifyIntent(_ text: String) async -> GigiIntent? {
