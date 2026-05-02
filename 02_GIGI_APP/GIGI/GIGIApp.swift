@@ -1,4 +1,5 @@
 import SwiftUI
+import AppIntents
 import GoogleSignIn
 import WebKit
 
@@ -14,6 +15,9 @@ struct GIGIApp: App {
         // from a previous run so the first wake re-prompts the user. Must run before
         // any Task or scenePhase observer reads the key.
         UserDefaults.standard.removeObject(forKey: GigiWakeWordEngine.consentKey)
+        if #available(iOS 16.0, *) {
+            GigiAppShortcuts.updateAppShortcutParameters()
+        }
         // Synchronous flush attempt for prior crash logs (so they reach the wire
         // before THIS run potentially crashes too).
         let prior = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
@@ -56,7 +60,8 @@ struct GIGIApp: App {
                     await GigiDebugLogger.flushCrashLogs()
                     GigiDebugLogger.log("flushCrashLogs done")
                     GigiBrainDiagnostics.log()
-                    GigiDebugLogger.log("GigiBrainDiagnostics done")
+                    GigiBrainDiagnostics.shared.startMonitoring()
+                    GigiDebugLogger.log("GigiBrainDiagnostics done — reachability monitor started")
                     // Presence Mode is now the single always-available mode. This starts
                     // Presence only when the user enabled it; otherwise it guarantees the
                     // wake-word engine is off so there is no second parallel logic.
@@ -65,9 +70,13 @@ struct GIGIApp: App {
                     // Realtime engine connects lazily on first use to save battery at startup
                     // Pre-load semantic memory for top-priority namespaces (non-blocking)
                     await GigiVectorStore.shared.preload(namespaces: [.contacts, .preferences, .places])
+                    await GigiUserProfile.shared.seedMVPPreferencesIfNeeded()
                     #if DEBUG
                     let mvpRoundTripOK = await GigiUserProfile.shared._debugMVPRoundTrip()
                     GigiDebugLogger.log("AC5 MVPPreferences round-trip → \(mvpRoundTripOK ? "OK" : "FAIL")")
+                    await GigiDayPlanReasoner.debugRunWithMockData()
+                    await GigiDayPlanReasoner.debugRunWithRealCalendar()
+                    await GigiDayPlanReasoner.debugRunWithLiveSources()
                     #endif
                     GigiDebugLogger.log("MainTabView .task finished")
                 }
