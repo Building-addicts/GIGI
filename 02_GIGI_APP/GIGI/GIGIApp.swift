@@ -52,7 +52,8 @@ struct GIGIApp: App {
                     await GigiDebugLogger.flushCrashLogs()
                     GigiDebugLogger.log("flushCrashLogs done")
                     GigiBrainDiagnostics.log()
-                    GigiDebugLogger.log("GigiBrainDiagnostics done")
+                    GigiBrainDiagnostics.shared.startMonitoring()
+                    GigiDebugLogger.log("GigiBrainDiagnostics done — reachability monitor started")
                     // Presence Mode is now the single always-available mode. This starts
                     // Presence only when the user enabled it; otherwise it guarantees the
                     // wake-word engine is off so there is no second parallel logic.
