@@ -15,27 +15,24 @@ struct GIGIApp: App {
         let prior = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
         GigiDebugLogger.log("GIGIApp init: prior crash logs count=\(prior.count)")
         Task { await GigiDebugLogger.flushCrashLogs() }
-        GIGIApp.installControlCenterListenObserver()
         GigiDebugLogger.log("GIGIApp init FINISHED")
     }
 
-    // Darwin notification posted by GIGIControlListenIntent (Control Center
-    // toggle). When the AppIntent's openAppWhenRun=true brings the app to
-    // foreground, this observer fires and starts QuickTalk continuous mode.
-    private static func installControlCenterListenObserver() {
-        let name = "com.killsiri.GIGI.controlCenterListen" as CFString
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            nil,
-            { _, _, _, _, _ in
-                Task { @MainActor in
-                    QuickTalkController.shared.startContinuous()
-                }
-            },
-            name,
-            nil,
-            .deliverImmediately
-        )
+    // Reads the App Group flag set by GIGIControlListenIntent (Control Center
+    // toggle). Called on every scenePhase=.active transition. If a fresh
+    // listen request is pending (timestamp within last 5s), starts QuickTalk
+    // continuous mode and clears the flag.
+    private static func consumeControlCenterListenRequestIfPending() {
+        guard let defaults = UserDefaults(suiteName: "group.com.gigi.presence") else { return }
+        let key = "gigi.cc.listenRequestedAt"
+        let ts = defaults.double(forKey: key)
+        guard ts > 0 else { return }
+        let age = Date().timeIntervalSince1970 - ts
+        defaults.removeObject(forKey: key)
+        guard age < 5 else { return }
+        Task { @MainActor in
+            QuickTalkController.shared.startContinuous()
+        }
     }
 
     var body: some Scene {
@@ -44,6 +41,7 @@ struct GIGIApp: App {
             MainTabView()
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
+                        GIGIApp.consumeControlCenterListenRequestIfPending()
                         Task { @MainActor in GigiApnsSync.onAppDidBecomeActive() }
                         // Presence Mode is the canonical always-available path.
                         // On every foreground transition, sync the user's preference:
@@ -68,6 +66,15 @@ struct GIGIApp: App {
                     }
                 }
                 .task {
+                    // Cover the cold-launch race where the AppIntent's
+                    // perform() may run AFTER scenePhase=.active fires:
+                    // poll the App Group flag for 3 seconds.
+                    Task {
+                        for _ in 0..<15 {
+                            try? await Task.sleep(nanoseconds: 200_000_000)
+                            GIGIApp.consumeControlCenterListenRequestIfPending()
+                        }
+                    }
                     GigiDebugLogger.log("MainTabView .task started")
                     await GigiDebugLogger.flushCrashLogs()
                     GigiDebugLogger.log("flushCrashLogs done")

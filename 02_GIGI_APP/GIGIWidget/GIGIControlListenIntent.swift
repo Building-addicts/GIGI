@@ -2,12 +2,10 @@ import AppIntents
 import Foundation
 
 // AppIntent fired by the Control Center toggle. openAppWhenRun = true
-// brings the host app to foreground; perform() then posts a Darwin
-// notification picked up by the main app's MainTabView, which starts
-// QuickTalkController.startContinuous() — same final state as a tap on
-// the in-app mic, but reachable from CC without the OpenURLIntent
-// quirks (which can silently no-op on custom URL schemes).
-@available(iOS 18.0, *)
+// brings the host app to foreground. The handoff to start listening is
+// via App Group UserDefaults (timestamp written here, read by main app
+// on scenePhase=.active). Darwin notifications proved unreliable from
+// chronod execution context (ChronoCore error code 3).
 struct GIGIControlListenIntent: AppIntent {
     static var title: LocalizedStringResource = "Talk to GIGI"
     static var description = IntentDescription(
@@ -16,11 +14,8 @@ struct GIGIControlListenIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        let name = CFNotificationName("com.killsiri.GIGI.controlCenterListen" as CFString)
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            name, nil, nil, true
-        )
+        let defaults = UserDefaults(suiteName: "group.com.gigi.presence")
+        defaults?.set(Date().timeIntervalSince1970, forKey: "gigi.cc.listenRequestedAt")
         return .result()
     }
 }
