@@ -1,4 +1,5 @@
 import SwiftUI
+import AppIntents
 import GoogleSignIn
 import WebKit
 
@@ -10,6 +11,9 @@ struct GIGIApp: App {
 
     init() {
         GigiDebugLogger.log("GIGIApp init STARTED — bundle=\(Bundle.main.bundleIdentifier ?? "nil")")
+        if #available(iOS 16.0, *) {
+            GigiAppShortcuts.updateAppShortcutParameters()
+        }
         // Synchronous flush attempt for prior crash logs (so they reach the wire
         // before THIS run potentially crashes too).
         let prior = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []

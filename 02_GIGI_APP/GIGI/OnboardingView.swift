@@ -428,7 +428,7 @@ struct OnboardingView: View {
                 // all without the GIGI app ever foregrounding.
                 VStack(alignment: .leading, spacing: 10) {
                     sectionHeader("Step 1 — Build the Talk to GIGI Shortcut", systemImage: "1.circle.fill")
-                    triggerRow(number: "a", title: "Install the Universal Talk to GIGI Shortcut, then open it in Shortcuts if you want to inspect it.")
+                    triggerRow(number: "a", title: "Install the Universal \(GigiHardwareShortcut.displayName) Shortcut. It appears in Shortcuts as \(GigiHardwareShortcut.shortcutName).")
                     triggerRow(number: "b", title: "It loops: Dictate Text → Process speech with GIGI → route markers → repeat until you say stop.")
                     triggerRow(number: "c", title: "CALL: passes the stripped phone number into the native Shortcuts Call action.")
                     triggerRow(number: "d", title: "SMS: sends the stripped message body to the stripped recipient with Send Message.")
@@ -467,15 +467,14 @@ struct OnboardingView: View {
 
                 // ── Setup 2: bind the Shortcut to a hardware trigger ──
                 //
-                // Critical: the picker shows two entries that look almost
-                // identical — the App Shortcut "Open GIGI" (foregrounds the
-                // app) and the user-built Shortcut "Talk to GIGI" (banner
-                // only). We steer the user to the second one explicitly.
+                // Critical: the picker shows both the App Shortcut "Open GIGI"
+                // (foregrounds the app) and the installed hardware Shortcut
+                // (banner only). We steer the user to the installed one.
                 VStack(alignment: .leading, spacing: 10) {
                     sectionHeader("Step 2 — Bind it to your iPhone", systemImage: "2.circle.fill")
                     triggerRow(number: "a", title: "Open the iOS Settings app")
                     triggerRow(number: "b", title: hardwareTriggerPath)
-                    triggerRow(number: "c", title: "Scroll to the Shortcuts section (not App Shortcuts) and pick Talk to GIGI — the one you just built")
+                    triggerRow(number: "c", title: "Scroll to the Shortcuts section (not App Shortcuts) and pick \(GigiHardwareShortcut.shortcutName) — the one you just installed")
 
                     Text("If you accidentally pick \"Open GIGI\" under App Shortcuts, the GIGI app will open instead of the dictation banner. Use the Shortcuts section.")
                         .font(.caption2)
@@ -504,7 +503,7 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, 24)
 
-                Text("No setup? Say \"Hey Siri, hey GIGI\" anywhere — works without configuring anything, but the answer comes through Siri.")
+                Text("No setup? Say \"Hey Siri, talk to GIGI\" anywhere — or \"Ehi Siri, parla con GIGI\" on Italian Siri. GIGI opens in conversation mode.")
                     .font(.footnote)
                     .foregroundColor(.white.opacity(0.5))
                     .multilineTextAlignment(.center)
@@ -547,8 +546,8 @@ struct OnboardingView: View {
     }
 
     /// Runs a saved user Shortcut by name. The walkthrough uses this so the
-    /// onboarding "Test the Shortcut" button verifies the user really built
-    /// and saved a Shortcut named "Talk to GIGI" — Shortcuts surfaces a clear
+    /// onboarding "Test the Shortcut" button verifies the user really installed
+    /// the expected Shortcut — Shortcuts surfaces a clear
     /// error sheet if no match is found.
     private func runShortcutByName(_ name: String) {
         #if canImport(UIKit)
