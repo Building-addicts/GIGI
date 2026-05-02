@@ -15,27 +15,7 @@ struct GIGIApp: App {
         let prior = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
         GigiDebugLogger.log("GIGIApp init: prior crash logs count=\(prior.count)")
         Task { await GigiDebugLogger.flushCrashLogs() }
-        GIGIApp.installControlCenterListenObserver()
         GigiDebugLogger.log("GIGIApp init FINISHED")
-    }
-
-    // Darwin notification posted by GIGIControlListenIntent (Control Center
-    // toggle). When the AppIntent's openAppWhenRun=true brings the app to
-    // foreground, this observer fires and starts QuickTalk continuous mode.
-    private static func installControlCenterListenObserver() {
-        let name = "com.killsiri.GIGI.controlCenterListen" as CFString
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            nil,
-            { _, _, _, _, _ in
-                Task { @MainActor in
-                    QuickTalkController.shared.startContinuous()
-                }
-            },
-            name,
-            nil,
-            .deliverImmediately
-        )
     }
 
     var body: some Scene {

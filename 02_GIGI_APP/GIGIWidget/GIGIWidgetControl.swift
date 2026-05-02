@@ -9,11 +9,11 @@ struct GIGIWidgetControl: ControlWidget {
         StaticControlConfiguration(
             kind: Self.kind
         ) {
-            // Use a dedicated AppIntent (openAppWhenRun = true) instead of
-            // OpenURLIntent. Control Center fires AppIntents reliably;
-            // OpenURLIntent for custom schemes can silently no-op on first
-            // invocation without a user permission round-trip.
-            ControlWidgetButton(action: GIGIControlListenIntent()) {
+            // Use the existing GigiQuickTalkIntent (openAppWhenRun = true)
+            // instead of OpenURLIntent. Control Center fires AppIntents
+            // reliably; OpenURLIntent for custom schemes can silently no-op
+            // on first invocation without a user permission round-trip.
+            ControlWidgetButton(action: GigiQuickTalkIntent()) {
                 Label("Talk to GIGI", systemImage: "mic.fill")
             }
         }
