@@ -47,6 +47,19 @@ enum GigiGateway {
     static let callbackCancelURLString = "gigi://gateway-cancel"
 }
 
+// MARK: - Hardware-trigger Shortcut (Action Button / Back Tap)
+enum GigiHardwareShortcut {
+    static let shortcutName = "Talk to GIGI"
+
+    // User-provided universal Shortcut link for the May 1 demo path.
+    private static let defaultICloudShortcutURL = "https://www.icloud.com/shortcuts/9789dedf6f714f2c8c20b205e815cd2d"
+
+    static var iCloudDownloadURL: URL? {
+        URL(string: defaultICloudShortcutURL)
+    }
+}
+
 extension Notification.Name {
     static let gigiGatewayCallback = Notification.Name("gigi.gateway.callback")
+    static let gigiReopenOnboarding = Notification.Name("gigi.onboarding.reopen")
 }
