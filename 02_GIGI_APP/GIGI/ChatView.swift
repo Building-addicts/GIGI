@@ -66,6 +66,9 @@ struct ChatView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
         .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
+        .sheet(isPresented: $gigi.showDraftPreview) {
+            DraftMessagePreviewSheet()
+        }
     }
 
     // MARK: - Sub-views
