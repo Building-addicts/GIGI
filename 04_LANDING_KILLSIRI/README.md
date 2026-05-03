@@ -4,7 +4,7 @@ Anti-Siri movement landing for **killsiri.xyz**. Static site, zero build step, d
 
 ## Stack
 - HTML / CSS / vanilla JS — no framework, no bundler
-- Supabase REST (waitlist storage)
+- Supabase RPC (waitlist storage)
 - Vercel hosting (static)
 
 ## Local dev
@@ -52,16 +52,16 @@ Notes:
 ## Activate Supabase (do AFTER site is perfect)
 
 1. Create project on supabase.com
-2. SQL Editor → paste contents of `supabase-schema.sql` → run
+2. SQL Editor → paste contents of `supabase-schema.sql` → run (or run the canonical `../supabase/migrations/202605030001_gigi_core.sql`)
 3. Settings → API → copy `URL` and `anon public key`
-4. Open `script.js` lines 9-10 → replace placeholders:
+4. Open the `SUPABASE CONFIG` block in `script.js` → replace placeholders:
    ```js
    const SUPABASE_URL = "https://xxx.supabase.co";
    const SUPABASE_ANON_KEY = "eyJhbG...";
    ```
 5. Redeploy
 
-Until step 4 is done, signups are stored in `localStorage` (browser-local fallback). Site works fully without Supabase.
+Until step 4 is done, signups are stored in `localStorage` (browser-local fallback). Site works fully without Supabase. Once enabled, the landing calls `killsiri_join_waitlist` and `killsiri_rebel_count` RPCs instead of exposing raw waitlist rows.
 
 ## What's intentionally NOT here yet
 - PDF certificate generation (placeholder visual only)

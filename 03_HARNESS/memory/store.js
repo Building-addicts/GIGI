@@ -12,6 +12,9 @@ export async function getStore() {
   if (backend === 'json') {
     const mod = await import('./backends/json-store.js');
     _store = mod.createStore();
+  } else if (backend === 'supabase') {
+    const mod = await import('./backends/supabase-store.js');
+    _store = mod.createStore();
   } else if (backend === 'lancedb') {
     const mod = await import('./backends/lancedb-store.js');
     _store = mod.createStore();

@@ -1,31 +1,69 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GIGi — Installazione OTA | killsiri.xyz</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f2f2f7; color: #1c1c1e; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; min-height: 100vh; margin: 0; }
-        .card { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 400px; width: 100%; text-align: center; }
-        .logo { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px; background: linear-gradient(135deg, #007aff, #5856d6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        h1 { font-size: 22px; font-weight: 700; margin: 12px 0 10px; }
-        p { color: #8e8e93; font-size: 15px; margin-bottom: 24px; line-height: 1.45; }
-        .btn { display: block; background: #007aff; color: white; text-decoration: none; padding: 15px; border-radius: 12px; font-weight: 600; margin-bottom: 12px; transition: opacity 0.2s; -webkit-tap-highlight-color: transparent; }
-        .btn.secondary { background: #34c759; }
-        .btn:active { opacity: 0.75; }
-        .footer { margin-top: 16px; font-size: 11px; color: #aeaeb2; line-height: 1.4; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Siri handles commands. GIGI handles context, memory, planning, and permissioned action." />
+  <meta name="theme-color" content="#000000" />
+  <title>Kill Siri — GIGI</title>
+  <style>
+    :root {
+      --black: #000;
+      --white: #f5f2ea;
+      --muted: rgba(245, 242, 234, 0.78);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--black);
+      color: var(--white);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    main {
+      width: min(1120px, calc(100vw - 40px));
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(42px, 8vw, 112px);
+      line-height: 0.94;
+      letter-spacing: -0.075em;
+      font-weight: 950;
+      text-wrap: balance;
+    }
+
+    h1 span {
+      display: block;
+    }
+
+    .line-one {
+      color: var(--muted);
+    }
+
+    .line-two {
+      color: var(--white);
+    }
+  </style>
 </head>
 <body>
-    <div class="card">
-        <div class="logo" aria-hidden="true">GIGi</div>
-        <h1>Deployment Center</h1>
-        <p>Apri questa pagina in <strong>Safari su iPhone</strong>. Prima il profilo di accessibilità, poi l’app OTA.</p>
-
-        <a href="https://killsiri.xyz/profiles/gigi_access_pro.mobileconfig" class="btn">1. Scarica profilo accessibilità</a>
-        <a href="itms-services://?action=download-manifest&amp;url=https://killsiri.xyz/deploy/manifest.plist" class="btn secondary">2. Installa app GIGi (OTA)</a>
-
-        <div class="footer">HTTPS obbligatorio per OTA. Dispositivo supervisionato dove richiesto dal profilo MDM. <br>killsiri.xyz</div>
-    </div>
+  <main aria-label="GIGI declaration">
+    <h1>
+      <span class="line-one">Siri handles commands.</span>
+      <span class="line-two">GIGI handles life.</span>
+    </h1>
+  </main>
 </body>
 </html>

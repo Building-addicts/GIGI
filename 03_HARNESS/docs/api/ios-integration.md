@@ -73,7 +73,7 @@ Body `{ "deviceId": "...", "reason": "manual" }` → forza snapshot memoria (Cla
 
 ## 2. Memoria semantica (per-device)
 
-Backend JSON file store (default, swap a LanceDB+BGE-M3 cambiando `MEMORY_BACKEND=lancedb`).
+Backend JSON file store di default. Per produzione condivisa usa Supabase con `MEMORY_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; lo schema canonico è `supabase/migrations/202605030001_gigi_core.sql`. LanceDB+BGE-M3 resta backend futuro via `MEMORY_BACKEND=lancedb`.
 
 ### POST /api/ios/memory/put
 ```json

@@ -72,7 +72,8 @@ Porte: **7777** panel admin · **7778** RPC loopback · **7779** iOS HTTP+WS.
 │   ├── store.js                   ← API astratta MemoryStore
 │   ├── retrieval.js               ← hybrid retrieval
 │   └── backends/
-│       ├── json-store.js          ← MVP JSON file per userId
+│       ├── json-store.js          ← fallback locale JSON per userId
+│       ├── supabase-store.js      ← backend produzione Supabase RPC
 │       └── lancedb-store.js       ← upgrade futuro (LanceDB + BGE-M3)
 ├── apns/                          ← Apple Push Notifications (fase 15)
 │   ├── send.js                    ← wrapper node-apn
@@ -112,7 +113,7 @@ Tutti i path override via env:
 ## Memory Upgrade (design in corso, non ancora implementato)
 
 Redesign memoria in `memory-upgrade/`. Branch attivo: `multi-user-v1/` (10 utenti, federated fine-tuning).
-Fase 13 implementa MVP JSON, upgrade a v4 SOTA stack (Anthropic Memory Tool + LanceDB + BGE-M3 + SurrealDB) futuro.
+Fase 13 mantiene fallback JSON; produzione condivisa passa da Supabase (`MEMORY_BACKEND=supabase`). Upgrade v4 SOTA stack (Anthropic Memory Tool + LanceDB + BGE-M3 + SurrealDB) resta futuro.
 
 ## Regola: loop → watcher
 

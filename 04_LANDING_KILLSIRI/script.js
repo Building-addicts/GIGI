@@ -11,21 +11,42 @@
 // ----- APOCALYPSE INTRO -----
 const intro = document.getElementById("intro-apocalypse");
 if (intro) {
-  document.body.classList.add("intro-running");
+  const isMobile = window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  const finishIntro = () => {
-    intro.classList.add("is-gone");
-    document.body.classList.remove("intro-running");
-    document.body.classList.add("intro-complete");
-    if (introTsTimer) clearInterval(introTsTimer);
-  };
+  // Mobile guard: if last intro likely crashed Safari (page reloaded within 10s
+  // of starting the intro), skip it on the retry so the user can see the site.
+  const CRASH_KEY = "killsiri_intro_started_at";
+  if (isMobile) {
+    const lastStart = parseInt(sessionStorage.getItem(CRASH_KEY) || "0", 10);
+    if (lastStart && Date.now() - lastStart < 10000) {
+      intro.classList.add("is-gone");
+      document.body.classList.add("intro-complete");
+      sessionStorage.removeItem(CRASH_KEY);
+    } else {
+      sessionStorage.setItem(CRASH_KEY, String(Date.now()));
+    }
+  }
 
-  intro.addEventListener("animationend", (event) => {
-    if (event.animationName === "intro-shell") finishIntro();
-  });
-  intro.addEventListener("click", finishIntro, { once: true });
+  if (!intro.classList.contains("is-gone")) {
+    document.body.classList.add("intro-running");
 
-  setTimeout(finishIntro, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1350 : 7300);
+    const finishIntro = () => {
+      intro.classList.add("is-gone");
+      document.body.classList.remove("intro-running");
+      document.body.classList.add("intro-complete");
+      sessionStorage.removeItem(CRASH_KEY);
+      if (introTsTimer) clearInterval(introTsTimer);
+    };
+
+    intro.addEventListener("animationend", (event) => {
+      if (event.animationName === "intro-shell") finishIntro();
+    });
+    intro.addEventListener("click", finishIntro, { once: true });
+
+    const introTimeout = reducedMotion ? 1350 : (isMobile ? 4800 : 7300);
+    setTimeout(finishIntro, introTimeout);
+  }
 }
 
 // ----- INTRO BIRTH FRAME — live UTC timestamp -----
@@ -48,8 +69,8 @@ if (introTs) {
 }
 
 // ----- SUPABASE CONFIG (replace at deploy time) -----
-const SUPABASE_URL = "YOUR_SUPABASE_URL";
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://frhiyogkuqtchxbsshqt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyaGl5b2drdXF0Y2h4YnNzaHF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3OTU4NTIsImV4cCI6MjA5MzM3MTg1Mn0.frnY3jBS_uvRLI70TVMuOz86oKoAho_uTzr6a-corOo";
 const SUPABASE_READY = !SUPABASE_URL.startsWith("YOUR_") && !SUPABASE_ANON_KEY.startsWith("YOUR_");
 
 // ----- REBEL NAME GENERATOR -----
@@ -93,41 +114,40 @@ function saveLocalRebel(rebel) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
-// ----- SUPABASE INSERT -----
-async function insertRebelSupabase(payload) {
-  const url = `${SUPABASE_URL}/rest/v1/waitlist_signups`;
+// ----- SUPABASE RPC -----
+// Tabella waitlist_signups è dietro RLS: anon non può select/insert direttamente.
+// Si usano le RPC security-definer: killsiri_join_waitlist + killsiri_rebel_count.
+async function callSupabaseRpc(name, body = {}) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${name}`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "apikey": SUPABASE_ANON_KEY,
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-      "Prefer": "return=representation"
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(body)
   });
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`Supabase error ${res.status}: ${txt}`);
+    throw new Error(`Supabase ${res.status} ${name}: ${txt}`);
   }
   return res.json();
 }
 
-async function getRebelCountSupabase() {
-  const url = `${SUPABASE_URL}/rest/v1/waitlist_signups?select=id`;
-  const res = await fetch(url, {
-    headers: {
-      "apikey": SUPABASE_ANON_KEY,
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-      "Prefer": "count=exact",
-      "Range-Unit": "items",
-      "Range": "0-0"
-    }
+async function insertRebelSupabase(payload) {
+  return callSupabaseRpc("killsiri_join_waitlist", {
+    p_email: payload.email,
+    p_rebel_name: payload.rebel_name,
+    p_share_code: payload.share_code,
+    p_referred_by: payload.referred_by || null
   });
-  const range = res.headers.get("content-range");
-  if (!range) return 0;
-  const total = parseInt(range.split("/")[1], 10);
-  return isNaN(total) ? 0 : total;
+}
+
+async function getRebelCountSupabase() {
+  const total = await callSupabaseRpc("killsiri_rebel_count");
+  const parsed = Number(total);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 // ----- COUNTER ANIMATION -----
@@ -190,7 +210,9 @@ form.addEventListener("submit", async (e) => {
   try {
     if (SUPABASE_READY) {
       const result = await insertRebelSupabase(rebel);
-      if (Array.isArray(result) && result[0]) savedRebel = result[0];
+      if (result && typeof result === "object") {
+        savedRebel = Array.isArray(result) ? (result[0] || rebel) : result;
+      }
     } else {
       saveLocalRebel(rebel);
     }

@@ -94,7 +94,9 @@ Tutti i path override via env:
 | `HARNESS_WATCHERS` | `server/watchers.json` | path definizioni watcher |
 | `HARNESS_SHARED_SECRET` | — | Bearer iOS (override cfg.ios.shared_secret) |
 | `HARNESS_MEMORY_DIR` | `memory/logs` | storage JSON memoria per-user |
-| `MEMORY_BACKEND` | `json` | `json` o `lancedb` |
+| `MEMORY_BACKEND` | `json` | `json`, `supabase` o `lancedb` |
+| `SUPABASE_URL` | — | richiesto se `MEMORY_BACKEND=supabase` |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | server-only, richiesto se `MEMORY_BACKEND=supabase` |
 | `ANTHROPIC_API_KEY` | — | per computer-use (override cfg.anthropic.api_key) |
 | `APNS_KEY_PATH` | cfg.apns.key_path | .p8 APNs Auth Key |
 | `APNS_KEY_ID` | cfg.apns.key_id | Key ID 10 char |
