@@ -35,31 +35,66 @@ struct DayPlanOutput {
 // del wiring real-source via TODO.
 
 protocol DayPlanPreferenceSource {
-    func currentPreferences() -> [String]
+    func currentPreferences() async -> [String]
 }
 
 protocol DayPlanTaskSource {
-    func currentSessionTasks() -> [String]
+    func currentSessionTasks() async -> [String]
 }
 
+/// Wires the reasoner to the real MVPPreferences struct (#13). Each non-empty
+/// field is serialized into a natural-language sentence the prompt cites
+/// directly. UserDefaults override remains supported for debug/test paths.
 struct LivePreferenceSource: DayPlanPreferenceSource {
     static let userDefaultsKey = "mvp.preferences.array"
 
-    func currentPreferences() -> [String] {
-        // TODO(#13): sostituire con `await GigiUserProfile.shared.loadMVPPreferences()`
-        // serializzata a frasi quando il parent #13 mergia. Per ora UserDefaults
-        // come seed leggero non-async (il source è chiamato da contesti sync).
-        return UserDefaults.standard.stringArray(forKey: Self.userDefaultsKey) ?? []
+    func currentPreferences() async -> [String] {
+        if let override = UserDefaults.standard.stringArray(forKey: Self.userDefaultsKey),
+           !override.isEmpty {
+            return override
+        }
+        let prefs = await GigiUserProfile.shared.loadMVPPreferences()
+        return Self.serialize(prefs)
+    }
+
+    static func serialize(_ p: MVPPreferences) -> [String] {
+        var out: [String] = []
+        if !p.communicationTone.isEmpty {
+            out.append("Tono comunicazione preferito: \(p.communicationTone).")
+        }
+        if !p.workHours.isEmpty {
+            out.append("Orario di lavoro \(p.workHours).")
+        }
+        if p.morningFocus {
+            out.append("Preferisce fare deep-work la mattina.")
+        }
+        if !p.vipContacts.isEmpty {
+            out.append("Contatti VIP: \(p.vipContacts.joined(separator: ", ")).")
+        }
+        if p.travelBufferMinutes > 0 {
+            out.append("Lascia \(p.travelBufferMinutes) minuti di buffer per gli spostamenti.")
+        }
+        if !p.foodPreference.isEmpty {
+            out.append("Preferenza cibo: \(p.foodPreference).")
+        }
+        out.append(contentsOf: p.routineHints.filter { !$0.isEmpty })
+        return out
     }
 }
 
+/// Reads the live extracted-task store from GigiTaskExtractor (#14) — the same
+/// store that powers the TalkingSessionTaskListView overlay. UserDefaults
+/// override remains supported for debug paths.
 struct LiveTaskSource: DayPlanTaskSource {
     static let userDefaultsKey = "mvp.tasks.array"
 
-    func currentSessionTasks() -> [String] {
-        // TODO(#14): sostituire con `GigiConversationMemory.recentExtractedTasks()`
-        // quando il parent #14 mergia il task store della session corrente.
-        return UserDefaults.standard.stringArray(forKey: Self.userDefaultsKey) ?? []
+    func currentSessionTasks() async -> [String] {
+        if let override = UserDefaults.standard.stringArray(forKey: Self.userDefaultsKey),
+           !override.isEmpty {
+            return override
+        }
+        let tasks = await MainActor.run { GigiTaskExtractor.shared.tasks }
+        return tasks.map { $0.title }
     }
 }
 
@@ -87,8 +122,8 @@ final class GigiDayPlanReasoner {
         preferenceSource: DayPlanPreferenceSource = LivePreferenceSource(),
         taskSource: DayPlanTaskSource = LiveTaskSource()
     ) async -> DayPlanOutput? {
-        let prefs = preferenceSource.currentPreferences()
-        let tasks = taskSource.currentSessionTasks()
+        let prefs = await preferenceSource.currentPreferences()
+        let tasks = await taskSource.currentSessionTasks()
         return await reasonForToday(preferences: prefs, tasks: tasks)
     }
 
