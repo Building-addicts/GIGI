@@ -1583,3 +1583,24 @@ body.intro-running { overflow: hidden; }
   :root { --intro-dur: 1.25s; --intro-explode: .9s; }
   .intro-noise { animation: none; opacity: 0; }
 }
+
+/* ============================================
+   MOBILE PERF — prevent iOS Safari OOM crash
+   240 animated fragments + drop-shadow + blur on
+   mobile causes "an error has occurred repeatedly".
+   Hide the fragment explosion and heavy compositing
+   layers on small / coarse-pointer devices.
+   ============================================ */
+@media (max-width: 768px), (pointer: coarse) {
+  :root { --intro-dur: 4.6s; --intro-explode: 3.2s; }
+
+  .intro-apple-fragments { display: none; }
+
+  .intro-noise { animation: none; opacity: 0; display: none; }
+
+  .scanlines { mix-blend-mode: normal; opacity: .4; }
+
+  .intro-apple {
+    filter: brightness(1.18) contrast(1.15);
+  }
+}

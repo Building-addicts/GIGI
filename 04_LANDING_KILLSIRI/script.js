@@ -11,21 +11,42 @@
 // ----- APOCALYPSE INTRO -----
 const intro = document.getElementById("intro-apocalypse");
 if (intro) {
-  document.body.classList.add("intro-running");
+  const isMobile = window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  const finishIntro = () => {
-    intro.classList.add("is-gone");
-    document.body.classList.remove("intro-running");
-    document.body.classList.add("intro-complete");
-    if (introTsTimer) clearInterval(introTsTimer);
-  };
+  // Mobile guard: if last intro likely crashed Safari (page reloaded within 10s
+  // of starting the intro), skip it on the retry so the user can see the site.
+  const CRASH_KEY = "killsiri_intro_started_at";
+  if (isMobile) {
+    const lastStart = parseInt(sessionStorage.getItem(CRASH_KEY) || "0", 10);
+    if (lastStart && Date.now() - lastStart < 10000) {
+      intro.classList.add("is-gone");
+      document.body.classList.add("intro-complete");
+      sessionStorage.removeItem(CRASH_KEY);
+    } else {
+      sessionStorage.setItem(CRASH_KEY, String(Date.now()));
+    }
+  }
 
-  intro.addEventListener("animationend", (event) => {
-    if (event.animationName === "intro-shell") finishIntro();
-  });
-  intro.addEventListener("click", finishIntro, { once: true });
+  if (!intro.classList.contains("is-gone")) {
+    document.body.classList.add("intro-running");
 
-  setTimeout(finishIntro, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1350 : 7300);
+    const finishIntro = () => {
+      intro.classList.add("is-gone");
+      document.body.classList.remove("intro-running");
+      document.body.classList.add("intro-complete");
+      sessionStorage.removeItem(CRASH_KEY);
+      if (introTsTimer) clearInterval(introTsTimer);
+    };
+
+    intro.addEventListener("animationend", (event) => {
+      if (event.animationName === "intro-shell") finishIntro();
+    });
+    intro.addEventListener("click", finishIntro, { once: true });
+
+    const introTimeout = reducedMotion ? 1350 : (isMobile ? 4800 : 7300);
+    setTimeout(finishIntro, introTimeout);
+  }
 }
 
 // ----- INTRO BIRTH FRAME — live UTC timestamp -----
