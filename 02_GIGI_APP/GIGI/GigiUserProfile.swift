@@ -217,6 +217,22 @@ final class GigiUserProfile {
     func injectMVPContext(into systemPrompt: String) async -> String {
         let prefs = await mvpPreferencesContext()
         guard !prefs.isEmpty else { return systemPrompt }
+        // Sub #79 — emit a hint signal so ChatView can show a 2s toast that
+        // proves to the demo audience that the memory was actually consulted.
+        // Send only the first non-empty preference summary for clarity.
+        if let firstLine = prefs.split(separator: "\n").first.map(String.init), !firstLine.isEmpty {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .gigiPreferenceApplied,
+                    object: nil,
+                    userInfo: [
+                        "pref": "preferences",
+                        "value": firstLine
+                    ]
+                )
+            }
+            GigiDebugLogger.log("preference_applied: \(firstLine)")
+        }
         return prefs + "\n\n" + systemPrompt
     }
 

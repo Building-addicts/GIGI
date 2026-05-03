@@ -63,6 +63,14 @@ struct ChatView: View {
                     .padding(.top, 56)
                     .zIndex(99)
             }
+
+            // ── Memory hint toast (#79) ──────────────────────────────────────
+            VStack {
+                MemoryHintView()
+                    .padding(.top, 96)
+                Spacer()
+            }
+            .zIndex(60)
         }
         .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
         .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
