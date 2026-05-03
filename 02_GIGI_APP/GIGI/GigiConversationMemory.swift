@@ -57,6 +57,16 @@ final class GigiConversationMemory: ObservableObject {
         trimIfNeeded()
     }
 
+    /// Last `turns` user transcripts joined as a bulletted multi-line string.
+    /// Used by GigiTaskExtractor periodic trigger (#54).
+    func recentUserTranscript(turns: Int = 6) -> String {
+        messages
+            .filter { $0.role == .user }
+            .suffix(turns)
+            .map { "- \($0.text)" }
+            .joined(separator: "\n")
+    }
+
     func addThinking() -> UUID {
         let msg = GigiMessage(role: .gigi, text: "", isThinking: true)
         messages.append(msg)
