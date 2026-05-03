@@ -23,6 +23,8 @@ struct GigiActivityAttributes: ActivityAttributes {
         var lastTranscript: String? = nil
         var sessionId: String? = nil
         var wakePulseId: String? = nil
+        // #145 — audio-reactive waveform amplitude in [0,1]. nil → idle pulse.
+        var audioLevel: Float? = nil
     }
 }
 

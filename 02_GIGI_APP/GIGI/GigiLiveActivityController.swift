@@ -558,6 +558,34 @@ final class GigiLiveActivityController: ObservableObject {
         print("GIGI LiveActivity: presence staleDate refreshed id=\(act.id)")
     }
 
+    /// Push a fresh ContentState carrying only the audio amplitude. Called
+    /// during .listening from the capture pipeline so the waveform overlay
+    /// (#145) reacts to the user's voice without touching phase/message.
+    @MainActor
+    func updateAudioLevel(_ level: Float) async {
+        guard enabled else { return }
+        let clamped = min(1.0, max(0.0, level))
+        if let act = presenceActivity {
+            let prev = act.contentState
+            let cs = GigiActivityAttributes.ContentState(
+                phase: prev.phase, message: prev.message,
+                lastTranscript: prev.lastTranscript, sessionId: prev.sessionId,
+                wakePulseId: prev.wakePulseId, audioLevel: clamped
+            )
+            await act.update(ActivityContent(state: cs, staleDate: Date().addingTimeInterval(3600)))
+            return
+        }
+        if let act = activity {
+            let prev = act.contentState
+            let cs = GigiActivityAttributes.ContentState(
+                phase: prev.phase, message: prev.message,
+                lastTranscript: prev.lastTranscript, sessionId: prev.sessionId,
+                wakePulseId: prev.wakePulseId, audioLevel: clamped
+            )
+            await act.update(ActivityContent(state: cs, staleDate: Date().addingTimeInterval(60)))
+        }
+    }
+
     @MainActor
     func updatePresence(
         state: GigiPhase,
