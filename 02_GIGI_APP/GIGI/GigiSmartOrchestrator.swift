@@ -196,6 +196,37 @@ class GigiSmartOrchestrator: ObservableObject {
         memory.addUser(trimmed)
         let thinkingID = memory.addThinking()
 
+        // --- Draft preview voice control (Sub #49) ---
+        // While DraftMessagePreviewSheet is up, intercept the transcript:
+        //   "send / yes / manda" → sendDraft
+        //   "cancel / no / annulla" → cancelDraft
+        //   anything else → replace draft body
+        if showDraftPreview {
+            let lower = trimmed.lowercased()
+            let yes = ["send", "manda", "invia", "yes", "sì", "go ahead", "mandala", "envialo"]
+            let no  = ["cancel", "annulla", "no", "stop", "non mandare", "non inviare"]
+            if yes.contains(where: { lower.contains($0) }) {
+                let result = await sendDraft()
+                memory.resolveThinking(id: thinkingID, with: result)
+                isThinking = false
+                return
+            }
+            if no.contains(where: { lower.contains($0) }) {
+                cancelDraft()
+                memory.resolveThinking(id: thinkingID, with: "Cancelled.")
+                isThinking = false
+                return
+            }
+            if var d = pendingDraft {
+                d.body = trimmed
+                pendingDraft = d
+                speech.speak("Updated. Say send when ready.")
+                memory.resolveThinking(id: thinkingID, with: "Draft updated.")
+                isThinking = false
+                return
+            }
+        }
+
         // --- Pending confirmation turn ---
         // If a destructive/payment action is waiting for user approval, check intent.
         // Tolerant: anything that isn't a clear "yes" cancels the confirm and processes normally.
