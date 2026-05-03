@@ -63,6 +63,18 @@ struct ChatView: View {
                     .padding(.top, 56)
                     .zIndex(99)
             }
+
+            // ── Live task list overlay (Talking Session only) — Sub #55 ──────
+            if presence.isActive {
+                HStack {
+                    Spacer()
+                    TalkingSessionTaskListView()
+                        .padding(.top, 120)
+                        .padding(.trailing, 12)
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .zIndex(50)
+            }
         }
         .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
         .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
