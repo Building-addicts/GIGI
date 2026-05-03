@@ -24,6 +24,41 @@ class GigiSmartOrchestrator: ObservableObject {
     @Published var bannerMessage   = ""
     @Published var showGatewayInstallPrompt = false
 
+    // MARK: - Draft preview (Sub #47 — WhatsApp/iMessage draft Send/Edit/Cancel sheet)
+
+    struct PendingDraft: Equatable {
+        let contact: String
+        let platform: String  // "whatsapp", "imessage"
+        var body: String
+        let raw: String       // pre-enrichment, for "show original"
+    }
+    @Published var showDraftPreview: Bool = false
+    @Published var pendingDraft: PendingDraft?
+
+    func presentDraft(contact: String, platform: String, body: String, raw: String) {
+        pendingDraft = PendingDraft(contact: contact, platform: platform, body: body, raw: raw)
+        showDraftPreview = true
+    }
+
+    @discardableResult
+    func sendDraft() async -> String {
+        guard let d = pendingDraft else { return "no draft" }
+        print("DRAFT MOCK SEND: to=\(d.contact) platform=\(d.platform) body.length=\(d.body.count)")
+        speech.speak("Sent to \(d.contact).")
+        memory.addGigi("Sent to \(d.contact) on \(d.platform.capitalized): \"\(d.body)\"")
+        showDraftPreview = false
+        pendingDraft = nil
+        return "Sent (mock) to \(d.contact)."
+    }
+
+    func cancelDraft() {
+        guard let d = pendingDraft else { return }
+        speech.speak("Cancelled.")
+        memory.addGigi("Draft to \(d.contact) cancelled.")
+        showDraftPreview = false
+        pendingDraft = nil
+    }
+
     // MARK: - Dependencies
 
     private let agentEngine  = GigiAgentEngine.shared
