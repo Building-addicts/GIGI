@@ -34,6 +34,20 @@ extension GigiActionDispatcher {
         guard !contact.isEmpty else { return .failure("contact parameter required for web_whatsapp") }
         guard !message.isEmpty else { return .failure("message parameter required for web_whatsapp") }
 
+        // Sub #12 — route through draft preview before WhatsApp Web automation.
+        let enriched = await GigiToneEnrichment.shared.enrich(rawDraft: message, contactName: contact)
+        await MainActor.run {
+            GigiSmartOrchestrator.shared.presentDraft(
+                contact: contact,
+                platform: "whatsapp",
+                body: enriched,
+                raw: message
+            )
+        }
+        return .success("I drafted a WhatsApp message to \(contact). Check the preview to send or edit.", tokenEstimate: 20)
+
+        // Legacy direct-send path retained below for reference (#12 path now interrupts before this).
+        #if false
         let result = await GigiWebAgent.shared.sendWhatsAppResult(contact: contact, message: message)
         switch result {
         case .success:
@@ -58,6 +72,7 @@ extension GigiActionDispatcher {
             }
             return .failure("WhatsApp Web failed: \(reason)")
         }
+        #endif
     }
 
     // MARK: - Restaurant booking
