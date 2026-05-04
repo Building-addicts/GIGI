@@ -23,6 +23,9 @@ struct GigiActivityAttributes: ActivityAttributes {
         var lastTranscript: String? = nil
         var sessionId: String? = nil
         var wakePulseId: String? = nil
+        // Mic input level 0.0–1.0 driving GigiWaveformView during .listening.
+        // nil = no live signal yet (idle pulse).
+        var audioLevel: Float? = nil
     }
 }
 
