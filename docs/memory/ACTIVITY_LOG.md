@@ -196,3 +196,4 @@
 - `2026-05-04T12:34:36Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #181 "docs(research): pick Groq llama-3.3-70b for orchestrator + system prompt v1" di @ArmandoBattaglino _(branch: `feat/issue-144-llm-pick` · +238/-0 · #144)_
 - `2026-05-04T12:46:11Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #195: "docs(demo): consolidate DEMO_SCRIPT.md — single source of truth (follow-up to #188-#192)" _(branch: `docs/docs-demo-script-consolidate` · 1 commit · +208/-212 · 5 file · (no link))_
 - `2026-05-04T12:46:25Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #195 "docs(demo): consolidate DEMO_SCRIPT.md — single source of truth (follow-up to #188-#192)" di @ArmandoBattaglino _(branch: `docs/docs-demo-script-consolidate` · +208/-212 · (no link))_
+- `2026-05-04T12:53:38Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #196: "[BUG] #46 Lingua-bonus — output garbage on English input (system prompt echo)" _(parent: #46)_
