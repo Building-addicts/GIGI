@@ -173,3 +173,4 @@
 - `2026-05-04T12:31:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #188 "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" di @ArmandoBattaglino _(branch: `docs/issue-71-storyboard` · +85/-0 · #71)_
 - `2026-05-04T12:31:52Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #188: "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" _(branch: `docs/issue-71-storyboard` · 1 commit · +85/-0 · 1 file · #71)_
 - `2026-05-04T12:32:05Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #189: "docs(demo): pre-demo setup state + 10-pt checklist" _(branch: `docs/issue-72-setup` · 1 commit · +72/-0 · 1 file · #72)_
+- `2026-05-04T12:32:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #189 _(branch: `docs/issue-72-setup` · totale +72/-0)_
