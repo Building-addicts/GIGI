@@ -227,3 +227,4 @@
 - `2026-05-04T13:48:55Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #197: "[BUG] PR #186 AC#1 — GIGIWidgetControl non registrato nel WidgetBundle, non appare in Control Center" _(parent: (no parent))_
 - `2026-05-04T14:28:48Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #198: "[BUG] Groq fallback tool mismatch — error 400 on create_event when harness offline" _(parent: (no parent))_
 - `2026-05-04T15:00:55Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #179: "feat(ios): generic PermissionConfirmationSheet for meaningful actions" _(branch: `feat/issue-77-permission-sheet` · 1 commit · +132/-0 · 1 file · #77)_
+- `2026-05-04T15:01:01Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #179 _(branch: `feat/issue-77-permission-sheet` · totale +132/-0)_
