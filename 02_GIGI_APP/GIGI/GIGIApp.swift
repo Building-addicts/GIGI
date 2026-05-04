@@ -88,10 +88,7 @@ struct GIGIApp: App {
                 .onOpenURL { url in
                     if url.scheme?.lowercased() == "gigi" {
                         if url.host == "listen" {
-                            if !PresenceSessionController.shared.isActive {
-                                PresenceSessionController.shared.startSession()
-                            }
-                            GigiSmartOrchestrator.shared.startListening()
+                            startListenFromControl()
                             return
                         }
                         NotificationCenter.default.post(name: .gigiGatewayCallback, object: url)
@@ -99,6 +96,35 @@ struct GIGIApp: App {
                     }
                     _ = GIDSignIn.sharedInstance.handle(url)
                 }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { handlePendingControlListenIfAny() }
+                }
         }
+    }
+
+    // MARK: - Control Center toggle handshake (#159)
+
+    private func startListenFromControl() {
+        if !PresenceSessionController.shared.isActive {
+            PresenceSessionController.shared.startSession()
+        }
+        GigiSmartOrchestrator.shared.startListening()
+    }
+
+    /// Picks up the UserDefaults handshake set by `GIGIControlOpenIntent`
+    /// when the Control Center button taps. Without this, the AppIntent
+    /// foregrounds the app but no listening kicks in (the URL path used
+    /// to do that work).
+    private func handlePendingControlListenIfAny() {
+        let suite = UserDefaults(suiteName: "group.com.gigi.presence") ?? .standard
+        guard suite.bool(forKey: "pendingControlListenRequest") else { return }
+        let ts = suite.double(forKey: "pendingControlListenAt")
+        // 5s freshness window so a stale flag from a prior session does not
+        // accidentally start a listen on the next launch.
+        if Date().timeIntervalSince1970 - ts < 5 {
+            startListenFromControl()
+        }
+        suite.set(false, forKey: "pendingControlListenRequest")
+        suite.removeObject(forKey: "pendingControlListenAt")
     }
 }

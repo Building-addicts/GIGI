@@ -40,6 +40,11 @@ struct SettingsView: View {
     @State private var pairedDeviceName: String? = nil
     @State private var forceClaude: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
     @State private var autoFallback: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
+    #if DEBUG
+    @State private var toneRawDraft: String = "posso passare alle 18 oggi"
+    @State private var toneResult: String = "—"
+    @State private var toneRunning: Bool = false
+    #endif
     @FocusState var focusedField: SettingsField?
 
     var body: some View {
@@ -628,6 +633,32 @@ struct SettingsView: View {
                 print("GigiTaskExtractor cleared → tasks.count = \(GigiTaskExtractor.shared.tasks.count)")
             }
             .foregroundColor(.purple)
+
+            // Tone Enrichment debug hook (#46 AC verification — remove before #170 ships)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Tone Enrichment").font(.caption).foregroundColor(.secondary)
+                TextField("Raw draft", text: $toneRawDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                Button(toneRunning ? "Enriching…" : "Enrich draft → Fede") {
+                    toneRunning = true
+                    toneResult = "…"
+                    Task {
+                        let out = await GigiToneEnrichment.shared.enrich(rawDraft: toneRawDraft, contactName: "Fede")
+                        await MainActor.run {
+                            toneResult = out.isEmpty ? "(empty)" : out
+                            toneRunning = false
+                        }
+                        print("ToneEnrichment[#46] raw=\"\(toneRawDraft)\" → \"\(out)\"")
+                    }
+                }
+                .disabled(toneRunning)
+                .foregroundColor(.purple)
+                Text(toneResult)
+                    .font(.footnote)
+                    .foregroundColor(.primary)
+                    .textSelection(.enabled)
+            }
             #endif
         } header: {
             Text("🔧 Debug")
