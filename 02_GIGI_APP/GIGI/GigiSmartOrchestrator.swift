@@ -405,6 +405,10 @@ class GigiSmartOrchestrator: ObservableObject {
         clearPendingDone(reason: "bargeIn.\(source)")
         GigiDebugLogger.voiceEvent("orchestrator.interruptAndListen", turnId: turnId, ["source": source, "audioState": "\(GigiAudioManager.shared.state)"])
 
+        // Flip pill to .listening FIRST so user sees state change within 500ms,
+        // independent of audio engine settle time below.
+        Task { await GigiLiveActivityController.shared.beginListening() }
+
         SoundEngine.play(.wakeWord)
         if isQuickTalkSession { onQuickTalkStateChange?(.listening) }
 
@@ -420,7 +424,6 @@ class GigiSmartOrchestrator: ObservableObject {
             speech.stopSpeaking()
             GigiAudioManager.shared.startRecording()
         }
-        Task { await GigiLiveActivityController.shared.beginListening() }
     }
 
     func stopMicCapture() {
