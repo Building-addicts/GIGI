@@ -206,3 +206,4 @@
 - `2026-05-04T13:00:08Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #168: "fix(ios): barge-in pill flips to .listening before audio settle" _(branch: `feat/issue-40-bargein` · 1 commit · +4/-1 · 1 file · #40)_
 - `2026-05-04T13:00:12Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #168 _(branch: `feat/issue-40-bargein` · totale +4/-1)_
 - `2026-05-04T13:00:18Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #40: "[Sub #10 · 3/4] Barge-in safety: clear pill speaking state on user interrupt"
+- `2026-05-04T13:00:33Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #169: "feat(ios): GigiToneEnrichment helper for draft message rewriting" _(branch: `feat/issue-46-tone` · 3 commit · +148/-0 · 2 file · #46)_
