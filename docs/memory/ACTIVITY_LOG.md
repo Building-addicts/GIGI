@@ -179,3 +179,4 @@
 - `2026-05-04T12:32:40Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #190: "docs(demo): plan B per scene + abort clause" _(branch: `docs/issue-73-planb` · 1 commit · +56/-0 · 1 file · #73)_
 - `2026-05-04T12:32:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #190 _(branch: `docs/issue-73-planb` · totale +56/-0)_
 - `2026-05-04T12:32:48Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #73: "[Sub #18 · 3/5] Plan B per ogni scena — fallback narrativi se X fallisce"
+- `2026-05-04T12:32:56Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #191 _(branch: `docs/issue-74-duration` · totale +38/-0)_
