@@ -189,3 +189,4 @@
 - `2026-05-04T12:33:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #176 "docs(qa): T1.1-T1.3 + T6.1-T6.2 evidence skeletons" di @ArmandoBattaglino _(branch: `feat/issue-68-onboarding-qa` · +121/-0 · #68)_
 - `2026-05-04T12:33:59Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #177: "docs(qa): H1-H3 + edge empty speech evidence skeletons" _(branch: `feat/issue-69-resilience-qa` · 1 commit · +95/-0 · 4 file · #69)_
 - `2026-05-04T12:34:06Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #178: "docs(qa): SUMMARY skeleton for PM GO/NO-GO sign-off" _(branch: `feat/issue-70-pm-signoff` · 1 commit · +67/-0 · 1 file · #70)_
+- `2026-05-04T12:34:11Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #178 _(branch: `feat/issue-70-pm-signoff` · totale +67/-0)_
