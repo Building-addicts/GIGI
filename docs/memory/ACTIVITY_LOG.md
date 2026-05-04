@@ -237,3 +237,4 @@
 - `2026-05-04T15:04:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #200 "fix(ios): register GIGIWidgetControl in WidgetBundle + target membership (Closes #197)" di @ArmandoBattaglino _(branch: `fix/fix-197-widgetbundle-register` · +5/-1 · #197)_
 - `2026-05-04T15:06:32Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #193 _(branch: `feat/issue-79-memory-hint` · totale +71/-0)_
 - `2026-05-04T15:06:53Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #79: "[iOS] Visible memory affordance — "Gigi remembered: <pref>" UI hint"
+- `2026-05-04T15:06:58Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #193 "feat(ios): visible memory affordance — Memory used toast in ChatView" di @ArmandoBattaglino _(branch: `feat/issue-79-memory-hint` · +71/-0 · #79)_
