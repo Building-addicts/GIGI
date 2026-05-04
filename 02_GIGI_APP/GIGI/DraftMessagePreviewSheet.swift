@@ -58,6 +58,40 @@ struct DraftMessagePreviewSheet: View {
                     }
                     .padding(.top, 8)
 
+                    #if DEBUG
+                    // 🎤 Voice intercept simulation (#49 — PR #172 AC test)
+                    Divider().padding(.vertical, 4)
+                    Text("DEBUG voice sim").font(.caption2).foregroundColor(.secondary)
+                    HStack(spacing: 10) {
+                        Button {
+                            Task { await GigiSmartOrchestrator.shared.process(text: "send") }
+                        } label: {
+                            Label("send", systemImage: "paperplane.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.green)
+
+                        Button {
+                            Task { await GigiSmartOrchestrator.shared.process(text: "cancel") }
+                        } label: {
+                            Label("cancel", systemImage: "xmark")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
+
+                        Button {
+                            Task { await GigiSmartOrchestrator.shared.process(text: "Hey Edi, on my way at 5pm instead") }
+                        } label: {
+                            Label("edit", systemImage: "pencil")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.blue)
+                    }
+                    #endif
+
                     Spacer()
                 }
             }
