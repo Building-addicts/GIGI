@@ -240,3 +240,4 @@
 - `2026-05-04T15:06:58Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #193 "feat(ios): visible memory affordance — Memory used toast in ChatView" di @ArmandoBattaglino _(branch: `feat/issue-79-memory-hint` · +71/-0 · #79)_
 - `2026-05-04T17:11:26Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #172 _(branch: `feat/issue-49-voice` · totale +93/-0)_
 - `2026-05-04T17:11:32Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #172: "feat(ios): voice confirm during draft preview — send/cancel/edit" _(branch: `feat/issue-49-voice` · 4 commit · +93/-0 · 3 file · #49)_
+- `2026-05-04T17:11:42Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #49: "[Sub #12 · 4/4] Voice confirm draft + plug in real Preferences source"
