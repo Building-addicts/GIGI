@@ -87,14 +87,17 @@ final class GigiSpeechService: NSObject {
 
 extension GigiSpeechService: AVSpeechSynthesizerDelegate {
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        print("GIGI Speech: didStart utterance.length=\(utterance.speechString.count)")
         Task { @MainActor in GigiAudioManager.shared.notifySpeakingStarted() }
     }
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        print("GIGI Speech: didFinish utterance.length=\(utterance.speechString.count)")
         Task { @MainActor in GigiAudioManager.shared.notifySpeakingFinished() }
     }
     // didCancel fires when stopSpeaking(at:) is called (barge-in, interruption, etc.).
     // Without this, state stays stuck at .speaking and wake word never resumes.
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        print("GIGI Speech: didCancel utterance.length=\(utterance.speechString.count)")
         Task { @MainActor in GigiAudioManager.shared.notifySpeakingFinished() }
     }
 }

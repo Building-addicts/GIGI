@@ -63,9 +63,59 @@ struct ChatView: View {
                     .padding(.top, 56)
                     .zIndex(99)
             }
+
+            #if DEBUG
+            // Debug FABs:
+            //  📨 envelope → dispatcher.executeNative(send_message) end-to-end (#48 route)
+            //  🐞 ladybug  → directly call presentDraft (#47 sheet UI in isolation)
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        Button {
+                            Task {
+                                let result = await GigiActionDispatcher.shared.executeNative(
+                                    "send_message",
+                                    args: [
+                                        "contact": "Edi",
+                                        "message": "can i come at 4 pm today?",
+                                        "platform": "whatsapp"
+                                    ]
+                                )
+                                print("DEBUG[#48] dispatcher → \(result)")
+                            }
+                        } label: {
+                            Image(systemName: "envelope.badge")
+                                .padding(10)
+                                .background(Circle().fill(Color.orange.opacity(0.85)))
+                                .foregroundColor(.white)
+                        }
+                        Button {
+                            gigi.presentDraft(
+                                contact: "Fede",
+                                platform: "whatsapp",
+                                body: "Hey Fede! Can I drop by at 4pm today? 🙌",
+                                raw: "can i come at 4pm today"
+                            )
+                        } label: {
+                            Image(systemName: "ladybug.fill")
+                                .padding(10)
+                                .background(Circle().fill(Color.purple.opacity(0.85)))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 96)
+                }
+            }
+            #endif
         }
         .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
         .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
+        .sheet(isPresented: $gigi.showDraftPreview) {
+            DraftMessagePreviewSheet()
+        }
     }
 
     // MARK: - Sub-views
