@@ -182,3 +182,4 @@
 - `2026-05-04T12:32:56Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #191 _(branch: `docs/issue-74-duration` · totale +38/-0)_
 - `2026-05-04T12:33:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #191 "docs(demo): final demo duration decision — corta 3min50s" di @ArmandoBattaglino _(branch: `docs/issue-74-duration` · +38/-0 · #74)_
 - `2026-05-04T12:33:08Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #192: "docs(demo): stability pass sign-off skeleton" _(branch: `docs/issue-75-signoff` · 1 commit · +41/-0 · 1 file · #75)_
+- `2026-05-04T12:33:16Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #75: "[Sub #18 · 5/5] Stability pass cross-funzionale — Leo + Fede firmano "fattibile""
