@@ -175,3 +175,4 @@
 - `2026-05-04T12:32:05Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #189: "docs(demo): pre-demo setup state + 10-pt checklist" _(branch: `docs/issue-72-setup` · 1 commit · +72/-0 · 1 file · #72)_
 - `2026-05-04T12:32:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #189 _(branch: `docs/issue-72-setup` · totale +72/-0)_
 - `2026-05-04T12:32:19Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #72: "[Sub #18 · 2/5] Pre-demo setup state — preferenze + calendario mock + contatti VIP + harness"
+- `2026-05-04T12:32:25Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #189 "docs(demo): pre-demo setup state + 10-pt checklist" di @ArmandoBattaglino _(branch: `docs/issue-72-setup` · +72/-0 · #72)_
