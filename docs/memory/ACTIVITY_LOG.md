@@ -203,3 +203,4 @@
 - `2026-05-04T12:59:45Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #167: "feat(ios): bannerForPill helper — word boundary trim + emoji guard" _(branch: `feat/issue-39-banner` · 1 commit · +20/-3 · 1 file · #39)_
 - `2026-05-04T12:59:54Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #167 "feat(ios): bannerForPill helper — word boundary trim + emoji guard" di @ArmandoBattaglino _(branch: `feat/issue-39-banner` · +20/-3 · #39)_
 - `2026-05-04T13:00:01Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #39: "[Sub #10 · 2/4] Speaking-pill banner: smart truncation + emoji guard"
+- `2026-05-04T13:00:08Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #168: "fix(ios): barge-in pill flips to .listening before audio settle" _(branch: `feat/issue-40-bargein` · 1 commit · +4/-1 · 1 file · #40)_
