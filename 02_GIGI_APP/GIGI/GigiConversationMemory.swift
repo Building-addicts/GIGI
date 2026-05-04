@@ -43,6 +43,12 @@ final class GigiConversationMemory: ObservableObject {
     private let tokenBudget     = 8_000
     private let toolResultLimit = 500   // chars before truncation
 
+    // #54 — periodic task extraction trigger (every 2 user turns).
+    // Lives here (not in PresenceSessionController) so it fires for every user turn
+    // — voice or chat — independent of Presence Mode (post-MVP).
+    private var taskExtractionTurnCounter = 0
+    private var taskExtractionTask: Task<Void, Never>?
+
     private init() {
         // Auto-restore recent session on launch
         if let restored = loadIfRecentSession() {
@@ -55,6 +61,27 @@ final class GigiConversationMemory: ObservableObject {
     func addUser(_ text: String) {
         messages.append(GigiMessage(role: .user, text: text))
         trimIfNeeded()
+
+        // #54 — fire task extraction every 2 user turns. Cancel any in-flight
+        // extractor task so we never have two extracts racing on the same memory.
+        taskExtractionTurnCounter += 1
+        if taskExtractionTurnCounter % 2 == 0 {
+            taskExtractionTask?.cancel()
+            let transcript = recentUserTranscript(turns: 6)
+            taskExtractionTask = Task {
+                await GigiTaskExtractor.shared.extract(from: transcript)
+            }
+        }
+    }
+
+    /// Last `turns` user transcripts joined as a bulletted multi-line string.
+    /// Used by GigiTaskExtractor periodic trigger (#54).
+    func recentUserTranscript(turns: Int = 6) -> String {
+        messages
+            .filter { $0.role == .user }
+            .suffix(turns)
+            .map { "- \($0.text)" }
+            .joined(separator: "\n")
     }
 
     func addThinking() -> UUID {
