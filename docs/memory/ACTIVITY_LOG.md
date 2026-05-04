@@ -202,3 +202,4 @@
 - `2026-05-04T12:59:34Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #38: "[Sub #10 · 1/4] Verify deferred completeWithDone wiring + add structured DI logs"
 - `2026-05-04T12:59:45Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #167: "feat(ios): bannerForPill helper — word boundary trim + emoji guard" _(branch: `feat/issue-39-banner` · 1 commit · +20/-3 · 1 file · #39)_
 - `2026-05-04T12:59:54Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #167 "feat(ios): bannerForPill helper — word boundary trim + emoji guard" di @ArmandoBattaglino _(branch: `feat/issue-39-banner` · +20/-3 · #39)_
+- `2026-05-04T13:00:01Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #39: "[Sub #10 · 2/4] Speaking-pill banner: smart truncation + emoji guard"
