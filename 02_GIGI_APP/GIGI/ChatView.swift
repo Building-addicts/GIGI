@@ -63,9 +63,37 @@ struct ChatView: View {
                     .padding(.top, 56)
                     .zIndex(99)
             }
+
+            #if DEBUG
+            // Draft preview debug trigger (#47 AC verification — remove once #171 wires the real route)
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button {
+                        gigi.presentDraft(
+                            contact: "Fede",
+                            platform: "whatsapp",
+                            body: "Hey Fede! Can I drop by at 4pm today? 🙌",
+                            raw: "can i come at 4pm today"
+                        )
+                    } label: {
+                        Image(systemName: "ladybug.fill")
+                            .padding(10)
+                            .background(Circle().fill(Color.purple.opacity(0.85)))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 96)
+                }
+            }
+            #endif
         }
         .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
         .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
+        .sheet(isPresented: $gigi.showDraftPreview) {
+            DraftMessagePreviewSheet()
+        }
     }
 
     // MARK: - Sub-views
