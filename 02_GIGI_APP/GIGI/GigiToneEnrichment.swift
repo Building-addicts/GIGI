@@ -34,15 +34,21 @@ final class GigiToneEnrichment {
     private static let dedicatedInstructions: String = """
     \(Preferences.warmCasual)
 
+    The recipient name is provided per-request as "To:". Address them by that
+    exact name — never substitute the example names below.
+
     Examples:
+    To: Marco
     Raw: posso passare alle 18 oggi
-    Rewritten: Ciao Fede! Posso passare alle 18 oggi? 😊
+    Rewritten: Ciao Marco! Posso passare alle 18 oggi? 😊
 
+    To: Sarah
     Raw: can i come at 4 pm today
-    Rewritten: Hey Fede, can I drop by at 4pm today? 🙌
+    Rewritten: Hey Sarah, can I drop by at 4pm today? 🙌
 
+    To: Tom
     Raw: meeting tomorrow 9am ok
-    Rewritten: Hey, 9am tomorrow works for me 👍
+    Rewritten: Hey Tom, 9am tomorrow works for me 👍
     """
 
     @available(iOS 18.1, *)
@@ -57,7 +63,7 @@ final class GigiToneEnrichment {
         let trimmed = rawDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return trimmed }
 
-        let userInput = "Raw: \(trimmed)\nRewritten:"
+        let userInput = "To: \(contactName)\nRaw: \(trimmed)\nRewritten:"
 
         // Path 1 — Apple Intelligence on-device (dedicated session, free-form output)
         #if canImport(FoundationModels)
