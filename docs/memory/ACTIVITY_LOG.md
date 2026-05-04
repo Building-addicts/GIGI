@@ -191,3 +191,4 @@
 - `2026-05-04T12:34:06Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #178: "docs(qa): SUMMARY skeleton for PM GO/NO-GO sign-off" _(branch: `feat/issue-70-pm-signoff` · 1 commit · +67/-0 · 1 file · #70)_
 - `2026-05-04T12:34:11Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #178 _(branch: `feat/issue-70-pm-signoff` · totale +67/-0)_
 - `2026-05-04T12:34:21Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #178 "docs(qa): SUMMARY skeleton for PM GO/NO-GO sign-off" di @ArmandoBattaglino _(branch: `feat/issue-70-pm-signoff` · +67/-0 · #70)_
+- `2026-05-04T12:34:25Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #181: "docs(research): pick Groq llama-3.3-70b for orchestrator + system prompt v1" _(branch: `feat/issue-144-llm-pick` · 1 commit · +238/-0 · 1 file · #144)_
