@@ -169,3 +169,4 @@
 - `2026-05-02T16:11:05Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #165: "fix(ios): align PR 103 device-tested shortcut and Siri triggers" _(branch: `fix/pr103-device-followup` · 1 commit · +25/-15 · 6 file · #161)_
 - `2026-05-02T16:12:42Z` · pr-merged · 🎉 @fc200490-sketch ha mergiato PR #165 "fix(ios): align PR 103 device-tested shortcut and Siri triggers" di @fc200490-sketch _(branch: `fix/pr103-device-followup` · +25/-15 · #103)_
 - `2026-05-02T16:28:45Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-05-04T12:28:50Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #169 _(branch: `feat/issue-46-tone` · totale +89/-0)_
