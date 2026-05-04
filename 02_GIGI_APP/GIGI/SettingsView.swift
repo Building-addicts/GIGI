@@ -40,6 +40,9 @@ struct SettingsView: View {
     @State private var pairedDeviceName: String? = nil
     @State private var forceClaude: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
     @State private var autoFallback: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
+    @State private var orchestratorGroqKey = ""
+    @State private var orchestratorAnthropicKey = ""
+    @State private var orchestratorSaveFlash: String? = nil
     @FocusState var focusedField: SettingsField?
 
     var body: some View {
@@ -47,6 +50,7 @@ struct SettingsView: View {
             List {
                 brainSection
                 brainModeSection
+                orchestratorKeysSection
                 harnessSection
                 whatsAppSection
                 profileSection
@@ -211,6 +215,56 @@ struct SettingsView: View {
         if UserDefaults.standard.bool(forKey: "gigi.migration.cf.dismissed") { return false }
         guard let host = GigiHarnessClient.shared.pairedBaseURL?.host else { return false }
         return host.hasPrefix("100.") // Tailscale CGNAT range
+    }
+
+    // MARK: - Orchestrator Keys section (#150)
+
+    private var orchestratorKeysSection: some View {
+        Section {
+            HStack {
+                Circle()
+                    .fill(orchestratorGroqKey.isEmpty ? .red : .green)
+                    .frame(width: 8, height: 8)
+                SecureField("Groq API key (orchestrator)", text: $orchestratorGroqKey)
+                    .font(.system(.body, design: .monospaced))
+                    .autocorrectionDisabled()
+                Button("Save") {
+                    GigiKeychain.save(orchestratorGroqKey, forKey: GigiKeychain.Key.groqAPIKey)
+                    orchestratorSaveFlash = "Groq key saved ✅"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { orchestratorSaveFlash = nil }
+                }
+                .disabled(orchestratorGroqKey.isEmpty)
+            }
+
+            HStack {
+                Circle()
+                    .fill(orchestratorAnthropicKey.isEmpty ? .red : .green)
+                    .frame(width: 8, height: 8)
+                SecureField("Anthropic API key (orchestrator)", text: $orchestratorAnthropicKey)
+                    .font(.system(.body, design: .monospaced))
+                    .autocorrectionDisabled()
+                Button("Save") {
+                    GigiKeychain.save(orchestratorAnthropicKey, forKey: GigiKeychain.Key.anthropicAPIKey)
+                    orchestratorSaveFlash = "Anthropic key saved ✅"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { orchestratorSaveFlash = nil }
+                }
+                .disabled(orchestratorAnthropicKey.isEmpty)
+            }
+
+            if let flash = orchestratorSaveFlash {
+                Text(flash)
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
+        } header: {
+            Text("Orchestrator Keys")
+        } footer: {
+            Text("Used by the Action Button → Dynamic Island orchestrator (#143). Both keys are stored in the iOS Keychain.")
+        }
+        .onAppear {
+            orchestratorGroqKey = GigiKeychain.load(forKey: GigiKeychain.Key.groqAPIKey) ?? ""
+            orchestratorAnthropicKey = GigiKeychain.load(forKey: GigiKeychain.Key.anthropicAPIKey) ?? ""
+        }
     }
 
     private var harnessSection: some View {
