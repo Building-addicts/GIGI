@@ -10,11 +10,11 @@ final class GigiToneEnrichment {
     private init() {}
 
     enum Preferences {
-        static let warmCasualIT = """
+        static let warmCasual = """
         You are rewriting a draft message in the user's voice.
-        Tone: warm, casual, friendly Italian.
-        Length: 1-2 sentences max.
-        Use one emoji at most. No formal closings.
+        Tone: warm, casual, friendly. No formal closings.
+        Length: 1-2 sentences max. Use one emoji at most.
+        Always reply in the SAME LANGUAGE as the raw draft (do not translate).
         Preserve the user's intent exactly. Do not add information.
         Output ONLY the rewritten message, no explanations or quotes.
         """
@@ -26,7 +26,7 @@ final class GigiToneEnrichment {
         guard !trimmed.isEmpty else { return trimmed }
 
         let prompt = """
-        \(Preferences.warmCasualIT)
+        \(Preferences.warmCasual)
 
         Recipient: \(contactName)
         Raw draft: \(trimmed)
