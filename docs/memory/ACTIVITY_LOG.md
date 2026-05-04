@@ -214,3 +214,4 @@
 - `2026-05-04T13:07:48Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #162: "[FOLLOW-UP] #102 — verify GigiBackgroundTalkIntent registration in Shortcuts editor on multiple devices"
 - `2026-05-04T13:07:51Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #187: "docs(notes): #160 superseded by re-impl in PR #173" _(branch: `fix/issue-160-extract-sink` · 1 commit · +26/-0 · 1 file · #160)_
 - `2026-05-04T13:08:01Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #187 "docs(notes): #160 superseded by re-impl in PR #173" di @ArmandoBattaglino _(branch: `fix/issue-160-extract-sink` · +26/-0 · #160)_
+- `2026-05-04T13:13:16Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #170: "feat(ios): draft message preview sheet — send/edit/cancel UI" _(branch: `feat/issue-47-draft-ui` · 2 commit · +136/-0 · 3 file · #47)_
