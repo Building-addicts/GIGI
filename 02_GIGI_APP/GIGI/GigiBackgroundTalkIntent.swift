@@ -474,16 +474,35 @@ struct GigiBackgroundTalkIntent: AppIntent {
             return .result(value: local)
         }
 
-        let result = await GigiHarnessClient.shared.agentRun(text: trimmed)
+        // Sub #129 — brain cascade with per-brain timeout.
+        //
+        //   Mac harness (5s) → Groq cloud (5s) → actionable fallback
+        //
+        // Each leg races against a per-brain deadline so a single hanging brain
+        // can never push us past the AppIntent's ~25s ceiling.
+        let result = await raceWithTimeout(seconds: 5) {
+            await GigiHarnessClient.shared.agentRun(text: trimmed)
+        }
         switch result {
-        case .success(let agent):
-            let answer = agent.result.trimmingCharacters(in: .whitespacesAndNewlines)
-            if answer.isEmpty {
-                return .result(value: "GIGI didn't return anything. Try again.")
+        case .timedOut:
+            // Harness silent for 5s — try Groq direct.
+            if let groqAnswer = await tryGroq(trimmed) {
+                return .result(value: groqAnswer)
             }
-            return .result(value: answer)
+            return .result(value: "Brains offline. Open GIGI to re-pair.")
+        case .completed(let outcome):
+            switch outcome {
+            case .success(let agent):
+                let answer = agent.result.trimmingCharacters(in: .whitespacesAndNewlines)
+                if answer.isEmpty {
+                    if let groqAnswer = await tryGroq(trimmed) {
+                        return .result(value: groqAnswer)
+                    }
+                    return .result(value: "GIGI didn't return anything. Try again.")
+                }
+                return .result(value: answer)
 
-        case .failure(let err):
+            case .failure(let err):
             // Map common failure modes to user-friendly speech rather than
             // surfacing raw error strings. The Shortcut speaks whatever we
             // return, so we keep it conversational.
@@ -519,7 +538,55 @@ struct GigiBackgroundTalkIntent: AppIntent {
             case .decodeFailed:
                 message = "GIGI's reply was unreadable. Try again."
             }
+            // Before falling back to a generic message, try Groq direct as a
+            // second brain — many failures here are transient harness blips
+            // and Groq has a separate failure mode (cloud-only).
+            if let groqAnswer = await tryGroq(trimmed) {
+                return .result(value: groqAnswer)
+            }
             return .result(value: message)
+            }
+        }
+    }
+}
+
+// MARK: - Brain cascade helpers (Sub #129)
+
+@available(iOS 16.0, *)
+private extension GigiBackgroundTalkIntent {
+    enum RaceOutcome<T> {
+        case completed(T)
+        case timedOut
+    }
+
+    /// Runs `op` against a per-brain deadline. Cancels the underlying task on
+    /// timeout so a hung network call cannot pin the AppIntent runtime.
+    func raceWithTimeout<T: Sendable>(seconds: Double, _ op: @escaping @Sendable () async -> T) async -> RaceOutcome<T> {
+        await withTaskGroup(of: RaceOutcome<T>.self) { group in
+            group.addTask { .completed(await op()) }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return .timedOut
+            }
+            let first = await group.next() ?? .timedOut
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Direct Groq attempt with 5s timeout. Returns nil on any failure so the
+    /// caller can decide whether to fall back to the actionable message.
+    func tryGroq(_ text: String) async -> String? {
+        let outcome = await raceWithTimeout(seconds: 5) { () -> String? in
+            do {
+                return try await GigiCloudService.shared.ask(text)
+            } catch {
+                return nil
+            }
+        }
+        switch outcome {
+        case .timedOut:        return nil
+        case .completed(let v): return v.flatMap { $0.isEmpty ? nil : $0 }
         }
     }
 }
