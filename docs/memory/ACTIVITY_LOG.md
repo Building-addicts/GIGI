@@ -231,3 +231,4 @@
 - `2026-05-04T15:01:06Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #179 "feat(ios): generic PermissionConfirmationSheet for meaningful actions" di @ArmandoBattaglino _(branch: `feat/issue-77-permission-sheet` · +132/-0 · #77)_
 - `2026-05-04T15:02:16Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #186: "fix(ios): Control Center toggle uses AppIntent + UserDefaults handshake" _(branch: `feat/issue-159-cc-toggle` · 1 commit · +58/-8 · 2 file · #159)_
 - `2026-05-04T15:02:33Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #159: "[BUG] #122 AC#5 — Control Center toggle tap does nothing (no app launch / no listening)"
+- `2026-05-04T15:03:18Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #186 _(branch: `feat/issue-159-cc-toggle` · totale +58/-8)_
