@@ -47,6 +47,7 @@ struct SettingsView: View {
             List {
                 brainSection
                 brainModeSection
+                tryItSection
                 harnessSection
                 whatsAppSection
                 profileSection
@@ -211,6 +212,36 @@ struct SettingsView: View {
         if UserDefaults.standard.bool(forKey: "gigi.migration.cf.dismissed") { return false }
         guard let host = GigiHarnessClient.shared.pairedBaseURL?.host else { return false }
         return host.hasPrefix("100.") // Tailscale CGNAT range
+    }
+
+    // MARK: - Try GIGI now (debug — #151, REMOVE post-MVP)
+
+    @ViewBuilder
+    private var tryItSection: some View {
+        Section {
+            Button {
+                Task { await GigiTryItDebugRunner.shared.run() }
+            } label: {
+                HStack {
+                    Image(systemName: "play.circle.fill")
+                    Text(GigiTryItDebugRunner.shared.isRunning ? "Running…" : "Try GIGI now (debug)")
+                    Spacer()
+                }
+            }
+            .disabled(GigiTryItDebugRunner.shared.isRunning)
+
+            if let err = GigiTryItDebugRunner.shared.lastError {
+                Text(err).font(.caption).foregroundColor(.red)
+            } else if !GigiTryItDebugRunner.shared.lastResult.isEmpty {
+                Text("Last result: \(GigiTryItDebugRunner.shared.lastResult)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        } header: {
+            Text("Try GIGI · debug")
+        } footer: {
+            Text("DEBUG ONLY — replays the Action Button flow in-app to validate orchestrator + DI. Remove post-MVP.")
+        }
     }
 
     private var harnessSection: some View {
