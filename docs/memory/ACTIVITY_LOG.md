@@ -180,3 +180,4 @@
 - `2026-05-04T12:32:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #190 _(branch: `docs/issue-73-planb` · totale +56/-0)_
 - `2026-05-04T12:32:48Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #73: "[Sub #18 · 3/5] Plan B per ogni scena — fallback narrativi se X fallisce"
 - `2026-05-04T12:32:56Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #191 _(branch: `docs/issue-74-duration` · totale +38/-0)_
+- `2026-05-04T12:33:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #191 "docs(demo): final demo duration decision — corta 3min50s" di @ArmandoBattaglino _(branch: `docs/issue-74-duration` · +38/-0 · #74)_
