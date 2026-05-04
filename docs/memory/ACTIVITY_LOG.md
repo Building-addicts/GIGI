@@ -238,3 +238,4 @@
 - `2026-05-04T15:06:32Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #193 _(branch: `feat/issue-79-memory-hint` · totale +71/-0)_
 - `2026-05-04T15:06:53Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #79: "[iOS] Visible memory affordance — "Gigi remembered: <pref>" UI hint"
 - `2026-05-04T15:06:58Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #193 "feat(ios): visible memory affordance — Memory used toast in ChatView" di @ArmandoBattaglino _(branch: `feat/issue-79-memory-hint` · +71/-0 · #79)_
+- `2026-05-04T17:11:26Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #172 _(branch: `feat/issue-49-voice` · totale +93/-0)_
