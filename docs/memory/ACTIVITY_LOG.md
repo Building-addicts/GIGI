@@ -245,3 +245,4 @@
 - `2026-05-04T19:52:41Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #173 _(branch: `feat/issue-54-extract-wire` · totale +27/-0)_
 - `2026-05-04T20:00:59Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #173: "feat(ios): wire GigiTaskExtractor to PresenceSessionController" _(branch: `feat/issue-54-extract-wire` · 2 commit · +27/-0 · 1 file · #54)_
 - `2026-05-04T20:01:44Z` · pr-merged · 🎉 @fc200490-sketch ha mergiato PR #173 "feat(ios): wire GigiTaskExtractor to PresenceSessionController" di @ArmandoBattaglino _(branch: `feat/issue-54-extract-wire` · +27/-0 · #54)_
+- `2026-05-04T20:01:49Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #54: "[Sub #14 · 2/3] Wire `GigiTaskExtractor` to `PresenceSessionController` (periodic trigger)"
