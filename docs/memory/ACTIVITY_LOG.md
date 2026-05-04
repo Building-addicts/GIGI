@@ -125,3 +125,67 @@
 - `2026-04-29T19:39:35Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +658/-28)_
 - `2026-04-29T19:43:01Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #142 _(branch: `feat/issue-77-permission-ui` · totale +665/-28)_
 - `2026-04-30T00:28:09Z` · issue-closed · ✅ @Leonardo-Corte ha chiuso issue #122: "[iOS][EPIC] In-app voice dispatch + Control Center quick listen (Shazam-style)"
+- `2026-04-30T03:59:23Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #17: "[QA] Pre-freeze QA gate (mercoledì 30 ore 16:00)"
+- `2026-04-30T10:14:08Z` · pr-closed · ⛔ @fc200490-sketch ha chiuso senza merge PR #142: "feat(ios): unify permission confirmation UI (#77)" _(branch: `feat/issue-77-permission-ui` · #77)_
+- `2026-04-30T14:37:58Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #86 _(branch: `feat/issue-51-mvp-preferences-seed` · totale +49/-0)_
+- `2026-04-30T14:38:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #86 "feat(ios): seed MVPPreferences first-launch + GigiMemory.awaitReady (Sub #13 2/3)" di @fc200490-sketch _(branch: `feat/issue-51-mvp-preferences-seed` · +49/-0 · #51)_
+- `2026-04-30T14:39:49Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #87 _(branch: `feat/issue-52-mvp-preferences-injection` · totale +70/-18)_
+- `2026-04-30T14:40:49Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #52: "[Sub #13 · 3/3] Inject `MVPPreferences` in every LLM call (Groq + Claude bridge + Realtime)"
+- `2026-04-30T14:40:54Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #87 "feat(ios): inject MVPPreferences in every LLM call (Sub #13 3/3)" di @fc200490-sketch _(branch: `feat/issue-52-mvp-preferences-injection` · +70/-18 · #52)_
+- `2026-04-30T14:49:05Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #91 _(branch: `feat/issue-56-day-plan-reasoner` · totale +156/-0)_
+- `2026-04-30T14:50:20Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #56: "[Sub #15 · 1/4] Create GigiDayPlanReasoner engine + LLM prompt"
+- `2026-04-30T14:50:27Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #91 "feat(ios): add GigiDayPlanReasoner engine + LLM prompt (Sub #15 1/4)" di @fc200490-sketch _(branch: `feat/issue-56-day-plan-reasoner` · +156/-0 · #56)_
+- `2026-04-30T14:53:42Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #92 _(branch: `feat/issue-57-day-plan-calendar` · totale +78/-1)_
+- `2026-04-30T14:54:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #92 "feat(ios): wire read_week_calendar into Day Plan Reasoner (Sub #15 2/4)" di @fc200490-sketch _(branch: `feat/issue-57-day-plan-calendar` · +78/-1 · #57)_
+- `2026-04-30T15:07:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #94 _(branch: `feat/issue-59-propose-day-plan-tool` · totale +118/-2)_
+- `2026-04-30T16:38:55Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #152: "[BUG] Voice action auto-replays when returning to app from external action (iMessage / x-callback)" _(parent: (no parent))_
+- `2026-04-30T17:39:06Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #94 "feat(ios): register propose_day_plan tool — voice delivery (Sub #15 4/4)" di @fc200490-sketch _(branch: `feat/issue-59-propose-day-plan-tool` · +118/-2 · #59)_
+- `2026-04-30T17:39:12Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #59: "[Sub #15 · 4/4] Voice delivery + tool registration `propose_day_plan`"
+- `2026-04-30T17:41:02Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #121 _(branch: `fix/issue-119-activitykit-entitlement` · totale +4/-0)_
+- `2026-04-30T17:42:15Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #121 "fix(ios): declare live activity support on widget extension" di @Leonardo-Corte _(branch: `fix/issue-119-activitykit-entitlement` · +4/-0 · #119)_
+- `2026-04-30T17:45:52Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #106 _(branch: `feat/issue-88-core-reliability` · totale +146/-12)_
+- `2026-05-01T17:48:42Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #154: "feat(infra): post-mvp scope deescalation — Claude PM auto-applies label on voice command" _(branch: `feat/issue-153-post-mvp-deescalation` · 1 commit · +106/-4 · 3 file · #153)_
+- `2026-05-01T17:48:46Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #154 "feat(infra): post-mvp scope deescalation — Claude PM auto-applies label on voice command" di @ArmandoBattaglino _(branch: `feat/issue-153-post-mvp-deescalation` · +106/-4 · #153)_
+- `2026-05-01T17:48:51Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #153: "feat(infra): scope deescalation procedure — 'post-mvp' label included in 🟡 WAITING + Claude PM auto-applies on PM voice command"
+- `2026-05-01T17:59:55Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #155: "feat(infra): GitHub Project — Post-MVP column + auto-move on label" _(branch: `feat/post-mvp-project-column` · 1 commit · +230/-1 · 2 file · #153)_
+- `2026-05-01T18:06:51Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #156: "fix(workflows): graphql query Projects v2 — field(id:) not supported" _(branch: `fix/post-mvp-graphql` · 1 commit · +23/-15 · 2 file · (no link))_
+- `2026-05-01T18:06:56Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #156 "fix(workflows): graphql query Projects v2 — field(id:) not supported" di @ArmandoBattaglino _(branch: `fix/post-mvp-graphql` · +23/-15 · (no link))_
+- `2026-05-01T18:27:05Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #158 "docs(claude.md): scope deescalation — split PM full-apply vs Dev proposal-mode" di @ArmandoBattaglino _(branch: `feat/issue-157-deescalation-roles` · +63/-6 · #157)_
+- `2026-05-02T13:18:53Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #159: "[BUG] #122 AC#5 — Control Center toggle tap does nothing (no app launch / no listening)" _(parent: #122)_
+- `2026-05-02T13:26:13Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #106 "fix(ios): stabilize demo-critical voice intents" di @Leonardo-Corte _(branch: `feat/issue-88-core-reliability` · +146/-12 · #89)_
+- `2026-05-02T13:40:24Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #61: "[Sub #16 · 2/4] Harness reachability monitor + diagnostics state"
+- `2026-05-02T13:59:22Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #124 "feat(ios): persistent harness offline banner + dashboard status pill (#62)" di @fc200490-sketch _(branch: `feat/issue-62-offline-banner` · +141/-3 · #62)_
+- `2026-05-02T14:30:08Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #128 _(branch: `feat/issue-63-claude-fallback` · totale +136/-5)_
+- `2026-05-02T14:31:35Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #63: "[Sub #16 · 4/4] Claude bridge fallback to Gemini direct on harness failure"
+- `2026-05-02T14:32:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #128 "feat(ios): Claude bridge auto-fallback to Gemini direct on harness failure (#63)" di @fc200490-sketch _(branch: `feat/issue-63-claude-fallback` · +136/-5 · #63)_
+- `2026-05-02T15:01:07Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #53: "[Sub #14 · 1/3] Build `GigiTaskExtractor` engine (LLM call + dedup + state)"
+- `2026-05-02T15:01:11Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #134 "feat(ios): GigiTaskExtractor engine + Jaccard dedup (Sub #14 1/3)" di @fc200490-sketch _(branch: `feat/issue-53-task-extractor` · +132/-0 · #53)_
+- `2026-05-02T15:14:29Z` · bug-opened · 🐛 @ArmandoBattaglino ha aperto issue bug #160: "[BUG] #54 AC#2/#3 — observeUserTurnsForExtraction sink Combine non triggera estrazione automatica" _(parent: #54)_
+- `2026-05-02T15:25:07Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #103 _(branch: `feat/issue-102-wake-word` · totale +1054/-78)_
+- `2026-05-02T15:30:20Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #161: "[BUG] #102 AC#6 — Test the Shortcut launches the installed Shortcut" _(parent: #102)_
+- `2026-05-02T15:35:00Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #102: "[BUG] Wake word "hey gigi" non risponde su iPhone PM (Armando)"
+- `2026-05-02T15:50:31Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #163: "fix(ios): task extraction wiring + overlay UI bundled (Closes #54 #55)" _(branch: `fix/issue-54-55-task-extraction-bundled` · 12 commit · +224/-0 · 6 file · #54)_
+- `2026-05-02T15:52:27Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #164: "[BUG] #102 AC#9 — Hey Siri, hey GIGI opens foreground conversation mode" _(parent: #102)_
+- `2026-05-02T16:11:05Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #165: "fix(ios): align PR 103 device-tested shortcut and Siri triggers" _(branch: `fix/pr103-device-followup` · 1 commit · +25/-15 · 6 file · #161)_
+- `2026-05-02T16:12:42Z` · pr-merged · 🎉 @fc200490-sketch ha mergiato PR #165 "fix(ios): align PR 103 device-tested shortcut and Siri triggers" di @fc200490-sketch _(branch: `fix/pr103-device-followup` · +25/-15 · #103)_
+- `2026-05-02T16:28:45Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-05-04T12:28:50Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #169 _(branch: `feat/issue-46-tone` · totale +89/-0)_
+- `2026-05-04T12:31:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #188 "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" di @ArmandoBattaglino _(branch: `docs/issue-71-storyboard` · +85/-0 · #71)_
+- `2026-05-04T12:31:52Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #188: "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" _(branch: `docs/issue-71-storyboard` · 1 commit · +85/-0 · 1 file · #71)_
+- `2026-05-04T12:32:05Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #189: "docs(demo): pre-demo setup state + 10-pt checklist" _(branch: `docs/issue-72-setup` · 1 commit · +72/-0 · 1 file · #72)_
+- `2026-05-04T12:32:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #189 _(branch: `docs/issue-72-setup` · totale +72/-0)_
+- `2026-05-04T12:32:19Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #72: "[Sub #18 · 2/5] Pre-demo setup state — preferenze + calendario mock + contatti VIP + harness"
+- `2026-05-04T12:32:25Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #189 "docs(demo): pre-demo setup state + 10-pt checklist" di @ArmandoBattaglino _(branch: `docs/issue-72-setup` · +72/-0 · #72)_
+- `2026-05-04T12:32:40Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #190: "docs(demo): plan B per scene + abort clause" _(branch: `docs/issue-73-planb` · 1 commit · +56/-0 · 1 file · #73)_
+- `2026-05-04T12:32:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #190 _(branch: `docs/issue-73-planb` · totale +56/-0)_
+- `2026-05-04T12:32:48Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #73: "[Sub #18 · 3/5] Plan B per ogni scena — fallback narrativi se X fallisce"
+- `2026-05-04T12:32:56Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #191 _(branch: `docs/issue-74-duration` · totale +38/-0)_
+- `2026-05-04T12:33:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #191 "docs(demo): final demo duration decision — corta 3min50s" di @ArmandoBattaglino _(branch: `docs/issue-74-duration` · +38/-0 · #74)_
+- `2026-05-04T12:33:08Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #192: "docs(demo): stability pass sign-off skeleton" _(branch: `docs/issue-75-signoff` · 1 commit · +41/-0 · 1 file · #75)_
+- `2026-05-04T12:33:16Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #75: "[Sub #18 · 5/5] Stability pass cross-funzionale — Leo + Fede firmano "fattibile""
+- `2026-05-04T12:33:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #192 _(branch: `docs/issue-75-signoff` · totale +41/-0)_
+- `2026-05-04T12:33:22Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #192 "docs(demo): stability pass sign-off skeleton" di @ArmandoBattaglino _(branch: `docs/issue-75-signoff` · +41/-0 · #75)_
+- `2026-05-04T12:33:43Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #176 _(branch: `feat/issue-68-onboarding-qa` · totale +121/-0)_
+- `2026-05-04T12:33:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #176 "docs(qa): T1.1-T1.3 + T6.1-T6.2 evidence skeletons" di @ArmandoBattaglino _(branch: `feat/issue-68-onboarding-qa` · +121/-0 · #68)_
+- `2026-05-04T12:33:59Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #177: "docs(qa): H1-H3 + edge empty speech evidence skeletons" _(branch: `feat/issue-69-resilience-qa` · 1 commit · +95/-0 · 4 file · #69)_
+- `2026-05-04T12:34:06Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #178: "docs(qa): SUMMARY skeleton for PM GO/NO-GO sign-off" _(branch: `feat/issue-70-pm-signoff` · 1 commit · +67/-0 · 1 file · #70)_

@@ -71,7 +71,7 @@ struct OnboardingView: View {
                     case 2: apiKeyStep
                     case 3: harnessStep
                     case 4: profileStep
-                    case 5: wakeWordStep
+                    case 5: hardwareTriggerStep
                     case 6: doneStep
                     default: EmptyView()
                     }
@@ -392,29 +392,215 @@ struct OnboardingView: View {
             .stroke(Color.purple.opacity(0.3), lineWidth: 1))
     }
 
-    private var wakeWordStep: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "ear.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.purple)
+    // MARK: - Hardware trigger step (#102)
+    //
+    // Replaces the old wake-word step. iOS does not allow continuous background
+    // mic for non-VoIP apps, so wake word is paused for MVP. Hardware triggers
+    // (Back Tap on iPhone 14, Action Button on iPhone 15 Pro+) plus Siri phrases
+    // open GIGI in <1s from any state. We can't deep-link into iOS Accessibility
+    // settings, so we walk the user through the steps and provide a quick test
+    // button that fires the same code path the trigger will hit.
 
-            Text("Presence")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+    private var hardwareTriggerStep: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.purple)
 
-            Text("Enable Presence to keep GIGI Ready through a Live Activity. Say **\"Hey GIGI\"** or **\"GIGI\"** while iOS keeps the app eligible; if iOS pauses it, tap the Live Activity or app shortcut to resume.\n\nReady is standby. Listening appears only during active capture.")
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .foregroundColor(.white.opacity(0.7))
-                .padding(.horizontal, 28)
+                Text("Talk to GIGI without opening the app")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
 
-            Toggle("Enable Presence", isOn: Binding(
-                get: { UserDefaults.standard.bool(forKey: GigiWakeWordEngine.userDefaultsEnabledKey) },
-                set: { PresenceSessionController.shared.setAlwaysAvailable($0) }
-            ))
-            .tint(.purple)
-            .padding(.horizontal, 40)
+                Text("Two one-time setups — then a tap on the back of your iPhone opens a system dictation overlay, GIGI answers, and you hear the reply. The app stays closed.")
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.horizontal, 28)
+
+                // ── Setup 1: build the iOS Shortcut that wraps everything ──
+                //
+                // The structure is a Repeat loop so the conversation keeps
+                // going after each answer — Dictate Text reopens, GIGI
+                // hears the next phrase, and the response is spoken back,
+                // all without the GIGI app ever foregrounding.
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader("Step 1 — Build the Talk to GIGI Shortcut", systemImage: "1.circle.fill")
+                    triggerRow(number: "a", title: "Install the Universal \(GigiHardwareShortcut.displayName) Shortcut. It appears in Shortcuts as \(GigiHardwareShortcut.shortcutName).")
+                    triggerRow(number: "b", title: "It loops: Dictate Text → Process speech with GIGI → route markers → repeat until you say stop.")
+                    triggerRow(number: "c", title: "CALL: passes the stripped phone number into the native Shortcuts Call action.")
+                    triggerRow(number: "d", title: "SMS: sends the stripped message body to the stripped recipient with Send Message.")
+                    triggerRow(number: "e", title: "OPEN: strips the prefix and runs Open URL for apps, websites, maps, and WhatsApp links.")
+                    triggerRow(number: "f", title: "Anything else is spoken with Speak Text.")
+
+                    Text("Result: a banner-style dictation overlay slides down at the top of the screen. Say \"call Mom\" and GIGI resolves the contact in the background, returns CALL:+number, then Shortcuts runs the native Call action over whatever app you were using. The GIGI app never opens.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.55))
+
+                    Button { openUniversalShortcutInstall() } label: {
+                        Label("Install Universal Shortcut", systemImage: "square.and.arrow.down.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.purple.opacity(0.85))
+                            .cornerRadius(10)
+                    }
+                    .padding(.top, 4)
+
+                    Button { openShortcutsApp() } label: {
+                        Label("Open Shortcuts app", systemImage: "square.stack.3d.up.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(10)
+                    }
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(14)
+                .padding(.horizontal, 20)
+
+                // ── Setup 2: bind the Shortcut to a hardware trigger ──
+                //
+                // Critical: the picker shows both the App Shortcut "Open GIGI"
+                // (foregrounds the app) and the installed hardware Shortcut
+                // (banner only). We steer the user to the installed one.
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader("Step 2 — Bind it to your iPhone", systemImage: "2.circle.fill")
+                    triggerRow(number: "a", title: "Open the iOS Settings app")
+                    triggerRow(number: "b", title: hardwareTriggerPath)
+                    triggerRow(number: "c", title: "Scroll to the Shortcuts section (not App Shortcuts) and pick \(GigiHardwareShortcut.shortcutName) — the one you just installed")
+
+                    Text("If you accidentally pick \"Open GIGI\" under App Shortcuts, the GIGI app will open instead of the dictation banner. Use the Shortcuts section.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.55))
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(14)
+                .padding(.horizontal, 20)
+
+                // ── Verify path ──
+                VStack(spacing: 8) {
+                    Button { runShortcutByName(GigiHardwareShortcut.shortcutName) } label: {
+                        Label("Test the Shortcut", systemImage: "play.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.green.opacity(0.85))
+                            .cornerRadius(10)
+                    }
+                    Text("Runs your saved Shortcut. If you haven't built it yet, Shortcuts will tell you it's missing.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 24)
+
+                Text("No setup? Say \"Hey Siri, talk to GIGI\" anywhere — or \"Ehi Siri, parla con GIGI\" on Italian Siri. GIGI opens in conversation mode.")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 20)
+            }
         }
+    }
+
+    private func sectionHeader(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundColor(.purple)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.white)
+            Spacer()
+        }
+    }
+
+    /// Opens the iOS Shortcuts app via its `shortcuts://` URL scheme. If the
+    /// app is not installed (Shortcuts ships with iOS, so this is rare), the
+    /// call is a no-op rather than a crash.
+    private func openShortcutsApp() {
+        #if canImport(UIKit)
+        if let url = URL(string: "shortcuts://"), UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        }
+        #endif
+    }
+
+    private func openUniversalShortcutInstall() {
+        #if canImport(UIKit)
+        if let url = GigiHardwareShortcut.iCloudDownloadURL {
+            UIApplication.shared.open(url)
+        } else {
+            openShortcutsApp()
+        }
+        #endif
+    }
+
+    /// Runs a saved user Shortcut by name. The walkthrough uses this so the
+    /// onboarding "Test the Shortcut" button verifies the user really installed
+    /// the expected Shortcut — Shortcuts surfaces a clear
+    /// error sheet if no match is found.
+    private func runShortcutByName(_ name: String) {
+        #if canImport(UIKit)
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        if let url = URL(string: "shortcuts://run-shortcut?name=\(encoded)"),
+           UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        }
+        #endif
+    }
+
+    private func triggerRow(number: String, title: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number)
+                .font(.subheadline.weight(.bold))
+                .foregroundColor(.white)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.purple))
+            Text(title)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Picks Action Button copy for iPhone 15 Pro / 16 Pro / 17 Pro and Back Tap
+    /// copy for everything else. We detect via the device model identifier rather
+    /// than `UIDevice.current.model` (which only returns "iPhone").
+    private var hardwareTriggerPath: String {
+        if hasActionButton {
+            return "Go to Action Button → Shortcut"
+        } else {
+            return "Go to Accessibility → Touch → Back Tap → Double Tap"
+        }
+    }
+
+    private var hasActionButton: Bool {
+        #if canImport(UIKit)
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let identifier = withUnsafePointer(to: &systemInfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(validatingUTF8: $0) ?? "" }
+        }
+        // Action Button ships on iPhone 15 Pro family (iPhone16,1 / 16,2),
+        // the entire iPhone 16 line (iPhone17,*), and the iPhone 17 family
+        // (iPhone18,*). Anything older falls through to Back Tap.
+        return identifier.hasPrefix("iPhone16,")
+            || identifier.hasPrefix("iPhone17,")
+            || identifier.hasPrefix("iPhone18,")
+        #else
+        return false
+        #endif
     }
 
     private var doneStep: some View {
@@ -427,7 +613,7 @@ struct OnboardingView: View {
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
-            Text("Tap the mic for one-shot voice or enable Presence for wake-word standby.\n\nTry: \"Call Marco\", \"What's the weather?\", \"Set a timer for 10 minutes\"")
+            Text("Tap the mic to talk, or use the hardware shortcut you just set up.\n\nTry: \"Call Marco\", \"What's the weather?\", \"Set a timer for 10 minutes\"")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.white.opacity(0.7))

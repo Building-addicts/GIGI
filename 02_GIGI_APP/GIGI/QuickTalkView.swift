@@ -10,22 +10,30 @@ struct QuickTalkView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
 
-            VStack(spacing: 32) {
-                Spacer()
-
-                VStack(spacing: 14) {
+            VStack(spacing: 24) {
+                // Top-aligned content so the card reads as a Siri-style
+                // overlay rather than a deep modal — mic indicator and
+                // status sit near the top, response slides in below.
+                VStack(spacing: 12) {
                     phaseIndicator
+                        .padding(.top, 24)
 
                     Text(controller.phase.displayName)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+
+                    if controller.continuousMode {
+                        Text("Conversation mode — say \"stop\" to end")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.45))
+                    }
                 }
 
                 if !controller.transcript.isEmpty {
-                    Text("\"\(controller.transcript)\"")
+                    Text("\u{201C}\(controller.transcript)\u{201D}")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundColor(.white.opacity(0.6))
                         .multilineTextAlignment(.center)
@@ -35,17 +43,31 @@ struct QuickTalkView: View {
 
                 if !controller.response.isEmpty {
                     Text(controller.response)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 24)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
                 Spacer()
 
                 stopButton
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 28)
+            }
+            .frame(maxWidth: .infinity)
+
+            // Always-available close button in the corner of the card,
+            // mirroring the Siri overlay's dismiss affordance.
+            Button {
+                controller.stop()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.white.opacity(0.55))
+                    .padding(.top, 14)
+                    .padding(.trailing, 14)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: controller.phase)
