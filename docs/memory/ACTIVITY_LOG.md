@@ -208,3 +208,4 @@
 - `2026-05-04T13:00:18Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #40: "[Sub #10 · 3/4] Barge-in safety: clear pill speaking state on user interrupt"
 - `2026-05-04T13:00:33Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #169: "feat(ios): GigiToneEnrichment helper for draft message rewriting" _(branch: `feat/issue-46-tone` · 3 commit · +148/-0 · 2 file · #46)_
 - `2026-05-04T13:00:47Z` · bug-closed · 🐛✅ @fc200490-sketch ha chiuso issue #196: "[BUG] #46 Lingua-bonus — output garbage on English input (system prompt echo)"
+- `2026-05-04T13:05:46Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #46: "[Sub #12 · 1/4] Tone enrichment helper for message drafts (hardcoded prefs)"
