@@ -1,0 +1,7 @@
+[[action]]
+url = "gigi://listen"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+

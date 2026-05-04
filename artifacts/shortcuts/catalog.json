@@ -1,0 +1,314 @@
+[
+  {
+    "command_id": "torch_on",
+    "marker": "SYS:torch:on",
+    "native_action": "Set Flashlight On",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn on flashlight"
+  },
+  {
+    "command_id": "torch_off",
+    "marker": "SYS:torch:off",
+    "native_action": "Set Flashlight Off",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn off flashlight"
+  },
+  {
+    "command_id": "volume",
+    "marker": "SYS:volume:<0-100>",
+    "native_action": "Set Volume",
+    "notes": "Dynamic typed numeric Shortcut field; validate import on device.",
+    "status": "generated-dynamic",
+    "test_phrase": "set volume to 30"
+  },
+  {
+    "command_id": "brightness",
+    "marker": "SYS:brightness:<0-100>",
+    "native_action": "Set Brightness",
+    "notes": "Dynamic typed numeric Shortcut field; validate import on device.",
+    "status": "generated-dynamic",
+    "test_phrase": "set brightness to 80"
+  },
+  {
+    "command_id": "wifi_on",
+    "marker": "SYS:wifi:on",
+    "native_action": "Set Wi-Fi On",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn on wifi"
+  },
+  {
+    "command_id": "wifi_off",
+    "marker": "SYS:wifi:off",
+    "native_action": "Set Wi-Fi Off",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn off wifi"
+  },
+  {
+    "command_id": "bluetooth_on",
+    "marker": "SYS:bluetooth:on",
+    "native_action": "Set Bluetooth On",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn on bluetooth"
+  },
+  {
+    "command_id": "bluetooth_off",
+    "marker": "SYS:bluetooth:off",
+    "native_action": "Set Bluetooth Off",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn off bluetooth"
+  },
+  {
+    "command_id": "airplane_on",
+    "marker": "SYS:airplane:on",
+    "native_action": "Set Airplane Mode On",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn on airplane mode"
+  },
+  {
+    "command_id": "airplane_off",
+    "marker": "SYS:airplane:off",
+    "native_action": "Set Airplane Mode Off",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn off airplane mode"
+  },
+  {
+    "command_id": "dnd_on",
+    "marker": "SYS:dnd:on",
+    "native_action": "Set Focus / DND On",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn on do not disturb"
+  },
+  {
+    "command_id": "dnd_off",
+    "marker": "SYS:dnd:off",
+    "native_action": "Set Focus / DND Off",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn off do not disturb"
+  },
+  {
+    "command_id": "silent_on",
+    "marker": "SYS:silent:on",
+    "native_action": "Set Silent Mode On",
+    "notes": "",
+    "status": "implemented-custom",
+    "test_phrase": "silent mode"
+  },
+  {
+    "command_id": "silent_off",
+    "marker": "SYS:silent:off",
+    "native_action": "Set Silent Mode Off",
+    "notes": "",
+    "status": "implemented-custom",
+    "test_phrase": "turn off silent mode"
+  },
+  {
+    "command_id": "lpm_on",
+    "marker": "SYS:lpm:on",
+    "native_action": "Set Low Power Mode On",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn on low power mode"
+  },
+  {
+    "command_id": "lpm_off",
+    "marker": "SYS:lpm:off",
+    "native_action": "Set Low Power Mode Off",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "turn off low power mode"
+  },
+  {
+    "command_id": "screenshot",
+    "marker": "SYS:screenshot:",
+    "native_action": "Take Screenshot + Save",
+    "notes": "",
+    "status": "implemented-custom",
+    "test_phrase": "take screenshot"
+  },
+  {
+    "command_id": "alarm",
+    "marker": "SYS:alarm:<HH-MM>",
+    "native_action": "GIGI executor AppIntent notification alarm",
+    "notes": "Generated Shortcut calls GigiExecuteSystemCommandIntent because shortcuts-py has no verified Create Alarm action mapping.",
+    "status": "implemented-appintent",
+    "test_phrase": "set alarm at 7:30"
+  },
+  {
+    "command_id": "timer",
+    "marker": "SYS:timer:<minutes>",
+    "native_action": "GIGI executor AppIntent notification timer",
+    "notes": "Generated Shortcut calls GigiExecuteSystemCommandIntent because shortcuts-py has no verified Start Timer action mapping.",
+    "status": "implemented-appintent",
+    "test_phrase": "set timer for 10 minutes"
+  },
+  {
+    "command_id": "reminder",
+    "marker": "SYS:reminder:<body>",
+    "native_action": "GIGI executor AppIntent EventKit reminder",
+    "notes": "Generated Shortcut calls GigiExecuteSystemCommandIntent because shortcuts-py has no verified Add Reminder action mapping.",
+    "status": "implemented-appintent",
+    "test_phrase": "remind me to call Marco"
+  },
+  {
+    "command_id": "music_play",
+    "marker": "SYS:music:play",
+    "native_action": "Play Music",
+    "notes": "",
+    "status": "implemented-custom",
+    "test_phrase": "play music"
+  },
+  {
+    "command_id": "music_pause",
+    "marker": "SYS:music:pause",
+    "native_action": "Pause Music",
+    "notes": "",
+    "status": "implemented-custom",
+    "test_phrase": "pause music"
+  },
+  {
+    "command_id": "music_next",
+    "marker": "SYS:music:next",
+    "native_action": "Skip Forward",
+    "notes": "",
+    "status": "implemented-custom",
+    "test_phrase": "next track"
+  },
+  {
+    "command_id": "music_prev",
+    "marker": "SYS:music:prev",
+    "native_action": "Skip Back",
+    "notes": "",
+    "status": "implemented-custom",
+    "test_phrase": "previous track"
+  },
+  {
+    "command_id": "weather",
+    "marker": "SYS:weather:",
+    "native_action": "GIGI executor AppIntent weather lookup",
+    "notes": "Generated Shortcut calls GigiExecuteSystemCommandIntent because shortcuts-py has no verified Weather action mapping.",
+    "status": "implemented-appintent",
+    "test_phrase": "what's the weather"
+  },
+  {
+    "command_id": "battery",
+    "marker": "SYS:battery:",
+    "native_action": "Get Battery_Level + Speak",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "what's the battery"
+  },
+  {
+    "command_id": "location",
+    "marker": "SYS:location:",
+    "native_action": "GIGI executor AppIntent current location",
+    "notes": "Generated Shortcut calls GigiExecuteSystemCommandIntent because shortcuts-py has no verified Current Location action mapping.",
+    "status": "implemented-appintent",
+    "test_phrase": "where am I"
+  },
+  {
+    "command_id": "event",
+    "marker": "SYS:event:<payload>",
+    "native_action": "GIGI executor AppIntent EventKit event",
+    "notes": "Generated Shortcut calls GigiExecuteSystemCommandIntent because shortcuts-py has no verified Calendar Event action mapping.",
+    "status": "implemented-appintent",
+    "test_phrase": "create calendar event"
+  },
+  {
+    "command_id": "call",
+    "marker": "CALL:<number>",
+    "native_action": "Open tel: URL",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "call Mom"
+  },
+  {
+    "command_id": "sms",
+    "marker": "SMS:<number>|<body>",
+    "native_action": "Send Message",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "text Fede saying I'm late"
+  },
+  {
+    "command_id": "open",
+    "marker": "OPEN:<url>",
+    "native_action": "Open URL",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "open Spotify"
+  },
+  {
+    "command_id": "spotify",
+    "marker": "SYS:spotify:<query>",
+    "native_action": "Open Spotify search URL",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "play Queen on Spotify"
+  },
+  {
+    "command_id": "youtube",
+    "marker": "SYS:youtube:<query>",
+    "native_action": "Open YouTube search URL",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "watch lofi on YouTube"
+  },
+  {
+    "command_id": "amazon",
+    "marker": "SYS:amazon:<query>",
+    "native_action": "Open Amazon search URL",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "search shoes on Amazon"
+  },
+  {
+    "command_id": "maps",
+    "marker": "SYS:maps:<query>",
+    "native_action": "Open Apple Maps search URL",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "navigate to Times Square"
+  },
+  {
+    "command_id": "instagram",
+    "marker": "SYS:instagram:<query>",
+    "native_action": "Open Instagram URL",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "Instagram user Marco"
+  },
+  {
+    "command_id": "speak",
+    "marker": "SPEAK:<text>",
+    "native_action": "Speak Text",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "tell me a joke"
+  },
+  {
+    "command_id": "stop",
+    "marker": "STOP:",
+    "native_action": "Exit Shortcut",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "stop"
+  },
+  {
+    "command_id": "error",
+    "marker": "ERROR:<text>",
+    "native_action": "Speak Text",
+    "notes": "",
+    "status": "implemented",
+    "test_phrase": "unavailable command"
+  }
+]

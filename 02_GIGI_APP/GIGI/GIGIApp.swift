@@ -78,15 +78,17 @@ struct GIGIApp: App {
                 }
                 .onOpenURL { url in
                     if url.scheme?.lowercased() == "gigi" {
-                        if url.host == "listen" {
-                            if !PresenceSessionController.shared.isActive {
-                                PresenceSessionController.shared.startSession()
-                            }
-                            GigiSmartOrchestrator.shared.startListening()
+                        switch url.host {
+                        case "listen":
+                            PresenceSessionController.shared.beginListeningSession(reason: "hardware-shortcut")
+                            return
+                        case "executor-complete", "executor-cancel":
+                            GigiShortcutExecutorDispatcher.handleCallback(url)
+                            return
+                        default:
+                            NotificationCenter.default.post(name: .gigiGatewayCallback, object: url)
                             return
                         }
-                        NotificationCenter.default.post(name: .gigiGatewayCallback, object: url)
-                        return
                     }
                     _ = GIDSignIn.sharedInstance.handle(url)
                 }

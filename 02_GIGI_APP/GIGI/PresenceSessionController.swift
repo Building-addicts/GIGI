@@ -128,6 +128,23 @@ final class PresenceSessionController: ObservableObject {
         GigiDebugLogger.log("PresenceSessionController: always-available session started \(sessionId)")
     }
 
+    /// One-shot hardware trigger entry used by `gigi://listen`.
+    ///
+    /// Back Tap / Action Button must not enable the always-available preference:
+    /// it should briefly foreground GIGI, show the Dynamic Island listening state,
+    /// capture one command, then let the normal turn lifecycle decide whether to
+    /// keep a follow-up window open.
+    func beginListeningSession(reason: String) {
+        GigiDebugLogger.log("PresenceSessionController: beginListeningSession reason=\(reason)")
+        if state == .inactive {
+            startSession(persistPreference: false)
+        } else {
+            GigiSmartOrchestrator.shared.isPresenceActive = true
+            GigiAudioManager.shared.presenceMode = true
+        }
+        GigiSmartOrchestrator.shared.startListening(requestAttention: true)
+    }
+
     func stopSession(disablePreference: Bool = true) {
         if disablePreference {
             UserDefaults.standard.set(false, forKey: Self.alwaysAvailableKey)

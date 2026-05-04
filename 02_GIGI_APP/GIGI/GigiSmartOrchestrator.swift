@@ -210,12 +210,89 @@ class GigiSmartOrchestrator: ObservableObject {
             }
         }
 
+        // Hardware-trigger / Dynamic Island path: deterministic local routing
+        // must sit above the cloud/agent loop. If GIGI can resolve a SYS/CALL/
+        // SMS/OPEN marker locally, Shortcuts is invoked only as the privileged
+        // executor after the orchestrator made the decision.
+        if let local = await GigiShortcutOrchestrator.resolveLocal(text: trimmed) {
+            await handleShortcutResult(local, thinkingID: thinkingID)
+            return
+        }
+
         // Passively learn user profile data from natural speech (non-blocking)
         Task { await GigiUserProfile.shared.learnFromText(trimmed) }
 
         // --- V3 agent loop ---
         let result = await agentEngine.process(text: trimmed)
         handleResult(result, thinkingID: thinkingID)
+    }
+
+    private func handleShortcutResult(_ result: GigiShortcutCommandResult, thinkingID: UUID) async {
+        switch result.kind {
+        case .system:
+            if shouldExecuteSystemMarkerInApp(result.shortcutValue) {
+                let speech = await GigiSystemCommandExecutor.execute(marker: result.shortcutValue)
+                memory.resolveThinking(id: thinkingID, with: speech)
+                handleResult(
+                    AgentResult(
+                        speech: speech,
+                        executedTools: ["gigi_system_executor"],
+                        isFollowUp: false,
+                        costEstimate: 0,
+                        requiresConfirm: nil,
+                        isError: false
+                    ),
+                    thinkingID: thinkingID
+                )
+                Task { await GigiLiveActivityController.shared.completeWithDone(message: speech) }
+                return
+            }
+            fallthrough
+
+        case .call, .sms, .open:
+            let opened = await GigiShortcutExecutorDispatcher.dispatch(result)
+            let speech = opened
+                ? "Running that."
+                : "I couldn't open the GIGI-Execute Shortcut. Install it from onboarding, then try again."
+            memory.resolveThinking(id: thinkingID, with: speech)
+            if opened {
+                status = "GIGI: Ready"
+                isThinking = false
+            } else {
+                handleResult(
+                    AgentResult(
+                        speech: speech,
+                        executedTools: [],
+                        isFollowUp: false,
+                        costEstimate: 0,
+                        requiresConfirm: nil,
+                        isError: true
+                    ),
+                    thinkingID: thinkingID
+                )
+            }
+
+        case .stop:
+            memory.resolveThinking(id: thinkingID, with: "Stopped.")
+            PresenceSessionController.shared.stopSession(disablePreference: false)
+            Task { await GigiLiveActivityController.shared.endImmediately() }
+            status = "GIGI: Ready"
+            isThinking = false
+            currentVoiceTurnId = nil
+
+        case .speech:
+            handleResult(
+                AgentResult(
+                    speech: result.shortcutValue,
+                    executedTools: ["local_orchestrator"],
+                    isFollowUp: false,
+                    costEstimate: 0,
+                    requiresConfirm: nil,
+                    isError: false
+                ),
+                thinkingID: thinkingID
+            )
+        }
     }
 
     // MARK: - Result handling (shared by normal turn + confirmation)
@@ -385,7 +462,20 @@ class GigiSmartOrchestrator: ObservableObject {
         Task { await GigiLiveActivityController.shared.endImmediately() }
     }
 
-    func startListening() {
+
+    private func shouldExecuteSystemMarkerInApp(_ marker: String) -> Bool {
+        let appHandledPrefixes = [
+            "SYS:alarm:",
+            "SYS:timer:",
+            "SYS:reminder:",
+            "SYS:weather:",
+            "SYS:location:",
+            "SYS:event:",
+        ]
+        return appHandledPrefixes.contains { marker.hasPrefix($0) }
+    }
+
+    func startListening(requestAttention: Bool = false) {
         GigiDebugLogger.log("startListening called")
         if GigiAudioManager.shared.state == .speaking {
             interruptAndListen(source: "wakeOrTap")
@@ -397,7 +487,13 @@ class GigiSmartOrchestrator: ObservableObject {
         status      = "GIGI: Listening..."
         usingRealtimeMic = false
         GigiAudioManager.shared.startRecording()
-        Task { await GigiLiveActivityController.shared.beginListening() }
+        Task {
+            if requestAttention {
+                await GigiLiveActivityController.shared.descendForListening()
+            } else {
+                await GigiLiveActivityController.shared.beginListening()
+            }
+        }
     }
 
 

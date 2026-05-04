@@ -26,6 +26,7 @@ struct OnboardingView: View {
     @State private var calendarGranted = false
     @State private var notifGranted = false
     @State private var isRequestingPermissions = false
+    @State private var shortcutSetupStatus = ""
 
     // Harness step
     @State private var harnessURL = ""
@@ -414,33 +415,31 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
 
-                Text("Two one-time setups — then a tap on the back of your iPhone opens a system dictation overlay, GIGI answers, and you hear the reply. The app stays closed.")
+                Text("GIGI uses two Shortcuts as a bridge. Listen wakes the app into Dynamic Island listening; Execute is the hidden native-action executor that GIGI calls after it understands you.")
                     .font(.footnote)
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white.opacity(0.7))
                     .padding(.horizontal, 28)
 
-                // ── Setup 1: build the iOS Shortcut that wraps everything ──
+                // ── Setup 1: explain and install the split Shortcuts ──
                 //
-                // The structure is a Repeat loop so the conversation keeps
-                // going after each answer — Dictate Text reopens, GIGI
-                // hears the next phrase, and the response is spoken back,
-                // all without the GIGI app ever foregrounding.
+                // GIGI-Listen is the visible hardware trigger and only opens
+                // gigi://listen. GIGI-Execute is a hidden marker executor
+                // called by the app after the orchestrator routes a command.
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader("Step 1 — Build the Talk to GIGI Shortcut", systemImage: "1.circle.fill")
-                    triggerRow(number: "a", title: "Install the Universal Talk to GIGI Shortcut, then open it in Shortcuts if you want to inspect it.")
-                    triggerRow(number: "b", title: "It loops: Dictate Text → Process speech with GIGI → route markers → repeat until you say stop.")
-                    triggerRow(number: "c", title: "CALL: passes the stripped phone number into the native Shortcuts Call action.")
-                    triggerRow(number: "d", title: "SMS: sends the stripped message body to the stripped recipient with Send Message.")
-                    triggerRow(number: "e", title: "OPEN: strips the prefix and runs Open URL for apps, websites, maps, and WhatsApp links.")
-                    triggerRow(number: "f", title: "Anything else is spoken with Speak Text.")
+                    sectionHeader("Step 1 — Connect app + Shortcuts", systemImage: "1.circle.fill")
+                    triggerRow(number: "a", title: "GIGI-Listen = the bridge. It opens gigi://listen and drops GIGI into Dynamic Island listening.")
+                    triggerRow(number: "b", title: "GIGI-Execute = the worker. You install it once, but never tap it manually.")
+                    triggerRow(number: "c", title: "When you speak a phone command, GIGI routes it first, then sends a marker like SYS:torch:on to GIGI-Execute.")
+                    triggerRow(number: "d", title: "Already installed both? Skip the install buttons and run the two tests below.")
+                    triggerRow(number: "e", title: "If you rebuild GIGI-Listen manually, do not pick a GIGI app action: add Apple URL with gigi://listen, then Apple Open URLs.")
 
-                    Text("Result: a banner-style dictation overlay slides down at the top of the screen. Say \"call Mom\" and GIGI resolves the contact in the background, returns CALL:+number, then Shortcuts runs the native Call action over whatever app you were using. The GIGI app never opens.")
+                    Text("Result: your hardware trigger opens GIGI, GIGI listens, the orchestrator decides, and Shortcuts only executes the final native iOS action.")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.55))
 
                     Button { openUniversalShortcutInstall() } label: {
-                        Label("Install Universal Shortcut", systemImage: "square.and.arrow.down.fill")
+                        Label("Install or update GIGI-Listen", systemImage: "square.and.arrow.down.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -449,6 +448,16 @@ struct OnboardingView: View {
                             .cornerRadius(10)
                     }
                     .padding(.top, 4)
+
+                    Button { openExecutorShortcutInstall() } label: {
+                        Label("Install or update GIGI-Execute", systemImage: "gearshape.2.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.9))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(Color.white.opacity(0.12))
+                            .cornerRadius(10)
+                    }
 
                     Button { openShortcutsApp() } label: {
                         Label("Open Shortcuts app", systemImage: "square.stack.3d.up.fill")
@@ -459,25 +468,57 @@ struct OnboardingView: View {
                             .background(Color.white.opacity(0.08))
                             .cornerRadius(10)
                     }
+
+                    if !shortcutSetupStatus.isEmpty {
+                        Text(shortcutSetupStatus)
+                            .font(.caption2)
+                            .foregroundColor(.green.opacity(0.9))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .padding(14)
                 .background(Color.white.opacity(0.05))
                 .cornerRadius(14)
                 .padding(.horizontal, 20)
 
-                // ── Setup 2: bind the Shortcut to a hardware trigger ──
-                //
-                // Critical: the picker shows two entries that look almost
-                // identical — the App Shortcut "Open GIGI" (foregrounds the
-                // app) and the user-built Shortcut "Talk to GIGI" (banner
-                // only). We steer the user to the second one explicitly.
+                // ── Verify app and Shortcut bridge separately ──
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader("Step 2 — Bind it to your iPhone", systemImage: "2.circle.fill")
-                    triggerRow(number: "a", title: "Open the iOS Settings app")
-                    triggerRow(number: "b", title: hardwareTriggerPath)
-                    triggerRow(number: "c", title: "Scroll to the Shortcuts section (not App Shortcuts) and pick Talk to GIGI — the one you just built")
+                    sectionHeader("Step 2 — Verify the bridge", systemImage: "2.circle.fill")
+                    triggerRow(number: "a", title: "Test app listener proves gigi://listen works even before Shortcuts.")
+                    triggerRow(number: "b", title: "Test GIGI-Listen proves the installed Shortcut calls back into the app.")
+                    triggerRow(number: "c", title: "Test GIGI-Execute proves the app can pass a safe marker to the hidden executor.")
 
-                    Text("If you accidentally pick \"Open GIGI\" under App Shortcuts, the GIGI app will open instead of the dictation banner. Use the Shortcuts section.")
+                    Button { openDirectListenURL() } label: {
+                        Label("Test app listener", systemImage: "dot.radiowaves.left.and.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.blue.opacity(0.8))
+                            .cornerRadius(10)
+                    }
+
+                    Button { runShortcutByName(GigiHardwareShortcut.shortcutName) } label: {
+                        Label("Test installed GIGI-Listen", systemImage: "play.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.green.opacity(0.85))
+                            .cornerRadius(10)
+                    }
+
+                    Button { runExecutorSmokeTest() } label: {
+                        Label("Test installed GIGI-Execute", systemImage: "bolt.badge.checkmark.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.9))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(Color.white.opacity(0.12))
+                            .cornerRadius(10)
+                    }
+
+                    Text("The Execute test uses SYS:battery:, a safe read-only marker. If Shortcuts says it cannot find the Shortcut, the installed name is missing or different.")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.55))
                 }
@@ -486,25 +527,26 @@ struct OnboardingView: View {
                 .cornerRadius(14)
                 .padding(.horizontal, 20)
 
-                // ── Verify path ──
-                VStack(spacing: 8) {
-                    Button { runShortcutByName(GigiHardwareShortcut.shortcutName) } label: {
-                        Label("Test the Shortcut", systemImage: "play.circle.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(Color.green.opacity(0.85))
-                            .cornerRadius(10)
-                    }
-                    Text("Runs your saved Shortcut. If you haven't built it yet, Shortcuts will tell you it's missing.")
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.5))
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, 24)
+                // ── Setup 3: bind the Shortcut to a hardware trigger ──
+                //
+                // Critical: bind the user Shortcut named GIGI-Listen, not the
+                // hidden executor and not the generic App Shortcut entry.
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader("Step 3 — Bind it to your iPhone", systemImage: "3.circle.fill")
+                    triggerRow(number: "a", title: "Open the iOS Settings app")
+                    triggerRow(number: "b", title: hardwareTriggerPath)
+                    triggerRow(number: "c", title: "Pick GIGI-Listen — not GIGI-Execute")
 
-                Text("No setup? Say \"Hey Siri, hey GIGI\" anywhere — works without configuring anything, but the answer comes through Siri.")
+                    Text("If you pick GIGI-Execute, nothing will listen. GIGI-Execute is only the hidden native-action arm.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.55))
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(14)
+                .padding(.horizontal, 20)
+
+                Text("No hardware setup? Say \"Hey Siri, GIGI-Listen\" after the Shortcut is installed, or open GIGI and tap the mic.")
                     .font(.footnote)
                     .foregroundColor(.white.opacity(0.5))
                     .multilineTextAlignment(.center)
@@ -530,15 +572,22 @@ struct OnboardingView: View {
     /// call is a no-op rather than a crash.
     private func openShortcutsApp() {
         #if canImport(UIKit)
-        if let url = URL(string: "shortcuts://"), UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url)
+        guard let url = URL(string: "shortcuts://") else { return }
+        UIApplication.shared.open(url) { success in
+            if !success {
+                shortcutSetupStatus = "Could not open Shortcuts. Open the Shortcuts app manually and check that GIGI-Listen and GIGI-Execute exist."
+            }
         }
         #endif
     }
 
     private func openUniversalShortcutInstall() {
         #if canImport(UIKit)
-        if let url = GigiHardwareShortcut.iCloudDownloadURL {
+        if GigiShortcutInstaller.shared.presentInstallSheet(resourceName: GigiHardwareShortcut.listenResourceName) {
+            shortcutSetupStatus = "Install sheet opened. Add or replace GIGI-Listen, then return here for the tests."
+            return
+        }
+        if let url = GigiHardwareShortcut.listenICloudDownloadURL {
             UIApplication.shared.open(url)
         } else {
             openShortcutsApp()
@@ -546,16 +595,71 @@ struct OnboardingView: View {
         #endif
     }
 
-    /// Runs a saved user Shortcut by name. The walkthrough uses this so the
-    /// onboarding "Test the Shortcut" button verifies the user really built
-    /// and saved a Shortcut named "Talk to GIGI" — Shortcuts surfaces a clear
-    /// error sheet if no match is found.
+    private func openExecutorShortcutInstall() {
+        #if canImport(UIKit)
+        if GigiShortcutInstaller.shared.presentInstallSheet(resourceName: GigiHardwareShortcut.executorResourceName) {
+            shortcutSetupStatus = "Install sheet opened. Add or replace GIGI-Execute, then return here for the tests."
+            return
+        }
+        if let url = GigiHardwareShortcut.executorICloudDownloadURL {
+            UIApplication.shared.open(url)
+        } else {
+            openShortcutsApp()
+        }
+        #endif
+    }
+
+    private func openDirectListenURL() {
+        #if canImport(UIKit)
+        shortcutSetupStatus = "Starting the same listener used by gigi://listen. Dynamic Island/listening should start now."
+        PresenceSessionController.shared.beginListeningSession(reason: "onboarding-test")
+        #endif
+    }
+
+    /// Runs a saved user Shortcut by name. This verifies the installed Shortcut
+    /// exists with the expected name; Shortcuts surfaces a clear error sheet if
+    /// no match is found.
     private func runShortcutByName(_ name: String) {
         #if canImport(UIKit)
-        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
-        if let url = URL(string: "shortcuts://run-shortcut?name=\(encoded)"),
-           UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url)
+        var components = URLComponents()
+        components.scheme = "shortcuts"
+        components.host = "run-shortcut"
+        components.queryItems = [URLQueryItem(name: "name", value: name)]
+        guard let url = components.url else {
+            shortcutSetupStatus = "Could not build the Shortcuts URL for \(name)."
+            return
+        }
+        shortcutSetupStatus = "Running \(name). If Shortcuts says it cannot find it, the installed Shortcut name is different."
+        UIApplication.shared.open(url) { success in
+            if !success {
+                shortcutSetupStatus = "Could not open Shortcuts. Open Shortcuts manually and check the Shortcut name: \(name)."
+            }
+        }
+        #endif
+    }
+
+    private func runExecutorSmokeTest() {
+        #if canImport(UIKit)
+        var components = URLComponents()
+        components.scheme = "shortcuts"
+        components.host = "x-callback-url"
+        components.path = "/run-shortcut"
+        components.queryItems = [
+            URLQueryItem(name: "name", value: GigiHardwareShortcut.executorShortcutName),
+            URLQueryItem(name: "input", value: "text"),
+            URLQueryItem(name: "text", value: "SYS:battery:"),
+            URLQueryItem(name: "x-success", value: GigiHardwareShortcut.executorSuccessURLString),
+            URLQueryItem(name: "x-cancel", value: GigiHardwareShortcut.executorCancelURLString),
+        ]
+        guard let url = components.url else {
+            shortcutSetupStatus = "Could not build the GIGI-Execute test URL."
+            return
+        }
+        shortcutSetupStatus = "Running GIGI-Execute with SYS:battery:. If Shortcuts says it cannot find it, install/rename GIGI-Execute."
+        UIApplication.shared.open(url) { success in
+            if !success {
+                shortcutSetupStatus = "Could not open Shortcuts for GIGI-Execute. Open Shortcuts manually and check that GIGI-Execute exists."
+            }
         }
         #endif
     }

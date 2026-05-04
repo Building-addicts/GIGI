@@ -1,0 +1,1807 @@
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiBeginSessionIntent"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Session"
+type = "set_variable"
+
+[[action]]
+text = "no"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "no"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+count = 50
+group_id = "gigi_repeat"
+type = "repeat_start"
+
+[[action]]
+type = "dictate_text"
+
+[[action]]
+name = "Dictated"
+type = "set_variable"
+
+[[action]]
+name = "Dictated"
+type = "get_variable"
+
+[[action]]
+compare_with = "stop"
+condition = "Equals"
+group_id = "gigi_stop_word_stop"
+type = "if"
+
+[[action]]
+type = "exit"
+
+[[action]]
+group_id = "gigi_stop_word_stop"
+type = "endif"
+
+[[action]]
+name = "Dictated"
+type = "get_variable"
+
+[[action]]
+compare_with = "cancel"
+condition = "Equals"
+group_id = "gigi_stop_word_cancel"
+type = "if"
+
+[[action]]
+type = "exit"
+
+[[action]]
+group_id = "gigi_stop_word_cancel"
+type = "endif"
+
+[[action]]
+name = "Dictated"
+type = "get_variable"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+input_text = "{{Dictated}}"
+intent_name = "GigiOrchestratorIntent"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Result"
+type = "set_variable"
+
+[[action]]
+text = "no"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "no"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:torch:on"
+condition = "Begins With"
+group_id = "gigi_torch_on"
+type = "if"
+
+[[action]]
+mode = "On"
+type = "set_torch"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_torch_on"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:torch:off"
+condition = "Begins With"
+group_id = "gigi_torch_off"
+type = "if"
+
+[[action]]
+mode = "Off"
+type = "set_torch"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_torch_off"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:wifi:on"
+condition = "Begins With"
+group_id = "gigi_wifi_on"
+type = "if"
+
+[[action]]
+on = "true"
+type = "set_wifi"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_wifi_on"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:wifi:off"
+condition = "Begins With"
+group_id = "gigi_wifi_off"
+type = "if"
+
+[[action]]
+on = "false"
+type = "set_wifi"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_wifi_off"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:bluetooth:on"
+condition = "Begins With"
+group_id = "gigi_bluetooth_on"
+type = "if"
+
+[[action]]
+on = "true"
+type = "set_bluetooth"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_bluetooth_on"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:bluetooth:off"
+condition = "Begins With"
+group_id = "gigi_bluetooth_off"
+type = "if"
+
+[[action]]
+on = "false"
+type = "set_bluetooth"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_bluetooth_off"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:airplane:on"
+condition = "Begins With"
+group_id = "gigi_airplane_on"
+type = "if"
+
+[[action]]
+on = "true"
+type = "set_airplane_mode"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_airplane_on"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:airplane:off"
+condition = "Begins With"
+group_id = "gigi_airplane_off"
+type = "if"
+
+[[action]]
+on = "false"
+type = "set_airplane_mode"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_airplane_off"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:dnd:on"
+condition = "Begins With"
+group_id = "gigi_dnd_on"
+type = "if"
+
+[[action]]
+enabled = "true"
+type = "set_do_not_disturb"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_dnd_on"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:dnd:off"
+condition = "Begins With"
+group_id = "gigi_dnd_off"
+type = "if"
+
+[[action]]
+enabled = "false"
+type = "set_do_not_disturb"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_dnd_off"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:silent:on"
+condition = "Begins With"
+group_id = "gigi_silent_on"
+type = "if"
+
+[[action]]
+on = "true"
+type = "set_silent_mode"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_silent_on"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:silent:off"
+condition = "Begins With"
+group_id = "gigi_silent_off"
+type = "if"
+
+[[action]]
+on = "false"
+type = "set_silent_mode"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_silent_off"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:lpm:on"
+condition = "Begins With"
+group_id = "gigi_lpm_on"
+type = "if"
+
+[[action]]
+on = "true"
+type = "set_low_power_mode"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_lpm_on"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:lpm:off"
+condition = "Begins With"
+group_id = "gigi_lpm_off"
+type = "if"
+
+[[action]]
+on = "false"
+type = "set_low_power_mode"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_lpm_off"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:music:play"
+condition = "Begins With"
+group_id = "gigi_music_play"
+type = "if"
+
+[[action]]
+type = "play_music"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_music_play"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:music:pause"
+condition = "Begins With"
+group_id = "gigi_music_pause"
+type = "if"
+
+[[action]]
+type = "pause_music"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_music_pause"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:music:next"
+condition = "Begins With"
+group_id = "gigi_music_next"
+type = "if"
+
+[[action]]
+type = "skip_forward"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_music_next"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:music:prev"
+condition = "Begins With"
+group_id = "gigi_music_prev"
+type = "if"
+
+[[action]]
+type = "skip_back"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_music_prev"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:screenshot:"
+condition = "Begins With"
+group_id = "gigi_screenshot"
+type = "if"
+
+[[action]]
+type = "take_screenshot"
+
+[[action]]
+type = "save_to_camera_roll"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_screenshot"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:volume:"
+condition = "Begins With"
+group_id = "gigi_volume"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SYS:volume:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "GIGI_Payload"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Payload"
+type = "get_variable"
+
+[[action]]
+level = "{{GIGI_Payload}}"
+type = "set_volume_dynamic"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_volume"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:brightness:"
+condition = "Begins With"
+group_id = "gigi_brightness"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SYS:brightness:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "GIGI_Payload"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Payload"
+type = "get_variable"
+
+[[action]]
+level = "{{GIGI_Payload}}"
+type = "set_brightness_dynamic"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_brightness"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:battery:"
+condition = "Begins With"
+group_id = "gigi_battery"
+type = "if"
+
+[[action]]
+type = "get_battery_level"
+
+[[action]]
+name = "Battery_Level"
+type = "set_variable"
+
+[[action]]
+text = "Battery is {{Battery_Level}} percent."
+type = "text"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_battery"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "CALL:"
+condition = "Begins With"
+group_id = "gigi_call"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "CALL:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Call_Target"
+type = "set_variable"
+
+[[action]]
+url = "tel:{{Call_Target}}"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_call"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SMS:"
+condition = "Begins With"
+group_id = "gigi_sms"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SMS:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "SMS_Payload"
+type = "set_variable"
+
+[[action]]
+name = "SMS_Payload"
+type = "get_variable"
+
+[[action]]
+custom_separator = "|"
+separator_type = "Custom"
+type = "split_text"
+
+[[action]]
+name = "SMS_Parts"
+type = "set_variable"
+
+[[action]]
+name = "SMS_Parts"
+type = "get_variable"
+
+[[action]]
+item_specifier = "First Item"
+type = "get_item_from_list"
+
+[[action]]
+name = "Message_Recipient"
+type = "set_variable"
+
+[[action]]
+name = "SMS_Parts"
+type = "get_variable"
+
+[[action]]
+item_specifier = "Last Item"
+type = "get_item_from_list"
+
+[[action]]
+name = "Message_Body"
+type = "set_variable"
+
+[[action]]
+recepients = "{{Message_Recipient}}"
+text = "{{Message_Body}}"
+type = "send_message"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_sms"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "OPEN:"
+condition = "Begins With"
+group_id = "gigi_open"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "OPEN:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Open_URL"
+type = "set_variable"
+
+[[action]]
+url = "{{Open_URL}}"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_open"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:spotify:"
+condition = "Begins With"
+group_id = "gigi_spotify"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SYS:spotify:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Search_Query"
+type = "set_variable"
+
+[[action]]
+name = "Search_Query"
+type = "get_variable"
+
+[[action]]
+type = "urlencode"
+
+[[action]]
+name = "Encoded_Query"
+type = "set_variable"
+
+[[action]]
+url = "spotify:search:{{Encoded_Query}}"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_spotify"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:youtube:"
+condition = "Begins With"
+group_id = "gigi_youtube"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SYS:youtube:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Search_Query"
+type = "set_variable"
+
+[[action]]
+name = "Search_Query"
+type = "get_variable"
+
+[[action]]
+type = "urlencode"
+
+[[action]]
+name = "Encoded_Query"
+type = "set_variable"
+
+[[action]]
+url = "youtube://www.youtube.com/results?search_query={{Encoded_Query}}"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_youtube"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:amazon:"
+condition = "Begins With"
+group_id = "gigi_amazon"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SYS:amazon:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Search_Query"
+type = "set_variable"
+
+[[action]]
+name = "Search_Query"
+type = "get_variable"
+
+[[action]]
+type = "urlencode"
+
+[[action]]
+name = "Encoded_Query"
+type = "set_variable"
+
+[[action]]
+url = "https://www.amazon.com/s?k={{Encoded_Query}}"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_amazon"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:maps:"
+condition = "Begins With"
+group_id = "gigi_maps"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SYS:maps:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Search_Query"
+type = "set_variable"
+
+[[action]]
+name = "Search_Query"
+type = "get_variable"
+
+[[action]]
+type = "urlencode"
+
+[[action]]
+name = "Encoded_Query"
+type = "set_variable"
+
+[[action]]
+url = "maps://?q={{Encoded_Query}}"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_maps"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:instagram:"
+condition = "Begins With"
+group_id = "gigi_instagram"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SYS:instagram:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Search_Query"
+type = "set_variable"
+
+[[action]]
+name = "Search_Query"
+type = "get_variable"
+
+[[action]]
+type = "urlencode"
+
+[[action]]
+name = "Encoded_Query"
+type = "set_variable"
+
+[[action]]
+url = "instagram://user?username={{Encoded_Query}}"
+type = "url_dynamic"
+
+[[action]]
+type = "open_url"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Needs_Confirm"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_instagram"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SPEAK:"
+condition = "Begins With"
+group_id = "gigi_speak"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "SPEAK:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Speech_Text"
+type = "set_variable"
+
+[[action]]
+name = "Speech_Text"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_speak"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "ERROR:"
+condition = "Begins With"
+group_id = "gigi_error"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+case_sensitive = "true"
+find = "ERROR:"
+regex = "false"
+replace = ""
+type = "replace_text"
+
+[[action]]
+name = "Speech_Text"
+type = "set_variable"
+
+[[action]]
+name = "Speech_Text"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_error"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "STOP:"
+condition = "Begins With"
+group_id = "gigi_stop"
+type = "if"
+
+[[action]]
+type = "exit"
+
+[[action]]
+group_id = "gigi_stop"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:alarm:"
+condition = "Begins With"
+group_id = "gigi_alarm"
+type = "if"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiExecuteSystemCommandIntent"
+marker = "{{GIGI_Result}}"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_alarm"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:timer:"
+condition = "Begins With"
+group_id = "gigi_timer"
+type = "if"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiExecuteSystemCommandIntent"
+marker = "{{GIGI_Result}}"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_timer"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:reminder:"
+condition = "Begins With"
+group_id = "gigi_reminder"
+type = "if"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiExecuteSystemCommandIntent"
+marker = "{{GIGI_Result}}"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_reminder"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:weather:"
+condition = "Begins With"
+group_id = "gigi_weather"
+type = "if"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiExecuteSystemCommandIntent"
+marker = "{{GIGI_Result}}"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_weather"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:location:"
+condition = "Begins With"
+group_id = "gigi_location"
+type = "if"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiExecuteSystemCommandIntent"
+marker = "{{GIGI_Result}}"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_location"
+type = "endif"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+compare_with = "SYS:event:"
+condition = "Begins With"
+group_id = "gigi_event"
+type = "if"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiExecuteSystemCommandIntent"
+marker = "{{GIGI_Result}}"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Execution_Result"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+text = "yes"
+type = "text"
+
+[[action]]
+name = "Spoken"
+type = "set_variable"
+
+[[action]]
+group_id = "gigi_event"
+type = "endif"
+
+[[action]]
+name = "Needs_Confirm"
+type = "get_variable"
+
+[[action]]
+compare_with = "yes"
+condition = "Equals"
+group_id = "gigi_confirm_native_action"
+type = "if"
+
+[[action]]
+bundle_id = "com.killsiri.GIGI"
+intent_name = "GigiConfirmActionIntent"
+result = "{{GIGI_Result}}"
+session_id = "{{GIGI_Session}}"
+type = "run_app_intent"
+
+[[action]]
+name = "GIGI_Confirmation"
+type = "set_variable"
+
+[[action]]
+name = "GIGI_Confirmation"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+group_id = "gigi_confirm_native_action"
+type = "endif"
+
+[[action]]
+name = "Spoken"
+type = "get_variable"
+
+[[action]]
+compare_with = "no"
+condition = "Equals"
+group_id = "gigi_default_speak"
+type = "if"
+
+[[action]]
+name = "GIGI_Result"
+type = "get_variable"
+
+[[action]]
+language = "English (United States)"
+type = "speak_text"
+
+[[action]]
+group_id = "gigi_default_speak"
+type = "endif"
+
+[[action]]
+group_id = "gigi_repeat"
+type = "repeat_end"
+

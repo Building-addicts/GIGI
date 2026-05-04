@@ -44,3 +44,4 @@ review-checklists/
 # Scratch / debug local notes
 debug console xcode.md
 voice.md
+__pycache__/

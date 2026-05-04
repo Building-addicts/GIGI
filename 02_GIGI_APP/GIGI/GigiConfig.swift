@@ -49,14 +49,43 @@ enum GigiGateway {
 
 // MARK: - Hardware-trigger Shortcut (Action Button / Back Tap)
 enum GigiHardwareShortcut {
-    static let shortcutName = "Talk to GIGI"
+    static let shortcutName = "GIGI-Listen"
+    static let executorShortcutName = "GIGI-Execute"
+    static let listenResourceName = "GIGI-Listen"
+    static let executorResourceName = "GIGI-Execute"
 
-    // User-provided universal Shortcut link for the May 1 demo path.
-    private static let defaultICloudShortcutURL = "https://www.icloud.com/shortcuts/4187a9575c6a4b9ca7af885e405bc7a9"
+    // Replace these with iCloud share links exported from the final signed
+    // Shortcuts. Until then, the debug app installs the bundled signed files.
+    private static let defaultListenICloudShortcutURL = ""
+    private static let defaultExecutorICloudShortcutURL = ""
 
-    static var iCloudDownloadURL: URL? {
-        URL(string: defaultICloudShortcutURL)
+    static var listenICloudDownloadURL: URL? {
+        shortcutURL(
+            infoPlistKey: "GIGI_LISTEN_ICLOUD_URL",
+            fallback: defaultListenICloudShortcutURL
+        )
     }
+
+    static var executorICloudDownloadURL: URL? {
+        shortcutURL(
+            infoPlistKey: "GIGI_EXECUTE_ICLOUD_URL",
+            fallback: defaultExecutorICloudShortcutURL
+        )
+    }
+
+    private static func shortcutURL(infoPlistKey: String, fallback: String) -> URL? {
+        let raw = Bundle.main.object(forInfoDictionaryKey: infoPlistKey) as? String ?? ""
+        let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? fallback : raw
+        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              url.scheme == "https"
+        else { return nil }
+        return url
+    }
+
+    static let executorSuccessURLString = "gigi://executor-complete"
+    static let executorCancelURLString = "gigi://executor-cancel"
 }
 
 extension Notification.Name {
