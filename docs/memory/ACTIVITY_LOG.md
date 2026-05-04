@@ -212,3 +212,4 @@
 - `2026-05-04T13:07:37Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #170 _(branch: `feat/issue-47-draft-ui` · totale +136/-0)_
 - `2026-05-04T13:07:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #194 _(branch: `docs/issue-162-shortcut-verify` · totale +54/-0)_
 - `2026-05-04T13:07:48Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #162: "[FOLLOW-UP] #102 — verify GigiBackgroundTalkIntent registration in Shortcuts editor on multiple devices"
+- `2026-05-04T13:07:51Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #187: "docs(notes): #160 superseded by re-impl in PR #173" _(branch: `fix/issue-160-extract-sink` · 1 commit · +26/-0 · 1 file · #160)_
