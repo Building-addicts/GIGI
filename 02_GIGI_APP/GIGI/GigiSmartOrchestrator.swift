@@ -243,9 +243,7 @@ class GigiSmartOrchestrator: ObservableObject {
         }
 
         let trimmed = result.speech.trimmingCharacters(in: .whitespacesAndNewlines)
-        let banner = trimmed.isEmpty
-            ? "Fatto."
-            : (trimmed.count <= 100 ? trimmed : String(trimmed.prefix(97)) + "…")
+        let banner = trimmed.isEmpty ? "Fatto." : Self.bannerForPill(speech: trimmed)
 
         // T5: empty speech path. Skip TTS (avoids `speak("")` → empty AVSpeech buffer
         // → mDataByteSize=0 noise), close the pill straight away.
@@ -257,6 +255,7 @@ class GigiSmartOrchestrator: ObservableObject {
         // T3: pill flips to .speaking with the response banner BEFORE TTS starts so the
         // visual matches the audio. T4: completeWithDone is held back — fireDone() runs
         // after AVSpeechSynthesizer reports didFinish/didCancel via onSpeakingFinished.
+        GigiDebugLogger.voiceEvent("orchestrator.transitionToSpeaking", turnId: currentVoiceTurnId, ["banner.length": "\(banner.count)"])
         Task { await GigiLiveActivityController.shared.transitionToSpeaking(message: banner) }
         scheduleDoneAfterTTS(message: banner)
         speech.speak(trimmed)
@@ -283,7 +282,7 @@ class GigiSmartOrchestrator: ObservableObject {
 
     private func fireDone() {
         guard let msg = pendingDoneMessage else { return }
-        GigiDebugLogger.voiceEvent("orchestrator.fireDone", turnId: currentVoiceTurnId)
+        GigiDebugLogger.voiceEvent("orchestrator.fireDone", turnId: currentVoiceTurnId, ["lastPhase": "\(GigiLiveActivityController.shared.lastPhase)"])
         pendingDoneMessage = nil
         doneSafetyTask?.cancel()
         doneSafetyTask = nil
@@ -406,6 +405,10 @@ class GigiSmartOrchestrator: ObservableObject {
         clearPendingDone(reason: "bargeIn.\(source)")
         GigiDebugLogger.voiceEvent("orchestrator.interruptAndListen", turnId: turnId, ["source": source, "audioState": "\(GigiAudioManager.shared.state)"])
 
+        // Flip pill to .listening FIRST so user sees state change within 500ms,
+        // independent of audio engine settle time below.
+        Task { await GigiLiveActivityController.shared.beginListening() }
+
         SoundEngine.play(.wakeWord)
         if isQuickTalkSession { onQuickTalkStateChange?(.listening) }
 
@@ -421,7 +424,6 @@ class GigiSmartOrchestrator: ObservableObject {
             speech.stopSpeaking()
             GigiAudioManager.shared.startRecording()
         }
-        Task { await GigiLiveActivityController.shared.beginListening() }
     }
 
     func stopMicCapture() {
@@ -459,6 +461,25 @@ class GigiSmartOrchestrator: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    /// Formats a TTS speech string into a Live Activity pill banner: trims to last
+    /// word boundary under 80 chars, strips emoji presentation scalars (ActivityKit
+    /// renders some multi-codepoint emoji incorrectly), falls back to "Speaking…"
+    /// if the cleaned text is too short.
+    static func bannerForPill(speech: String) -> String {
+        let cleaned = speech
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .unicodeScalars
+            .filter { !$0.properties.isEmojiPresentation && !($0.value >= 0x1F300 && $0.value <= 0x1FAFF) }
+            .reduce(into: "") { $0.append(Character($1)) }
+        guard cleaned.count >= 2 else { return "Speaking…" }
+        guard cleaned.count > 80 else { return cleaned }
+        let cap = cleaned.prefix(80)
+        if let lastSpace = cap.lastIndex(of: " ") {
+            return String(cap[..<lastSpace]) + "…"
+        }
+        return String(cap) + "…"
+    }
 
     /// Splits a text containing multiple sequential commands into individual parts.
     /// Returns nil if only one command is detected (avoids false splits like "call mom and dad").
