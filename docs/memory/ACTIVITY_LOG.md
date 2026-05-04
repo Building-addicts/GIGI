@@ -171,3 +171,4 @@
 - `2026-05-02T16:28:45Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
 - `2026-05-04T12:28:50Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #169 _(branch: `feat/issue-46-tone` · totale +89/-0)_
 - `2026-05-04T12:31:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #188 "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" di @ArmandoBattaglino _(branch: `docs/issue-71-storyboard` · +85/-0 · #71)_
+- `2026-05-04T12:31:52Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #188: "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" _(branch: `docs/issue-71-storyboard` · 1 commit · +85/-0 · 1 file · #71)_
