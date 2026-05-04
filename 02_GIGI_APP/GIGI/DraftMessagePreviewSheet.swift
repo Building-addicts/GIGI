@@ -69,5 +69,8 @@ struct DraftMessagePreviewSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        #if DEBUG
+        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        #endif
     }
 }
