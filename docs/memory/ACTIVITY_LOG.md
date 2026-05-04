@@ -193,3 +193,4 @@
 - `2026-05-04T12:34:21Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #178 "docs(qa): SUMMARY skeleton for PM GO/NO-GO sign-off" di @ArmandoBattaglino _(branch: `feat/issue-70-pm-signoff` · +67/-0 · #70)_
 - `2026-05-04T12:34:25Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #181: "docs(research): pick Groq llama-3.3-70b for orchestrator + system prompt v1" _(branch: `feat/issue-144-llm-pick` · 1 commit · +238/-0 · 1 file · #144)_
 - `2026-05-04T12:34:30Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #144: "[Sub #143 · 1/6] Pick orchestrator LLM provider + design system prompt marker grammar"
+- `2026-05-04T12:34:36Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #181 "docs(research): pick Groq llama-3.3-70b for orchestrator + system prompt v1" di @ArmandoBattaglino _(branch: `feat/issue-144-llm-pick` · +238/-0 · #144)_
