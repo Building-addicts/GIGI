@@ -11,6 +11,10 @@ struct GIGIApp: App {
 
     init() {
         GigiDebugLogger.log("GIGIApp init STARTED — bundle=\(Bundle.main.bundleIdentifier ?? "nil")")
+        // Always-listening consent is per-app-launch: clear any value carried over
+        // from a previous run so the first wake re-prompts the user. Must run before
+        // any Task or scenePhase observer reads the key.
+        UserDefaults.standard.removeObject(forKey: GigiWakeWordEngine.consentKey)
         if #available(iOS 16.0, *) {
             GigiAppShortcuts.updateAppShortcutParameters()
         }

@@ -17,9 +17,11 @@ final class GigiPresenceAppGroup {
     nonisolated static let darwinMute  = "com.gigi.presence.mute"
     nonisolated static let darwinStop  = "com.gigi.presence.stop"
     nonisolated static let darwinStart = "com.gigi.presence.start"
+    nonisolated static let darwinLock  = "com.gigi.presence.islandLock"
 
     enum Command: String {
-        case start, mute, unmute, stop
+        case start, mute, unmute, stop, lockIsland, unlockIsland
+        case allowAlwaysListening, declineAlwaysListening
     }
 
     // Called by the widget intent process. nonisolated so AppIntent.perform()
@@ -33,6 +35,11 @@ final class GigiPresenceAppGroup {
         case .start:         notifName = darwinStart
         case .mute, .unmute: notifName = darwinMute
         case .stop:          notifName = darwinStop
+        case .lockIsland, .unlockIsland,
+             .allowAlwaysListening, .declineAlwaysListening:
+            // Reuse the islandLock channel: the observer re-reads commandKey from
+            // UserDefaults so the new commands surface as the typed enum value.
+            notifName = darwinLock
         }
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
@@ -64,6 +71,12 @@ final class GigiPresenceAppGroup {
         ) { _ in
             handler(.start)
         }
+        NotificationCenter.default.addObserver(
+            forName: .gigiPresenceIslandLock, object: nil, queue: .main
+        ) { _ in
+            let raw = UserDefaults(suiteName: suiteName)?.string(forKey: commandKey) ?? "lockIsland"
+            if let cmd = Command(rawValue: raw) { handler(cmd) }
+        }
     }
 
     private static var darwinObserversRegistered = false
@@ -80,10 +93,14 @@ final class GigiPresenceAppGroup {
         let startCallback: CFNotificationCallback = { _, _, _, _, _ in
             NotificationCenter.default.post(name: .gigiPresenceStart, object: nil)
         }
+        let lockCallback: CFNotificationCallback = { _, _, _, _, _ in
+            NotificationCenter.default.post(name: .gigiPresenceIslandLock, object: nil)
+        }
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterAddObserver(center, nil, muteCallback,  darwinMute  as CFString, nil, .deliverImmediately)
         CFNotificationCenterAddObserver(center, nil, stopCallback,  darwinStop  as CFString, nil, .deliverImmediately)
         CFNotificationCenterAddObserver(center, nil, startCallback, darwinStart as CFString, nil, .deliverImmediately)
+        CFNotificationCenterAddObserver(center, nil, lockCallback,  darwinLock  as CFString, nil, .deliverImmediately)
     }
 }
 
@@ -91,4 +108,5 @@ private extension Notification.Name {
     static let gigiPresenceMute  = Notification.Name("com.gigi.presence.mute.local")
     static let gigiPresenceStop  = Notification.Name("com.gigi.presence.stop.local")
     static let gigiPresenceStart = Notification.Name("com.gigi.presence.start.local")
+    static let gigiPresenceIslandLock = Notification.Name("com.gigi.presence.islandLock.local")
 }

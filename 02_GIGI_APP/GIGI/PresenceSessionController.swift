@@ -136,6 +136,7 @@ final class PresenceSessionController: ObservableObject {
             GigiSmartOrchestrator.shared.isPresenceActive = false
             GigiAudioManager.shared.presenceMode = false
             GigiAudioManager.shared.stopAll()
+            Task { await GigiLiveActivityController.shared.setIslandLocked(false) }
             return
         }
         state = .inactive
@@ -150,6 +151,7 @@ final class PresenceSessionController: ObservableObject {
         GigiAudioManager.shared.stopAll()
 
         Task {
+            await GigiLiveActivityController.shared.setIslandLocked(false)
             await GigiLiveActivityController.shared.endPresenceActivity()
             // Keep a passive island entry point, but no wake-word engine runs outside Presence.
             await GigiLiveActivityController.shared.startPersistentPill()
@@ -198,8 +200,117 @@ final class PresenceSessionController: ObservableObject {
                 self.unmuteFromIsland()
             case .stop:
                 self.stopFromIsland()
+            case .lockIsland:
+                self.lockIslandFromIsland()
+            case .unlockIsland:
+                self.unlockIslandFromIsland()
+            case .allowAlwaysListening:
+                self.allowAlwaysListeningFromIsland()
+            case .declineAlwaysListening:
+                self.declineAlwaysListeningFromIsland()
             }
         }
+    }
+
+    private func lockIslandFromIsland() {
+        // User-pinned Dynamic Island is a session-scoped hold: it keeps the Live
+        // Activity from visually falling back to Ready and keeps Presence timers awake.
+        inactivityTask?.cancel()
+        Task { await GigiLiveActivityController.shared.setIslandLocked(true) }
+        if isActive, state != .muted {
+            GigiAudioManager.shared.presenceMode = true
+            GigiAudioManager.shared.startWakeWordListening()
+        }
+    }
+
+    private func unlockIslandFromIsland() {
+        Task {
+            await GigiLiveActivityController.shared.setIslandLocked(false)
+            await reconcileIslandAfterUnlock()
+        }
+        // Stepping out of always-listening means the user has explicitly released.
+        // Persist `false` so the wake engine does not re-prompt during this app launch.
+        UserDefaults.standard.set(false, forKey: GigiWakeWordEngine.consentKey)
+    }
+
+    private func allowAlwaysListeningFromIsland() {
+        // Idempotent: if the user double-taps Allow, the second invocation is a no-op
+        // because consent is already set and the island is already locked. Without this
+        // guard, the second tap would race the lock snapshot and could pin the prompt.
+        if UserDefaults.standard.object(forKey: GigiWakeWordEngine.consentKey) is Bool,
+           UserDefaults.standard.bool(forKey: GigiWakeWordEngine.consentKey) {
+            return
+        }
+        UserDefaults.standard.set(true, forKey: GigiWakeWordEngine.consentKey)
+        inactivityTask?.cancel()
+
+        Task {
+            // Order matters: clear the prompt FIRST so the snapshot captured by
+            // setIslandLocked(true) below does not pin `consentPending` forever.
+            await GigiLiveActivityController.shared.clearConsentPending()
+            await GigiLiveActivityController.shared.setIslandLocked(true)
+        }
+
+        if !isActive {
+            // No Presence session yet — start one. Always-listening implies a Presence
+            // mode session so the audio plumbing has a single owner.
+            startSession()
+        }
+        if state != .muted {
+            GigiAudioManager.shared.presenceMode = true
+            GigiAudioManager.shared.startWakeWordListening()
+        }
+    }
+
+    private func declineAlwaysListeningFromIsland() {
+        // Decline = single-turn flow. Persist `false` so we do not re-prompt during
+        // this app launch, then run the same handoff the wake engine would have run
+        // (mirrors `GigiWakeWordEngine.handleWakeDetection` post-consent path).
+        if UserDefaults.standard.object(forKey: GigiWakeWordEngine.consentKey) is Bool {
+            return
+        }
+        UserDefaults.standard.set(false, forKey: GigiWakeWordEngine.consentKey)
+
+        Task { @MainActor in
+            await GigiLiveActivityController.shared.clearConsentPending()
+            let isForeground = UIApplication.shared.applicationState == .active
+            if isForeground {
+                SoundEngine.play(.wakeWord)
+                await GigiLiveActivityController.shared.beginListening()
+            } else {
+                await GigiLiveActivityController.shared.descendForListening()
+            }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            GigiSmartOrchestrator.shared.startListening()
+        }
+    }
+
+    private func reconcileIslandAfterUnlock() async {
+        if isActive {
+            resetInactivityTimer()
+            switch state {
+            case .sleeping:
+                await GigiLiveActivityController.shared.updatePresence(state: .sleeping, message: "Ready — say Hey GIGI")
+            case .listening:
+                await GigiLiveActivityController.shared.updatePresence(state: .listening, message: "I heard you")
+            case .thinking:
+                await GigiLiveActivityController.shared.updatePresence(state: .thinking, message: "Thinking about it", transcript: lastTranscript)
+            case .speaking:
+                await GigiLiveActivityController.shared.updatePresence(state: .speaking, message: "Say GIGI or tap to interrupt")
+            case .muted:
+                await GigiLiveActivityController.shared.updatePresence(state: .muted, message: "Muted — tap Mute to resume")
+            case .inactive:
+                await GigiLiveActivityController.shared.updateMonitoringPill(state: .sleeping, message: "Ready — say Hey GIGI")
+            case .error(let message):
+                await GigiLiveActivityController.shared.updatePresence(state: .error, message: message)
+            }
+            return
+        }
+
+        await GigiLiveActivityController.shared.updateMonitoringPill(
+            state: .sleeping,
+            message: standaloneMuted ? "Muted — tap Mute to resume" : "Ready — say Hey GIGI"
+        )
     }
 
     private func toggleMuteFromIsland() {
@@ -239,6 +350,7 @@ final class PresenceSessionController: ObservableObject {
 
     private func stopFromIsland() {
         standaloneMuted = false
+        Task { await GigiLiveActivityController.shared.setIslandLocked(false) }
         if isActive {
             stopSession()
             return
@@ -303,6 +415,9 @@ final class PresenceSessionController: ObservableObject {
         // In always-available mode GIGI must stay Ready all day. Silence only returns
         // the audio state to wake-word standby; it must not end the Presence session.
         guard !Self.isAlwaysAvailableEnabled else { return }
+        // Dynamic Island lock is also explicit user intent to keep this session alive
+        // until unlock; do not let the legacy inactivity timeout tear down wake word.
+        guard !GigiLiveActivityController.shared.isIslandLocked else { return }
         inactivityTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(nanoseconds: UInt64(inactivityTimeout * 1_000_000_000))

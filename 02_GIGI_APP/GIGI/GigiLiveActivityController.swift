@@ -10,6 +10,9 @@ final class GigiLiveActivityController: ObservableObject {
     private(set) var lastPhase: GigiPhase = .sleeping
     private var wakePulseCounter = 0
     private var suspendedPresenceSessionId: String?
+    private var lockedVisualState: GigiActivityAttributes.ContentState?
+    private var lastRenderedState: GigiActivityAttributes.ContentState?
+    @Published private(set) var isIslandLocked = false
 
     // Persistent "Shazam-style" pill. Stays alive across the full turn lifecycle
     // (sleeping→listening→thinking→executing→done→sleeping) without ever ending,
@@ -33,6 +36,7 @@ final class GigiLiveActivityController: ObservableObject {
             "monitoringActivityState": monitoringActivity.map { "\($0.activityState)" } ?? "none",
             "lastPhase": "\(lastPhase)",
             "monitoringModeActive": "\(isMonitoringModeActive)",
+            "isIslandLocked": "\(isIslandLocked)",
             "activitiesEnabled": "\(areActivitiesEnabled)",
             "lastActivityError": lastActivityError ?? "none"
         ]
@@ -74,10 +78,10 @@ final class GigiLiveActivityController: ObservableObject {
 
         if lastPhase == .listening { return }
         let content = ActivityContent(
-            state: GigiActivityAttributes.ContentState(
+            state: contentState(
                 phase: .listening,
                 message: message,
-                lastTranscript: transcript
+                transcript: transcript
             ),
             staleDate: Date().addingTimeInterval(120)
         )
@@ -100,10 +104,10 @@ final class GigiLiveActivityController: ObservableObject {
         let message = phaseMessage(for: .listening)
         let pulseId = nextWakePulseId()
         let content = ActivityContent(
-            state: GigiActivityAttributes.ContentState(
+            state: contentState(
                 phase: .listening,
                 message: message,
-                lastTranscript: transcript,
+                transcript: transcript,
                 wakePulseId: pulseId
             ),
             staleDate: Date().addingTimeInterval(120),
@@ -139,6 +143,71 @@ final class GigiLiveActivityController: ObservableObject {
             print("GIGI LiveActivity: turn Activity.request FAILED — \(error)")
             await restorePresenceIfNeeded()
         }
+    }
+
+    /// First-wake consent prompt. Surfaces the always-listening question on whichever
+    /// activity already owns the island (presence > monitoring) — never requests a new
+    /// `Activity` here, which would race the existing pill and produce a double island.
+    /// `AlertConfiguration` forces iOS to expand so the Allow / Decline buttons are
+    /// visible (without it the prompt stays compact and the buttons never render).
+    @MainActor
+    func presentConsentRequest() async {
+        guard enabled else {
+            print("GIGI LiveActivity: presentConsentRequest FAILED — activities disabled")
+            return
+        }
+
+        let host = activity ?? presenceActivity ?? monitoringActivity
+        guard let target = host else {
+            // No existing activity to host the prompt — request one. Keeps a fallback
+            // path so the prompt is never silently dropped at first wake.
+            let state = contentState(
+                phase: .sleeping,
+                message: "Keep GIGI always listening?",
+                consentPending: true
+            )
+            let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(120), relevanceScore: 100)
+            let alert = AlertConfiguration(title: "GIGI", body: "Keep GIGI always listening?", sound: .default)
+            do {
+                let attrs = GigiActivityAttributes(sessionID: UUID().uuidString)
+                let act = try Activity.request(attributes: attrs, content: content, pushType: nil)
+                activity = act
+                lastPhase = .sleeping
+                await act.update(content, alertConfiguration: alert)
+                print("GIGI LiveActivity: consent prompt activity requested (no host)")
+            } catch {
+                print("GIGI LiveActivity: consent prompt request FAILED — \(error)")
+            }
+            return
+        }
+
+        let state = contentState(
+            phase: .sleeping,
+            message: "Keep GIGI always listening?",
+            consentPending: true
+        )
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(120), relevanceScore: 100)
+        let alert = AlertConfiguration(title: "GIGI", body: "Keep GIGI always listening?", sound: .default)
+        await target.update(content, alertConfiguration: alert)
+        print("GIGI LiveActivity: consent prompt presented on existing activity id=\(target.id)")
+    }
+
+    /// Clears `consentPending` on whichever activity is currently visible. Called by
+    /// the Allow / Decline session handlers right after the user picks, BEFORE any
+    /// follow-up state change (lock or descendForListening) so the next snapshot the
+    /// island captures is clean.
+    @MainActor
+    func clearConsentPending() async {
+        let host = activity ?? presenceActivity ?? monitoringActivity
+        guard let target = host else { return }
+        var state = lastRenderedState ?? GigiActivityAttributes.ContentState(
+            phase: lastPhase,
+            message: phaseMessage(for: lastPhase)
+        )
+        state.consentPending = false
+        lastRenderedState = state
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(3600), relevanceScore: 50)
+        await target.update(content)
     }
 
     @MainActor
@@ -210,10 +279,10 @@ final class GigiLiveActivityController: ObservableObject {
     ) async -> Activity<GigiActivityAttributes>? {
         guard enabled else { return nil }
         let attrs = GigiActivityAttributes(sessionID: UUID().uuidString)
-        let state = GigiActivityAttributes.ContentState(
+        let state = contentState(
             phase: phase,
             message: message,
-            lastTranscript: transcript
+            transcript: transcript
         )
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(staleAfter))
         do {
@@ -235,7 +304,7 @@ final class GigiLiveActivityController: ObservableObject {
     @MainActor
     private func endMonitoringActivity(_ act: Activity<GigiActivityAttributes>) async {
         monitoringActivity = nil
-        let cs = GigiActivityAttributes.ContentState(phase: .done, message: "")
+        let cs = endState()
         let content = ActivityContent(state: cs, staleDate: nil)
         await act.end(content, dismissalPolicy: .immediate)
     }
@@ -264,13 +333,14 @@ final class GigiLiveActivityController: ObservableObject {
             transcript: transcript,
             staleAfter: staleAfter
         ) else { return }
-        lastPhase = normalizedState
+        let renderedState = contentState(
+            phase: normalizedState,
+            message: displayMessage,
+            transcript: transcript
+        )
+        lastPhase = renderedState.phase
         let content = ActivityContent(
-            state: GigiActivityAttributes.ContentState(
-                phase: normalizedState,
-                message: displayMessage,
-                lastTranscript: transcript
-            ),
+            state: renderedState,
             staleDate: Date().addingTimeInterval(staleAfter)
         )
         await target.update(content)
@@ -290,7 +360,7 @@ final class GigiLiveActivityController: ObservableObject {
     private func requestNewListeningActivity() async {
         guard enabled else { return }
         let attrs = GigiActivityAttributes(sessionID: UUID().uuidString)
-        let state = GigiActivityAttributes.ContentState(phase: .listening, message: phaseMessage(for: .listening))
+        let state = contentState(phase: .listening, message: phaseMessage(for: .listening))
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(120))
         if let existing = activity {
             await existing.update(content)
@@ -312,10 +382,10 @@ final class GigiLiveActivityController: ObservableObject {
         lastPhase = .thinking
         let message = phaseMessage(for: .thinking)
         let content = ActivityContent(
-            state: GigiActivityAttributes.ContentState(
+            state: contentState(
                 phase: .thinking,
                 message: message,
-                lastTranscript: transcript
+                transcript: transcript
             ),
             staleDate: Date().addingTimeInterval(90)
         )
@@ -340,7 +410,7 @@ final class GigiLiveActivityController: ObservableObject {
     func transitionToExecuting(message: String) async {
         lastPhase = .executing
         let content = ActivityContent(
-            state: GigiActivityAttributes.ContentState(phase: .executing, message: message),
+            state: contentState(phase: .executing, message: message),
             staleDate: Date().addingTimeInterval(120)
         )
         if let activity {
@@ -362,7 +432,7 @@ final class GigiLiveActivityController: ObservableObject {
         lastPhase = .speaking
         let displayMessage = normalizedMessage(message, for: .speaking)
         let content = ActivityContent(
-            state: GigiActivityAttributes.ContentState(phase: .speaking, message: displayMessage),
+            state: contentState(phase: .speaking, message: displayMessage),
             staleDate: Date().addingTimeInterval(60)
         )
         if let activity {
@@ -396,9 +466,17 @@ final class GigiLiveActivityController: ObservableObject {
     /// Quando monitoring è attivo: mostra brevemente .done poi torna a .sleeping — non termina l'activity.
     @MainActor
     func completeWithDone(message: String, dismissAfter delay: TimeInterval = 3) async {
+        if isIslandLocked {
+            // User explicitly pinned the Island; keep the current visual state instead
+            // of auto-dismissing/returning to Ready until the unlock control is tapped.
+            if let snapshot = lockedVisualState ?? lastRenderedState {
+                await updateVisibleActivities(with: snapshot, staleAfter: 3600)
+            }
+            return
+        }
         if let activity {
             lastPhase = .done
-            let doneState = GigiActivityAttributes.ContentState(phase: .done, message: message)
+            let doneState = endState(message: message)
             let endContent = ActivityContent(state: doneState, staleDate: nil)
             let dismissAt = Date.now.addingTimeInterval(delay)
             await activity.end(endContent, dismissalPolicy: .after(dismissAt))
@@ -413,14 +491,14 @@ final class GigiLiveActivityController: ObservableObject {
             // Briefly show done, then return pill to sleeping so user sees turn completed.
             lastPhase = .done
             let doneContent = ActivityContent(
-                state: GigiActivityAttributes.ContentState(phase: .done, message: message),
+                state: contentState(phase: .done, message: message),
                 staleDate: Date().addingTimeInterval(30)
             )
             await mon.update(doneContent)
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             lastPhase = .sleeping
             let sleepContent = ActivityContent(
-                state: GigiActivityAttributes.ContentState(phase: .sleeping, message: phaseMessage(for: .sleeping)),
+                state: contentState(phase: .sleeping, message: phaseMessage(for: .sleeping)),
                 staleDate: Date().addingTimeInterval(3600)
             )
             await mon.update(sleepContent)
@@ -433,9 +511,15 @@ final class GigiLiveActivityController: ObservableObject {
     /// Quando monitoring è attivo: torna a .sleeping invece di terminare.
     @MainActor
     func endImmediately() async {
+        if isIslandLocked {
+            if let snapshot = lockedVisualState ?? lastRenderedState {
+                await updateVisibleActivities(with: snapshot, staleAfter: 3600)
+            }
+            return
+        }
         if let activity {
             let content = ActivityContent(
-                state: GigiActivityAttributes.ContentState(phase: .done, message: ""),
+                state: endState(),
                 staleDate: nil
             )
             await activity.end(content, dismissalPolicy: .immediate)
@@ -447,7 +531,7 @@ final class GigiLiveActivityController: ObservableObject {
         if let mon = monitoringActivity {
             lastPhase = .sleeping
             let content = ActivityContent(
-                state: GigiActivityAttributes.ContentState(phase: .sleeping, message: phaseMessage(for: .sleeping)),
+                state: contentState(phase: .sleeping, message: phaseMessage(for: .sleeping)),
                 staleDate: Date().addingTimeInterval(3600)
             )
             await mon.update(content)
@@ -455,7 +539,7 @@ final class GigiLiveActivityController: ObservableObject {
         }
         guard let activity else { return }
         let content = ActivityContent(
-            state: GigiActivityAttributes.ContentState(phase: .done, message: ""),
+            state: endState(),
             staleDate: nil
         )
         await activity.end(content, dismissalPolicy: .immediate)
@@ -500,7 +584,7 @@ final class GigiLiveActivityController: ObservableObject {
         isMonitoringModeActive = false
         guard let act = monitoringActivity else { return }
         monitoringActivity = nil
-        let cs = GigiActivityAttributes.ContentState(phase: .done, message: "")
+        let cs = endState()
         let content = ActivityContent(state: cs, staleDate: nil)
         await act.end(content, dismissalPolicy: .immediate)
     }
@@ -522,8 +606,10 @@ final class GigiLiveActivityController: ObservableObject {
         guard enabled else { return }
         await endPresenceActivity()   // clean up any stale
         let attrs = GigiActivityAttributes(sessionID: sessionId)
-        let state = GigiActivityAttributes.ContentState(
-            phase: .sleeping, message: phaseMessage(for: .sleeping), lastTranscript: nil, sessionId: sessionId
+        let state = contentState(
+            phase: .sleeping,
+            message: phaseMessage(for: .sleeping),
+            sessionId: sessionId
         )
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(3600))
         do {
@@ -582,9 +668,9 @@ final class GigiLiveActivityController: ObservableObject {
             return
         }
         let pulseId = requestAttention ? nextWakePulseId() : nil
-        let cs = GigiActivityAttributes.ContentState(
+        let cs = contentState(
             phase: normalizedState, message: displayMessage,
-            lastTranscript: transcript, sessionId: nil,
+            transcript: transcript, sessionId: nil,
             wakePulseId: pulseId
         )
         let content = ActivityContent(state: cs, staleDate: Date().addingTimeInterval(3600))
@@ -599,7 +685,7 @@ final class GigiLiveActivityController: ObservableObject {
         } else {
             await act.update(content)
         }
-        lastPhase = normalizedState
+        lastPhase = cs.phase
     }
 
     @MainActor
@@ -611,9 +697,7 @@ final class GigiLiveActivityController: ObservableObject {
         refreshTask?.cancel()
         refreshTask = nil
         guard let act = presenceActivity else { return }
-        let cs = GigiActivityAttributes.ContentState(
-            phase: .done, message: "Session ended", lastTranscript: nil, sessionId: nil
-        )
+        let cs = endState(message: "Session ended")
         let content = ActivityContent(state: cs, staleDate: nil)
         await act.end(content, dismissalPolicy: .immediate)
         presenceActivity = nil
@@ -627,7 +711,7 @@ final class GigiLiveActivityController: ObservableObject {
         guard enabled else { return nil }
         await endImmediately()
         let attrs = GigiActivityAttributes(sessionID: UUID().uuidString)
-        let state = GigiActivityAttributes.ContentState(phase: .listening, message: initialMessage)
+        let state = contentState(phase: .listening, message: initialMessage)
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(120))
         activity = try Activity.request(attributes: attrs, content: content, pushType: nil)
         lastPhase = .listening
@@ -644,7 +728,10 @@ final class GigiLiveActivityController: ObservableObject {
         let normalizedState = normalizedPhase(phase, message: message)
         let displayMessage = normalizedMessage(message, for: normalizedState)
         lastPhase = normalizedState
-        let content = ActivityContent(state: GigiActivityAttributes.ContentState(phase: normalizedState, message: displayMessage), staleDate: Date().addingTimeInterval(30))
+        let content = ActivityContent(
+            state: contentState(phase: normalizedState, message: displayMessage),
+            staleDate: Date().addingTimeInterval(30)
+        )
         await activity.update(content)
     }
 
@@ -657,6 +744,93 @@ final class GigiLiveActivityController: ObservableObject {
     private func normalizedMessage(_ message: String, for phase: GigiPhase) -> String {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? phaseMessage(for: phase) : trimmed
+    }
+
+    private func contentState(
+        phase: GigiPhase,
+        message: String,
+        transcript: String? = nil,
+        sessionId: String? = nil,
+        wakePulseId: String? = nil,
+        consentPending: Bool = false
+    ) -> GigiActivityAttributes.ContentState {
+        var desired = GigiActivityAttributes.ContentState(
+            phase: phase,
+            message: message,
+            lastTranscript: transcript,
+            sessionId: sessionId,
+            wakePulseId: wakePulseId,
+            isIslandLocked: false,
+            consentPending: consentPending
+        )
+
+        if isIslandLocked {
+            if isIdleDemotion(phase), var locked = lockedVisualState ?? lastRenderedState {
+                locked.isIslandLocked = true
+                locked.consentPending = consentPending
+                lastRenderedState = locked
+                return locked
+            }
+            desired.isIslandLocked = true
+            lockedVisualState = desired
+        }
+
+        lastRenderedState = desired
+        return desired
+    }
+
+    private func endState(phase: GigiPhase = .done, message: String = "") -> GigiActivityAttributes.ContentState {
+        var state = GigiActivityAttributes.ContentState(phase: phase, message: message)
+        state.isIslandLocked = isIslandLocked
+        return state
+    }
+
+    private func isIdleDemotion(_ phase: GigiPhase) -> Bool {
+        phase == .sleeping || phase == .done
+    }
+
+    @MainActor
+    func setIslandLocked(_ locked: Bool) async {
+        guard isIslandLocked != locked else { return }
+        isIslandLocked = locked
+
+        if locked {
+            var snapshot = lastRenderedState ?? GigiActivityAttributes.ContentState(
+                phase: lastPhase,
+                message: phaseMessage(for: lastPhase)
+            )
+            snapshot.isIslandLocked = true
+            lockedVisualState = snapshot
+            lastRenderedState = snapshot
+            await updateVisibleActivities(with: snapshot, staleAfter: 3600)
+            return
+        }
+
+        lockedVisualState = nil
+        if let turn = activity, GigiSmartOrchestrator.shared.isPresenceActive {
+            let releaseState = endState(message: "Released")
+            let releaseContent = ActivityContent(state: releaseState, staleDate: nil)
+            await turn.end(releaseContent, dismissalPolicy: .immediate)
+            activity = nil
+            await restorePresenceIfNeeded()
+            return
+        }
+        if var snapshot = lastRenderedState {
+            snapshot.isIslandLocked = false
+            lastRenderedState = snapshot
+            await updateVisibleActivities(with: snapshot, staleAfter: 3600)
+        }
+    }
+
+    @MainActor
+    private func updateVisibleActivities(
+        with state: GigiActivityAttributes.ContentState,
+        staleAfter: TimeInterval
+    ) async {
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(staleAfter))
+        if let activity { await activity.update(content) }
+        if let presenceActivity { await presenceActivity.update(content) }
+        if let monitoringActivity { await monitoringActivity.update(content) }
     }
 
     private func phaseMessage(for phase: GigiPhase) -> String {
