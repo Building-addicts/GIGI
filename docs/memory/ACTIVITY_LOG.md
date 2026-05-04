@@ -221,3 +221,4 @@
 - `2026-05-04T13:21:29Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #171 _(branch: `feat/issue-48-route` · totale +70/-26)_
 - `2026-05-04T13:28:40Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #171 _(branch: `feat/issue-48-route` · totale +70/-26)_
 - `2026-05-04T13:34:05Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #171 _(branch: `feat/issue-48-route` · totale +80/-30)_
+- `2026-05-04T13:38:32Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #171: "feat(ios): route send_message and web_whatsapp through draft preview" _(branch: `feat/issue-48-route` · 4 commit · +80/-30 · 5 file · #48)_
