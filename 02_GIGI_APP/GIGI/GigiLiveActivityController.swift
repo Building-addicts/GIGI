@@ -358,6 +358,7 @@ final class GigiLiveActivityController: ObservableObject {
     /// Pill in `.speaking` while TTS plays. Banner = full response (truncated upstream).
     @MainActor
     func transitionToSpeaking(message: String) async {
+        print("GIGI LiveActivity: transitionToSpeaking ENTER lastPhase=\(lastPhase) activity=\(activity != nil) monitoring=\(monitoringActivity != nil)")
         lastPhase = .speaking
         let displayMessage = normalizedMessage(message, for: .speaking)
         let content = ActivityContent(
@@ -366,14 +367,20 @@ final class GigiLiveActivityController: ObservableObject {
         )
         if let activity {
             await activity.update(content)
+            print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=\(activity.id)")
             return
         }
         if monitoringActivity != nil || isMonitoringModeActive {
             await updateMonitoringPill(state: .speaking, message: displayMessage, staleAfter: 60)
+            print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=monitoring")
             return
         }
-        guard enabled, let activity else { return }
+        guard enabled, let activity else {
+            print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=nil")
+            return
+        }
         await activity.update(content)
+        print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=\(activity.id)")
     }
 
     @MainActor

@@ -255,6 +255,7 @@ class GigiSmartOrchestrator: ObservableObject {
         // T3: pill flips to .speaking with the response banner BEFORE TTS starts so the
         // visual matches the audio. T4: completeWithDone is held back — fireDone() runs
         // after AVSpeechSynthesizer reports didFinish/didCancel via onSpeakingFinished.
+        GigiDebugLogger.voiceEvent("orchestrator.transitionToSpeaking", turnId: currentVoiceTurnId, ["banner.length": "\(banner.count)"])
         Task { await GigiLiveActivityController.shared.transitionToSpeaking(message: banner) }
         scheduleDoneAfterTTS(message: banner)
         speech.speak(trimmed)
@@ -281,7 +282,7 @@ class GigiSmartOrchestrator: ObservableObject {
 
     private func fireDone() {
         guard let msg = pendingDoneMessage else { return }
-        GigiDebugLogger.voiceEvent("orchestrator.fireDone", turnId: currentVoiceTurnId)
+        GigiDebugLogger.voiceEvent("orchestrator.fireDone", turnId: currentVoiceTurnId, ["lastPhase": "\(GigiLiveActivityController.shared.lastPhase)"])
         pendingDoneMessage = nil
         doneSafetyTask?.cancel()
         doneSafetyTask = nil
