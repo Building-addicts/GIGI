@@ -232,3 +232,4 @@
 - `2026-05-04T15:02:16Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #186: "fix(ios): Control Center toggle uses AppIntent + UserDefaults handshake" _(branch: `feat/issue-159-cc-toggle` · 1 commit · +58/-8 · 2 file · #159)_
 - `2026-05-04T15:02:33Z` · bug-closed · 🐛✅ @ArmandoBattaglino ha chiuso issue #159: "[BUG] #122 AC#5 — Control Center toggle tap does nothing (no app launch / no listening)"
 - `2026-05-04T15:03:18Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #186 _(branch: `feat/issue-159-cc-toggle` · totale +58/-8)_
+- `2026-05-04T15:04:25Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #200: "fix(ios): register GIGIWidgetControl in WidgetBundle + target membership (Closes #197)" _(branch: `fix/fix-197-widgetbundle-register` · 1 commit · +5/-1 · 2 file · #197)_
