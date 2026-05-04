@@ -200,3 +200,4 @@
 - `2026-05-04T12:56:18Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #169 _(branch: `feat/issue-46-tone` · totale +148/-0)_
 - `2026-05-04T12:59:24Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #166 _(branch: `feat/issue-38-di-logs` · totale +13/-2)_
 - `2026-05-04T12:59:34Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #38: "[Sub #10 · 1/4] Verify deferred completeWithDone wiring + add structured DI logs"
+- `2026-05-04T12:59:45Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #167: "feat(ios): bannerForPill helper — word boundary trim + emoji guard" _(branch: `feat/issue-39-banner` · 1 commit · +20/-3 · 1 file · #39)_
