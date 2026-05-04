@@ -211,3 +211,4 @@
 - `2026-05-04T13:05:46Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #46: "[Sub #12 · 1/4] Tone enrichment helper for message drafts (hardcoded prefs)"
 - `2026-05-04T13:07:37Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #170 _(branch: `feat/issue-47-draft-ui` · totale +136/-0)_
 - `2026-05-04T13:07:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #194 _(branch: `docs/issue-162-shortcut-verify` · totale +54/-0)_
+- `2026-05-04T13:07:48Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #162: "[FOLLOW-UP] #102 — verify GigiBackgroundTalkIntent registration in Shortcuts editor on multiple devices"
