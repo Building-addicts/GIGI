@@ -217,3 +217,4 @@
 - `2026-05-04T13:13:16Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #170: "feat(ios): draft message preview sheet — send/edit/cancel UI" _(branch: `feat/issue-47-draft-ui` · 2 commit · +136/-0 · 3 file · #47)_
 - `2026-05-04T13:14:44Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #47: "[Sub #12 · 2/4] DraftMessagePreviewSheet UI: Send · Edit · Cancel"
 - `2026-05-04T13:14:51Z` · pr-merged · 🎉 @fc200490-sketch ha mergiato PR #170 "feat(ios): draft message preview sheet — send/edit/cancel UI" di @ArmandoBattaglino _(branch: `feat/issue-47-draft-ui` · +136/-0 · #47)_
+- `2026-05-04T13:15:39Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #171 _(branch: `feat/issue-48-route` · totale +35/-13)_
