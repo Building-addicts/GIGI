@@ -247,3 +247,4 @@
 - `2026-05-04T20:01:44Z` · pr-merged · 🎉 @fc200490-sketch ha mergiato PR #173 "feat(ios): wire GigiTaskExtractor to PresenceSessionController" di @ArmandoBattaglino _(branch: `feat/issue-54-extract-wire` · +27/-0 · #54)_
 - `2026-05-04T20:01:49Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #54: "[Sub #14 · 2/3] Wire `GigiTaskExtractor` to `PresenceSessionController` (periodic trigger)"
 - `2026-05-04T20:05:49Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #141 _(branch: `feat/issue-55-task-list-view` · totale +2960/-105)_
+- `2026-05-04T20:07:28Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #55: "[Sub #14 · 3/3] `TalkingSessionTaskListView` — UI laterale live con i task estratti"
