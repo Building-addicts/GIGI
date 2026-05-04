@@ -64,6 +64,14 @@ struct ChatView: View {
                     .zIndex(99)
             }
 
+            // ── Memory hint toast (#79) ──────────────────────────────────────
+            VStack {
+                MemoryHintView()
+                    .padding(.top, 96)
+                Spacer()
+            }
+            .zIndex(60)
+
             #if DEBUG
             // Debug FABs:
             //  📨 envelope → dispatcher.executeNative(send_message) end-to-end (#48 route)
