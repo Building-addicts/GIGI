@@ -78,7 +78,7 @@ struct ChatView: View {
                                 let result = await GigiActionDispatcher.shared.executeNative(
                                     "send_message",
                                     args: [
-                                        "contact": "Fede",
+                                        "contact": "Edi",
                                         "message": "can i come at 4 pm today?",
                                         "platform": "whatsapp"
                                     ]
