@@ -53,10 +53,6 @@ final class PresenceSessionController: ObservableObject {
     private var durationTask: Task<Void, Never>?
     private var standaloneMuted = false
 
-    // #54 — periodic task extraction during Talking Session
-    private var turnCounter: Int = 0
-    private var extractionTask: Task<Void, Never>?
-
     private init() {
         GigiDebugLogger.log("PresenceSessionController init START")
         observeOrchestrator()
@@ -151,11 +147,6 @@ final class PresenceSessionController: ObservableObject {
 
         inactivityTask?.cancel()
         durationTask?.cancel()
-        // #54 — clean up task extractor state
-        extractionTask?.cancel()
-        extractionTask = nil
-        turnCounter = 0
-        Task { await GigiTaskExtractor.shared.clear() }
         GigiAudioManager.shared.stopAll()
 
         Task {
@@ -301,17 +292,6 @@ final class PresenceSessionController: ObservableObject {
                 self.lastTranscript = text
                 self.state = .thinking
                 await GigiLiveActivityController.shared.updatePresence(state: .thinking, message: "Thinking about it", transcript: text)
-
-                // #54 — fire task extraction every 2 user turns. Cancel any in-flight
-                // extractor task so we never have two extracts racing on the same memory.
-                self.turnCounter += 1
-                if self.turnCounter % 2 == 0 {
-                    self.extractionTask?.cancel()
-                    self.extractionTask = Task {
-                        let transcript = await GigiConversationMemory.shared.recentUserTranscript(turns: 6)
-                        await GigiTaskExtractor.shared.extract(from: transcript)
-                    }
-                }
             }
         }
     }
