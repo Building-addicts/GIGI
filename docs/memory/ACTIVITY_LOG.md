@@ -169,3 +169,36 @@
 - `2026-05-02T16:11:05Z` · pr-opened · 📤 @fc200490-sketch ha aperto PR #165: "fix(ios): align PR 103 device-tested shortcut and Siri triggers" _(branch: `fix/pr103-device-followup` · 1 commit · +25/-15 · 6 file · #161)_
 - `2026-05-02T16:12:42Z` · pr-merged · 🎉 @fc200490-sketch ha mergiato PR #165 "fix(ios): align PR 103 device-tested shortcut and Siri triggers" di @fc200490-sketch _(branch: `fix/pr103-device-followup` · +25/-15 · #103)_
 - `2026-05-02T16:28:45Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #85 _(branch: `feat/issue-83-always-listening` · totale +559/-52)_
+- `2026-05-04T12:28:50Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #169 _(branch: `feat/issue-46-tone` · totale +89/-0)_
+- `2026-05-04T12:31:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #188 "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" di @ArmandoBattaglino _(branch: `docs/issue-71-storyboard` · +85/-0 · #71)_
+- `2026-05-04T12:31:52Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #188: "docs(demo): storyboard 7 scenes mapped to MVP_SCOPE §306" _(branch: `docs/issue-71-storyboard` · 1 commit · +85/-0 · 1 file · #71)_
+- `2026-05-04T12:32:05Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #189: "docs(demo): pre-demo setup state + 10-pt checklist" _(branch: `docs/issue-72-setup` · 1 commit · +72/-0 · 1 file · #72)_
+- `2026-05-04T12:32:16Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #189 _(branch: `docs/issue-72-setup` · totale +72/-0)_
+- `2026-05-04T12:32:19Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #72: "[Sub #18 · 2/5] Pre-demo setup state — preferenze + calendario mock + contatti VIP + harness"
+- `2026-05-04T12:32:25Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #189 "docs(demo): pre-demo setup state + 10-pt checklist" di @ArmandoBattaglino _(branch: `docs/issue-72-setup` · +72/-0 · #72)_
+- `2026-05-04T12:32:40Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #190: "docs(demo): plan B per scene + abort clause" _(branch: `docs/issue-73-planb` · 1 commit · +56/-0 · 1 file · #73)_
+- `2026-05-04T12:32:44Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #190 _(branch: `docs/issue-73-planb` · totale +56/-0)_
+- `2026-05-04T12:32:48Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #73: "[Sub #18 · 3/5] Plan B per ogni scena — fallback narrativi se X fallisce"
+- `2026-05-04T12:32:56Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #191 _(branch: `docs/issue-74-duration` · totale +38/-0)_
+- `2026-05-04T12:33:03Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #191 "docs(demo): final demo duration decision — corta 3min50s" di @ArmandoBattaglino _(branch: `docs/issue-74-duration` · +38/-0 · #74)_
+- `2026-05-04T12:33:08Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #192: "docs(demo): stability pass sign-off skeleton" _(branch: `docs/issue-75-signoff` · 1 commit · +41/-0 · 1 file · #75)_
+- `2026-05-04T12:33:16Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #75: "[Sub #18 · 5/5] Stability pass cross-funzionale — Leo + Fede firmano "fattibile""
+- `2026-05-04T12:33:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #192 _(branch: `docs/issue-75-signoff` · totale +41/-0)_
+- `2026-05-04T12:33:22Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #192 "docs(demo): stability pass sign-off skeleton" di @ArmandoBattaglino _(branch: `docs/issue-75-signoff` · +41/-0 · #75)_
+- `2026-05-04T12:33:43Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #176 _(branch: `feat/issue-68-onboarding-qa` · totale +121/-0)_
+- `2026-05-04T12:33:47Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #176 "docs(qa): T1.1-T1.3 + T6.1-T6.2 evidence skeletons" di @ArmandoBattaglino _(branch: `feat/issue-68-onboarding-qa` · +121/-0 · #68)_
+- `2026-05-04T12:33:59Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #177: "docs(qa): H1-H3 + edge empty speech evidence skeletons" _(branch: `feat/issue-69-resilience-qa` · 1 commit · +95/-0 · 4 file · #69)_
+- `2026-05-04T12:34:06Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #178: "docs(qa): SUMMARY skeleton for PM GO/NO-GO sign-off" _(branch: `feat/issue-70-pm-signoff` · 1 commit · +67/-0 · 1 file · #70)_
+- `2026-05-04T12:34:11Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #178 _(branch: `feat/issue-70-pm-signoff` · totale +67/-0)_
+- `2026-05-04T12:34:21Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #178 "docs(qa): SUMMARY skeleton for PM GO/NO-GO sign-off" di @ArmandoBattaglino _(branch: `feat/issue-70-pm-signoff` · +67/-0 · #70)_
+- `2026-05-04T12:34:25Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #181: "docs(research): pick Groq llama-3.3-70b for orchestrator + system prompt v1" _(branch: `feat/issue-144-llm-pick` · 1 commit · +238/-0 · 1 file · #144)_
+- `2026-05-04T12:34:30Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #144: "[Sub #143 · 1/6] Pick orchestrator LLM provider + design system prompt marker grammar"
+- `2026-05-04T12:34:36Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #181 "docs(research): pick Groq llama-3.3-70b for orchestrator + system prompt v1" di @ArmandoBattaglino _(branch: `feat/issue-144-llm-pick` · +238/-0 · #144)_
+- `2026-05-04T12:46:11Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #195: "docs(demo): consolidate DEMO_SCRIPT.md — single source of truth (follow-up to #188-#192)" _(branch: `docs/docs-demo-script-consolidate` · 1 commit · +208/-212 · 5 file · (no link))_
+- `2026-05-04T12:46:25Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #195 "docs(demo): consolidate DEMO_SCRIPT.md — single source of truth (follow-up to #188-#192)" di @ArmandoBattaglino _(branch: `docs/docs-demo-script-consolidate` · +208/-212 · (no link))_
+- `2026-05-04T12:53:38Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #196: "[BUG] #46 Lingua-bonus — output garbage on English input (system prompt echo)" _(parent: #46)_
+- `2026-05-04T12:56:18Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #169 _(branch: `feat/issue-46-tone` · totale +148/-0)_
+- `2026-05-04T12:59:24Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #166 _(branch: `feat/issue-38-di-logs` · totale +13/-2)_
+- `2026-05-04T12:59:34Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #38: "[Sub #10 · 1/4] Verify deferred completeWithDone wiring + add structured DI logs"
+- `2026-05-04T12:59:45Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #167: "feat(ios): bannerForPill helper — word boundary trim + emoji guard" _(branch: `feat/issue-39-banner` · 1 commit · +20/-3 · 1 file · #39)_
+- `2026-05-04T12:59:54Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #167 "feat(ios): bannerForPill helper — word boundary trim + emoji guard" di @ArmandoBattaglino _(branch: `feat/issue-39-banner` · +20/-3 · #39)_
