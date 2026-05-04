@@ -229,3 +229,4 @@
 - `2026-05-04T15:00:55Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #179: "feat(ios): generic PermissionConfirmationSheet for meaningful actions" _(branch: `feat/issue-77-permission-sheet` · 1 commit · +132/-0 · 1 file · #77)_
 - `2026-05-04T15:01:01Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #179 _(branch: `feat/issue-77-permission-sheet` · totale +132/-0)_
 - `2026-05-04T15:01:06Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #179 "feat(ios): generic PermissionConfirmationSheet for meaningful actions" di @ArmandoBattaglino _(branch: `feat/issue-77-permission-sheet` · +132/-0 · #77)_
+- `2026-05-04T15:02:16Z` · pr-opened · 📤 @ArmandoBattaglino ha aperto PR #186: "fix(ios): Control Center toggle uses AppIntent + UserDefaults handshake" _(branch: `feat/issue-159-cc-toggle` · 1 commit · +58/-8 · 2 file · #159)_
