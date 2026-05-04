@@ -79,20 +79,27 @@ extension GigiActionDispatcher {
             let result = await bridge.makeCallAutomatic(to: contact)
             return .success(result)
 
-        case "send_message":
+        case "send_message", "send_whatsapp":
             guard !contact.isEmpty else { return .failure("contact parameter required") }
             let body = string(args, "message", fallback: string(args, "body"))
             guard !body.isEmpty else { return .failure("message parameter required") }
-            let platform = string(args, "platform", fallback: "imessage")
-            let result = await bridge.sendMessageAutomatic(to: contact, body: body, platform: platform)
-            return .success(result)
+            let platform = name == "send_whatsapp"
+                ? "whatsapp"
+                : string(args, "platform", fallback: "imessage")
 
-        case "send_whatsapp":
-            guard !contact.isEmpty else { return .failure("contact parameter required") }
-            let body = string(args, "message", fallback: string(args, "body"))
-            guard !body.isEmpty else { return .failure("message parameter required") }
-            let result = await bridge.sendMessageAutomatic(to: contact, body: body, platform: "whatsapp")
-            return .success(result)
+            // Sub #12 — route through draft preview instead of automatic send.
+            // 1) tone enrichment (Apple Intelligence on-device → cloud fallback)
+            let enriched = await GigiToneEnrichment.shared.enrich(rawDraft: body, contactName: contact)
+            // 2) present preview sheet — user confirms tap-by-tap
+            await MainActor.run {
+                GigiSmartOrchestrator.shared.presentDraft(
+                    contact: contact,
+                    platform: platform,
+                    body: enriched,
+                    raw: body
+                )
+            }
+            return .success("I drafted a message to \(contact). Check the preview to send or edit.")
 
         case "send_email":
             guard !contact.isEmpty else { return .failure("contact parameter required") }
