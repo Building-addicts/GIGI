@@ -112,6 +112,31 @@ struct ChatView: View {
                                 .background(Circle().fill(Color.purple.opacity(0.85)))
                                 .foregroundColor(.white)
                         }
+                        // 🎤 Voice intercept simulation (#49 — PR #172)
+                        Button {
+                            Task { await gigi.process(text: "send") }
+                        } label: {
+                            Image(systemName: "paperplane.fill")
+                                .padding(10)
+                                .background(Circle().fill(Color.green.opacity(0.85)))
+                                .foregroundColor(.white)
+                        }
+                        Button {
+                            Task { await gigi.process(text: "cancel") }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .padding(10)
+                                .background(Circle().fill(Color.red.opacity(0.85)))
+                                .foregroundColor(.white)
+                        }
+                        Button {
+                            Task { await gigi.process(text: "Hey Edi, on my way at 5pm instead") }
+                        } label: {
+                            Image(systemName: "pencil.circle.fill")
+                                .padding(10)
+                                .background(Circle().fill(Color.blue.opacity(0.85)))
+                                .foregroundColor(.white)
+                        }
                     }
                     .padding(.trailing, 16)
                     .padding(.bottom, 96)
