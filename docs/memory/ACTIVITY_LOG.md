@@ -199,3 +199,4 @@
 - `2026-05-04T12:53:38Z` · bug-opened · 🐛 @fc200490-sketch ha aperto issue bug #196: "[BUG] #46 Lingua-bonus — output garbage on English input (system prompt echo)" _(parent: #46)_
 - `2026-05-04T12:56:18Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #169 _(branch: `feat/issue-46-tone` · totale +148/-0)_
 - `2026-05-04T12:59:24Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #166 _(branch: `feat/issue-38-di-logs` · totale +13/-2)_
+- `2026-05-04T12:59:34Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #38: "[Sub #10 · 1/4] Verify deferred completeWithDone wiring + add structured DI logs"
