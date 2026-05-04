@@ -185,3 +185,4 @@
 - `2026-05-04T12:33:16Z` · issue-closed · ✅ @ArmandoBattaglino ha chiuso issue #75: "[Sub #18 · 5/5] Stability pass cross-funzionale — Leo + Fede firmano "fattibile""
 - `2026-05-04T12:33:19Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #192 _(branch: `docs/issue-75-signoff` · totale +41/-0)_
 - `2026-05-04T12:33:22Z` · pr-merged · 🎉 @ArmandoBattaglino ha mergiato PR #192 "docs(demo): stability pass sign-off skeleton" di @ArmandoBattaglino _(branch: `docs/issue-75-signoff` · +41/-0 · #75)_
+- `2026-05-04T12:33:43Z` · pr-synchronize · 🔄 @ArmandoBattaglino ha aggiornato PR #176 _(branch: `feat/issue-68-onboarding-qa` · totale +121/-0)_
