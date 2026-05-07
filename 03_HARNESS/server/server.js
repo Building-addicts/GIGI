@@ -35,7 +35,6 @@ import { handleSetup } from './api/setup.js';
 import { handleDiagnostics } from './api/diagnostics.js';
 import { handleAutofix } from './api/autofix.js';
 import { attachWebSocketServer } from './api/ios-stream.js';
-import * as channelRouter from './api/channel-router.js';
 import { handlePanelRequest } from './api/panel-connections.js';
 import { handleDebugIngest } from './api/debug-ingest.js';
 
@@ -155,8 +154,6 @@ async function main() {
   log('config:', CONFIG_PATH);
   log('logs:', LOGS_DIR);
 
-  channelRouter.init(LOGS_DIR);
-
   try {
     watchers.start(cfg, log);
     log('watchers started');
@@ -198,9 +195,9 @@ async function main() {
       if (await handlePanelRequest(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
       // /api/setup/* — wizard endpoints, also loopback-only + bearer-free.
       if (await handleSetup(req, res, { cfg, cfgPath: CONFIG_PATH })) return;
-      // iOS router (Bearer-authed) → fallback to channel router (Telegram/WhatsApp/etc.)
-      const handled = await handleIosRequest(req, res, { cfg, gigiServer })
-        || await channelRouter.handle(req, res, { cfg, gigiServer, log });
+      // iOS router (Bearer-authed). GIGI is iPhone-only post-MVP — external
+      // channel webhooks (Telegram/WhatsApp) were removed in the rework.
+      const handled = await handleIosRequest(req, res, { cfg, gigiServer });
       if (!handled) {
         res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'endpoint sconosciuto' } }));
