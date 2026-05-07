@@ -1974,10 +1974,28 @@ Edit principali:
 - `README_SETUP.md` — riscritto: niente più Gemini Vision, niente più Porcupine wake word.
 - `ARCHITETTURA_V3.md §13` — sezione "Gemini Live WebSocket" marcata RIMOSSO con nota archeologica.
 
-⚠️ **Cleanup manuale residuo** (richiede Xcode):
-- Apri Xcode → **Project → Package Dependencies → GoogleSignIn → (-) Remove**. Senza questo step, `Package.resolved` + `project.pbxproj` mantengono la pin GoogleSignIn-iOS (e le 6 dipendenze transitive Google: `app-check`, `appauth-ios`, `googleutilities`, `gtm-session-fetcher`, `gtmappauth`, `promises`).
+⚠️ **Cleanup manuale residuo** (NON bloccante — build passa lo stesso, ma cosmetico):
+- Apri Xcode → **Project → Package Dependencies → GoogleSignIn → (-) Remove**. Senza questo step, `Package.resolved` + `project.pbxproj` mantengono la pin GoogleSignIn-iOS (e le 6 dipendenze transitive Google: `app-check`, `appauth-ios`, `googleutilities`, `gtm-session-fetcher`, `gtmappauth`, `promises`). Il framework resta linkato ma non importato — overhead binary minimo.
 - Esegui `xcodebuild -resolvePackageDependencies` per rigenerare `Package.resolved` clean.
-- I 5 file Swift cancellati nelle phase 1+2 vanno rimossi anche dalle reference `project.pbxproj` (file rossi in Project navigator → Cmd-Click → Delete → Remove Reference).
+- I 5 file Swift cancellati nelle phase 1+2 vanno rimossi anche dalle reference `project.pbxproj` (file rossi in Project navigator → Cmd-Click → Delete → Remove Reference). Xcode 26.3 li gestisce graziosamente come warning, ma è cosmetico.
+
+#### Build verify — Post-Phase 2 (commit `1bb6d63`)
+
+Eseguito 2026-05-07 su MacInCloud (FF125, Xcode 26.3, Build 17C529):
+
+```
+Path: ~/GIGI-armando-rework (sync via tar/ssh)
+Comando: xcodebuild -project GIGI.xcodeproj -scheme GIGI -configuration Debug \
+         -destination 'generic/platform=iOS' \
+         CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+Risultato: ** BUILD SUCCEEDED ** (al 2° tentativo dopo fix `GigiToolCall`)
+```
+
+**Fix Phase 2 emerso da build verify** (commit `1bb6d63`):
+- `GigiToolCall` struct era definito dentro `GigiRealtimeEngine.swift` (cancellato in `8b3cfaa`) ma usato da `GigiActionDispatcher.mapToolCall` + `GigiActionDispatcher+Native` per il path on-device tool dispatch (provider-agnostico).
+- Risolto: re-introdotto come prefix in `GigiActionDispatcher.swift` (3 campi `name/args/callId`). No edit pbxproj richiesto perché il file ospitante è già nel target.
+
+**IPA generata**: `_IPA_DROP/GIGI-armando-rework.ipa` (4.2 MB Debug, unsigned — Sideloadly firma in-flight per installazione).
 
 ### Convenzione per future modifiche
 
