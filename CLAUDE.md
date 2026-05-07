@@ -13,7 +13,9 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | Devi… | Apri |
 |---|---|
 | **Scope MVP del lancio (cosa serve venerdì)** | **`docs/MVP_SCOPE.md`** |
-| Capire l'architettura V3 | `docs/Architecture-Armando-Revision.md` |
+| Capire l'architettura V3 (rev. Armando) | `docs/rework/Architecture-Armando-Revision.md` |
+| **Stato del rework + recap visivo** | `docs/rework/README.md` (indice) → `docs/rework/recap.html` |
+| **Capability map del codebase (audit di partenza)** | `docs/rework/CAPABILITY_MAP.md` |
 | Piano integrazione harness | `docs/PIANO_INTEGRAZIONE_HARNESS.md` |
 | Test E2E | `docs/TEST_E2E.md` |
 | Onboarding utente / pairing / sideload | `docs/GETTING_STARTED.md` |
@@ -41,8 +43,16 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 01_SERVER_MDM/  Node — profili MDM iOS
 02_GIGI_APP/    Swift/SwiftUI — app iOS + Siri ext
 03_HARNESS/     Node — Claude sessions, memoria, computer-use, APNS
-docs/           TUTTI i doc project-level (architettura, piano, E2E, components,
-                onboarding, task plan, memory/, plans/, research/, archive/)
+docs/           TUTTI i doc project-level
+  ├── rework/   Artefatti rework armando-rework: Architecture-Armando-Revision.md
+  │             (paper architetturale + §21 rework log) + CAPABILITY_MAP +
+  │             4 file CAPABILITIES_* (iOS/harness/infra/crosscut) + recap.html
+  ├── adr/      Decisioni architetturali numerate (0001-…), immutabili
+  ├── memory/   Memoria progetto agenti (PROJECT, CONTEXT, ACTIVITY_LOG)
+  ├── plans/    Piani per fase
+  ├── research/ Finding tecnici
+  ├── runbooks/ Procedure ripetitive
+  └── archive/  Doc storiche superate
 ```
 
 Run rapido harness: `./start-harness.sh` → dettagli in `03_HARNESS/README.md`.

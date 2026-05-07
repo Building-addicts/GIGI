@@ -10,7 +10,7 @@ import Foundation
 // GigiHarnessClient when the agent path needs it — not in this pipeline.
 //
 // Removed in rework armando-rework (2026-05-07, ADR-0004): Gemini Live (L0)
-// and Gemini REST (L2). See Architecture-Armando-Revision.md §21 rework log.
+// and Gemini REST (L2). See docs/rework/Architecture-Armando-Revision.md §21 rework log.
 //
 // Returns a GigiAgentResponse regardless of which level fires.
 

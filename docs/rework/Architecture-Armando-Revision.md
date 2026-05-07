@@ -1572,7 +1572,14 @@ struct AgentResult {
 ```
 GIGI/
 ├── docs/
-│   ├── Architecture-Armando-Revision.md   ← questo documento (rev. Armando)
+│   ├── rework/                  ← artefatti del rework armando-rework
+│   │   ├── Architecture-Armando-Revision.md   ← questo documento (rev. Armando)
+│   │   ├── CAPABILITY_MAP.md
+│   │   ├── CAPABILITIES_iOS.md
+│   │   ├── CAPABILITIES_harness.md
+│   │   ├── CAPABILITIES_infra.md
+│   │   ├── CAPABILITIES_crosscut.md
+│   │   └── recap.html           ← cruscotto visivo stato rework
 │   ├── PIANO_INTEGRAZIONE_HARNESS.md
 │   ├── TEST_E2E.md
 │   ├── COMPONENTS.md            ← mappa "quale file fa cosa" per funzione
@@ -1581,6 +1588,7 @@ GIGI/
 │   ├── memory/                  ← memoria progetto agenti
 │   ├── plans/                   ← piani per fase
 │   ├── research/                ← finding tecnici
+│   ├── adr/                     ← decisioni architetturali (numerate, immutabili)
 │   └── archive/                 ← doc storiche superate
 │
 ├── 01_SERVER_MDM/               ← Node.js backend

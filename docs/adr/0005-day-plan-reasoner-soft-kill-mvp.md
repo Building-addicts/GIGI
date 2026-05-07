@@ -36,7 +36,7 @@ Adottiamo il **soft-kill** per `GigiDayPlanReasoner`, allineato al pattern già 
 >
 > I tre smoke test DEBUG in `GIGIApp.swift` sono commentati con riferimento a questo ADR.
 
-In Architecture-Armando-Revision.md §21 viene introdotta una nuova sotto-sezione **"Codice congelato — index"** che lista TUTTI i pezzi soft-killed (oggi: Wake Word + Day Plan Reasoner). Diventa la mappa di riattivazione: chi torna a guardare il repo in 6 mesi vede subito cosa parcheggiare e cosa riprendere.
+In ../rework/Architecture-Armando-Revision.md §21 viene introdotta una nuova sotto-sezione **"Codice congelato — index"** che lista TUTTI i pezzi soft-killed (oggi: Wake Word + Day Plan Reasoner). Diventa la mappa di riattivazione: chi torna a guardare il repo in 6 mesi vede subito cosa parcheggiare e cosa riprendere.
 
 ## Alternatives considered
 
@@ -72,7 +72,7 @@ In Architecture-Armando-Revision.md §21 viene introdotta una nuova sotto-sezion
 - `02_GIGI_APP/GIGI/GigiDayPlanReasoner.swift:67-75` — flag `isDisabledForMVP` con commento ricorda-tutto
 - `02_GIGI_APP/GIGI/GIGIApp.swift` — sezione `.task` `#if DEBUG` con i 3 smoke test commentati
 - `docs/rework/CAPABILITY_MAP.md` § "Chirurgia da fare — GigiPlanner vs GigiDayPlanReasoner"
-- `docs/Architecture-Armando-Revision.md §21` — sotto-sezione "Codice congelato — index"
+- `docs/rework/Architecture-Armando-Revision.md §21` — sotto-sezione "Codice congelato — index"
 - ADR correlati: ADR-0003 (Wake Word soft-kill, stesso pattern)
 
 ---

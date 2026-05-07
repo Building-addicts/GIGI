@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GIGI Rework — Recap Visivo</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ff8c42;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --surface: #f6f8fa;
+      --surface-2: #ffffff;
+      --border: #d0d7de;
+      --text: #1f2328;
+      --text-dim: #59636e;
+      --green: #1f883d;
+      --red: #cf222e;
+      --yellow: #9a6700;
+      --blue: #0969da;
+      --purple: #8250df;
+      --orange: #bc4c00;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    padding: 32px 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  header {
+    margin-bottom: 36px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+  }
+  h1 {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  h1 .branch {
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.5em;
+    background: var(--surface-2);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--purple);
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 24px 0;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .stat-num {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .red-num    { color: var(--red); }
+  .yellow-num { color: var(--yellow); }
+  .green-num  { color: var(--green); }
+  .blue-num   { color: var(--blue); }
+  .purple-num { color: var(--purple); }
+  .orange-num { color: var(--orange); }
+
+  section {
+    margin: 32px 0;
+  }
+  section h2 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  section h2 .badge {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 12px;
+    color: var(--bg);
+  }
+  .badge-red    { background: var(--red); }
+  .badge-yellow { background: var(--yellow); color: #0d1117; }
+  .badge-green  { background: var(--green); color: #0d1117; }
+  .badge-blue   { background: var(--blue); color: #0d1117; }
+  .badge-purple { background: var(--purple); color: #0d1117; }
+  .badge-orange { background: var(--orange); color: #0d1117; }
+
+  section h2 .count {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  .desc {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 14px;
+    font-style: italic;
+  }
+
+  .item-grid {
+    display: grid;
+    gap: 10px;
+  }
+  .item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--text-dim);
+    border-radius: 6px;
+    padding: 12px 16px;
+    transition: border-color 0.15s;
+  }
+  .item:hover {
+    border-color: var(--blue);
+  }
+  .item-killed   { border-left-color: var(--red); }
+  .item-frozen   { border-left-color: var(--yellow); }
+  .item-kept     { border-left-color: var(--green); }
+  .item-deferred { border-left-color: var(--purple); }
+  .item-todo     { border-left-color: var(--orange); }
+  .item-name {
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .item-name .scope {
+    font-family: -apple-system, sans-serif;
+    font-weight: 400;
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-left: 8px;
+  }
+  .item-detail {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .item-detail b {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .item-detail code {
+    font-family: "SF Mono", Consolas, monospace;
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }
+  .item-meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .item-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 24px;
+    font-size: 13px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .legend-bar {
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    border-radius: 2px;
+  }
+
+  details {
+    margin-top: 14px;
+  }
+  details summary {
+    cursor: pointer;
+    color: var(--blue);
+    font-size: 14px;
+    user-select: none;
+  }
+  details summary:hover {
+    text-decoration: underline;
+  }
+  .commit-list {
+    margin-top: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12px;
+  }
+  .commit-list .row {
+    padding: 3px 0;
+    color: var(--text-dim);
+  }
+  .commit-list .sha {
+    color: var(--purple);
+    margin-right: 10px;
+  }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>GIGI Rework — Recap Visivo <span class="branch">armando-rework</span></h1>
+  <div class="subtitle">Stato al 2026-05-07 · 18 commit · 14 domande della capability map evase</div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num red-num">~1900</div><div class="stat-label">righe rimosse</div></div>
+  <div class="stat"><div class="stat-num red-num">11</div><div class="stat-label">file killed</div></div>
+  <div class="stat"><div class="stat-num yellow-num">2</div><div class="stat-label">soft-killed</div></div>
+  <div class="stat"><div class="stat-num green-num">4</div><div class="stat-label">kept dopo eval</div></div>
+  <div class="stat"><div class="stat-num purple-num">2</div><div class="stat-label">debiti architett.</div></div>
+  <div class="stat"><div class="stat-num blue-num">5</div><div class="stat-label">ADR scritti</div></div>
+  <div class="stat"><div class="stat-num orange-num">2</div><div class="stat-label">aperti</div></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="legend-bar" style="background:var(--red)"></span><b>Killed</b> — codice rimosso definitivamente</div>
+  <div class="legend-item"><span class="legend-bar" style="background:var(--yellow)"></span><b>Frozen</b> — soft-kill, recuperabile via flag</div>
+  <div class="legend-item"><span class="legend-bar" style="background:var(--green)"></span><b>Kept</b> — tenuto dopo valutazione</div>
+  <div class="legend-item"><span class="legend-bar" style="background:var(--purple)"></span><b>Deferred</b> — parcheggiato a phase futura</div>
+  <div class="legend-item"><span class="legend-bar" style="background:var(--orange)"></span><b>Open</b> — lavoro residuo</div>
+</div>
+
+<!-- ========== KILLED ========== -->
+<section>
+  <h2><span class="badge badge-red">KILLED</span> Sradicato dal codebase <span class="count">11 file + ~1900 righe</span></h2>
+  <div class="desc">Codice cancellato. Recupero possibile solo via <code>git revert</code> dei commit relativi.</div>
+
+  <div class="item-grid">
+    <div class="item item-killed">
+      <div class="item-name">GigiRealtimeEngine.swift <span class="scope">iOS</span></div>
+      <div class="item-detail">Pipeline <b>Gemini Live WebSocket</b> full-duplex con jitter buffer + barge-in detection. <b>1062 righe</b>. Sostituito da nessuno (full-duplex voice è post-MVP).</div>
+      <div class="item-meta"><span>📂 02_GIGI_APP/GIGI/</span><span>📋 ADR-0004</span><span>commit 8b3cfaa</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">GigiAuthManager.swift <span class="scope">iOS</span></div>
+      <div class="item-detail">OAuth Google Sign-In wrapper, usato SOLO per Gemini Live. <b>134 righe</b>. Cancellato + dipendenza <code>GoogleSignIn</code> SDK rimossa da Package.resolved.</div>
+      <div class="item-meta"><span>📂 02_GIGI_APP/GIGI/</span><span>📋 ADR-0004</span><span>commit 8b3cfaa</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">Channel router Telegram/WhatsApp <span class="scope">harness</span></div>
+      <div class="item-detail">7 file: <code>channel-router.js</code>, <code>channels/{telegram,whatsapp,channel-interface}.js</code>, <code>audio/{stt,tts,normalize}.js</code>, <code>identity/user-mapper.js</code>. Il file stesso dichiarava "GIGI is iPhone-only" e rispondeva 410.</div>
+      <div class="item-meta"><span>📂 03_HARNESS/server/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">browser-pool/server.js <span class="scope">harness</span></div>
+      <div class="item-detail">Puppeteer MCP legacy. Soppiantato da <code>driver.js</code> (Playwright diretto). Il fratello <code>server-playwright.js</code> resta vivo (usato da claude-runner via mcp-browser.json).</div>
+      <div class="item-meta"><span>📂 03_HARNESS/browser-pool/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">tunnel/mdns.js <span class="scope">harness</span></div>
+      <div class="item-detail">mDNS advertise per modalità "lan" (mai usata in pratica). Modalità tunnel da 4 → 3 (manual / quick / named).</div>
+      <div class="item-meta"><span>📂 03_HARNESS/server/tunnel/</span><span>commit 92d74a8</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">GigiMDNSDiscovery.swift <span class="scope">iOS</span></div>
+      <div class="item-detail">Bonjour LAN browser pre-QR-pairing. Mai chiamato. Eredità di un LAN-only mode mai attivato.</div>
+      <div class="item-meta"><span>📂 02_GIGI_APP/GIGI/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">GIGIWidget/{GIGIWidget,AppIntent}.swift <span class="scope">iOS</span></div>
+      <div class="item-detail">Boilerplate Xcode "Time:" / favoriteEmoji template. Mai registrato in <code>GIGIWidgetBundle.body</code>.</div>
+      <div class="item-meta"><span>📂 02_GIGI_APP/GIGIWidget/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">HarnessQRScanner.swift <span class="scope">iOS</span></div>
+      <div class="item-detail">QR scanner duplicato AVFoundation. Tenuto <code>GigiPairScanner</code> (VisionKit, più moderno).</div>
+      <div class="item-meta"><span>📂 02_GIGI_APP/GIGI/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">PermissionConfirmationSheet.swift <span class="scope">iOS</span></div>
+      <div class="item-detail">Sheet UI orfano (residuo sub-issue #79). Definito ma mai instanziato da nessuna view.</div>
+      <div class="item-meta"><span>📂 02_GIGI_APP/GIGI/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">setup-post-mvp-status.yml <span class="scope">infra</span></div>
+      <div class="item-detail">Workflow GitHub one-shot, già eseguito una volta. Dormiente, 0 valore residuo.</div>
+      <div class="item-meta"><span>📂 .github/workflows/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">scripts/setup-project.sh <span class="scope">infra</span></div>
+      <div class="item-detail">Bootstrap GitHub Project v2 idempotente, già eseguito. Stesso pattern del workflow sopra.</div>
+      <div class="item-meta"><span>📂 scripts/</span><span>commit 7e4a7f5</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">propose_day_plan tool registry <span class="scope">iOS</span></div>
+      <div class="item-detail">Riga rimossa da <code>GigiToolRegistry.all</code> + <code>alwaysIncluded</code>. La struct <code>ProposeDayPlanTool</code> resta nel file per recupero futuro.</div>
+      <div class="item-meta"><span>📂 02_GIGI_APP/GIGI/</span><span>📋 coerente con ADR-0005</span><span>commit e17b105</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">Cascade Gemini REST + Gemini Live in BrainPipeline <span class="scope">iOS</span></div>
+      <div class="item-detail">Riduzione cascade da 4 livelli (Gemini Live → Apple Foundation → Gemini REST → Local NLU) a <b>2 livelli</b> (Apple Foundation → Local NLU). Cloud reasoning via harness (Groq/Claude).</div>
+      <div class="item-meta"><span>📋 ADR-0004</span><span>commit 8b3cfaa</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">Setup wizard mode "lan" <span class="scope">harness</span></div>
+      <div class="item-detail">UI card + endpoints <code>/api/setup/lan/start|stop</code> + ref nel preflight + label nel panel.</div>
+      <div class="item-meta"><span>📂 03_HARNESS/server/</span><span>commit 92d74a8</span></div>
+    </div>
+
+    <div class="item item-killed">
+      <div class="item-name">Watchers default templates <span class="scope">harness</span></div>
+      <div class="item-detail"><code>gigi-morning-briefing</code> + <code>gigi-meeting-prep</code> rimossi da <code>watchers.json</code> produzione → spostati in <code>server/examples/watchers.example.json</code> con README convenzione.</div>
+      <div class="item-meta"><span>📂 03_HARNESS/server/</span><span>commit ebfda88</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== FROZEN ========== -->
+<section>
+  <h2><span class="badge badge-yellow">FROZEN</span> Soft-kill (recuperabili via flag flip) <span class="count">2 capability</span></h2>
+  <div class="desc">Codice intatto, gated da flag <code>isDisabledForMVP = true</code>. Riattivare = flip + 2-3 righe diff.</div>
+
+  <div class="item-grid">
+    <div class="item item-frozen">
+      <div class="item-name">Wake Word "Hey GIGI" <span class="scope">iOS</span></div>
+      <div class="item-detail"><code>GigiWakeWordEngine.isDisabledForMVP = true</code>. iOS non permette mic continuo background per app non-VoIP — sostituito da Action Button + Back Tap + Siri AppIntent. <b>~600 righe</b> dormienti. Capability row in DashboardView nascosta.</div>
+      <div class="item-meta"><span>📋 ADR-0003</span><span>📍 issue #102</span><span>commit 7e587fb</span></div>
+    </div>
+
+    <div class="item item-frozen">
+      <div class="item-name">GigiDayPlanReasoner <span class="scope">iOS</span></div>
+      <div class="item-detail">Engine "che giornata ho?" con calendar + preferences + tasks → piano vocale italiano. Sub 4/4 (#59) mai chiusa, niente tool registrato. <code>isDisabledForMVP = true</code> + 3 smoke test DEBUG commentati. <b>~300 righe</b> dormienti.</div>
+      <div class="item-meta"><span>📋 ADR-0005</span><span>📍 parent #15 / sub #59</span><span>commit a98b90a</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== KEPT ========== -->
+<section>
+  <h2><span class="badge badge-green">KEPT</span> Tenuto dopo valutazione <span class="count">4 cose</span></h2>
+  <div class="desc">Considerati per kill ma tenuti per ragioni esplicite. Documentati in §21 "Decisioni di non-kill" per evitare ri-valutazione.</div>
+
+  <div class="item-grid">
+    <div class="item item-kept">
+      <div class="item-name">Doppio path Claude (CLI + SDK) <span class="scope">harness</span></div>
+      <div class="item-detail">Tenuto entrambi con <b>boundary esplicito</b>: <code>claude-runner.js</code> CLI subprocess (subscription flat) per voice/agent, <code>ios-computer-use.js</code> SDK cloud (per-token) solo per computer-use Playwright. ADR formale che blinda i confini.</div>
+      <div class="item-meta"><span>📋 ADR-0002</span><span>commit 0d6ddc1</span></div>
+    </div>
+
+    <div class="item item-kept">
+      <div class="item-name">Endpoint debug <code>/api/ios/{push/test, memory/all}</code> <span class="scope">harness</span></div>
+      <div class="item-detail">Zero caller iOS, ma utili come debug tools via <code>curl</code>. ~80 righe totali, costo runtime zero. Ri-considerare il kill se entro 6 mesi nessuno li chiama.</div>
+      <div class="item-meta"><span>commit ee78a16</span></div>
+    </div>
+
+    <div class="item item-kept">
+      <div class="item-name">Admin Panel <span class="scope">harness</span></div>
+      <div class="item-detail">~1500 righe, port 7778 loopback-only. Dev-only ma prezioso quando debugghi log live, sessioni Claude, watchers. Zero rischio production (loopback).</div>
+      <div class="item-meta"><span>📂 03_HARNESS/server/panel.js</span></div>
+    </div>
+
+    <div class="item item-kept">
+      <div class="item-name">health-check.yml <span class="scope">infra</span></div>
+      <div class="item-detail">GitHub Action giornaliera 8:00 CET, posta status su Discord. Gap monitoring noto (5/10 workflow hardcoded). Costo zero su free tier. Tenuto come "log silenzioso" consultabile on-demand.</div>
+      <div class="item-meta"><span>commit 0265cda</span></div>
+    </div>
+
+    <div class="item item-kept">
+      <div class="item-name">Setup wizard modes manual + named <span class="scope">harness</span></div>
+      <div class="item-detail">Manual = fallback storico (paste URL+secret in iOS). Named = stub 501 placeholder per Phase 5.2 OAuth Cloudflare con dominio user. Tenuti come placeholder per il futuro.</div>
+      <div class="item-meta"><span>commit 92d74a8</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== ADDED ========== -->
+<section>
+  <h2><span class="badge badge-blue">ADDED</span> Cose aggiunte / convenzioni nuove <span class="count">7 nuove</span></h2>
+  <div class="desc">Pattern e infrastrutture introdotti dal rework per blindare le decisioni future.</div>
+
+  <div class="item-grid">
+    <div class="item">
+      <div class="item-name">5 ADR formali (0002–0005)</div>
+      <div class="item-detail">ADR-0002 doppio path Claude · ADR-0003 wake word soft-kill · ADR-0004 sradicamento Gemini · ADR-0005 DayPlan soft-kill. Diventano riferimento immutable per le decisioni di scope.</div>
+      <div class="item-meta"><span>📂 docs/adr/</span></div>
+    </div>
+
+    <div class="item">
+      <div class="item-name">§21 "Rework log (living)" in Architecture-Armando-Revision.md</div>
+      <div class="item-detail">Sezione vivente con 4 sub-indici: (1) Phase log dei commit, (2) Codice congelato — index, (3) Debiti architetturali (TODO), (4) Decisioni di non-kill. Cresce a ogni commit del rework.</div>
+      <div class="item-meta"><span>📂 docs/rework/Architecture-Armando-Revision.md</span></div>
+    </div>
+
+    <div class="item">
+      <div class="item-name">CLAUDE.local.md (workflow personale)</div>
+      <div class="item-detail">Gitignored. Host SSH MacInCloud, drop folder IPA, comandi build per il PM Armando. Ricreato dopo che era stato perso (probabilmente sync OneDrive).</div>
+      <div class="item-meta"><span>📂 root</span></div>
+    </div>
+
+    <div class="item">
+      <div class="item-name">.claude/agents/timeline-poster.md + bug-tracker.md</div>
+      <div class="item-detail">Subagent stub Haiku per workflow team-coordination. CLAUDE.md li citava ma <code>.claude/agents/</code> non esisteva. Ora esistono come sorgente di verità.</div>
+      <div class="item-meta"><span>commit 660418d</span></div>
+    </div>
+
+    <div class="item">
+      <div class="item-name">03_HARNESS/server/examples/ + README convenzione</div>
+      <div class="item-detail">Cartella per template config dimostrativi. Convenzione: ogni file <code>.example.{json,yml}</code> con campo <code>_README</code> esplicativo. Watchers template trasferiti qui.</div>
+      <div class="item-meta"><span>commit ebfda88</span></div>
+    </div>
+
+    <div class="item">
+      <div class="item-name">Pattern flag <code>isDisabledForMVP</code></div>
+      <div class="item-detail">Convenzione uniforme per soft-kill: <code>static let isDisabledForMVP = true</code> + guard early-return + entry in tabella "Codice congelato". Uniforma Wake Word + Day Plan Reasoner, riusabile per future feature freeze.</div>
+      <div class="item-meta"><span>📋 ADR-0003 + ADR-0005</span></div>
+    </div>
+
+    <div class="item">
+      <div class="item-name">struct GigiToolCall (re-introdotta)</div>
+      <div class="item-detail">Era dentro <code>GigiRealtimeEngine.swift</code> (cancellato), ma usata anche da <code>GigiActionDispatcher</code> per tool dispatch. Ri-aggiunta in cima a ActionDispatcher come provider-agnostico.</div>
+      <div class="item-meta"><span>commit 1bb6d63 (fix post-build)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== DEFERRED ========== -->
+<section>
+  <h2><span class="badge badge-purple">DEFERRED</span> Parcheggiato a phase futura <span class="count">2 debiti architetturali</span></h2>
+  <div class="desc">Decisioni che richiedono refactor sostanziali, NON patch chirurgiche. Tracciati in §21 "Debiti architetturali (TODO post-rework)".</div>
+
+  <div class="item-grid">
+    <div class="item item-deferred">
+      <div class="item-name">TD-001 — Tool selection inefficiente</div>
+      <div class="item-detail">
+        <b>Problema</b>: <code>selectRelevant()</code> fa keyword matching su tag hard-coded, <code>alwaysIncluded</code> manda 14 tool ad ogni request indipendentemente. ~1.5-2k token sprecati per voice turn.<br>
+        <b>4 path proposti (ranked)</b>:<br>
+        🟢 Quick win 2h: drop alwaysIncluded per tool specifici<br>
+        🟡 Medio 1w: migra a embedding semantico (Apple Foundation Models)<br>
+        🔴 Grosso 2w: two-stage selection (micro-classifier dominio + filtro)<br>
+        Bonus: cache LRU per frasi frequenti
+      </div>
+      <div class="item-meta"><span>commit 1eeafb8</span></div>
+    </div>
+
+    <div class="item item-deferred">
+      <div class="item-name">TD-002 — Memoria GIGI 3-layer da unificare</div>
+      <div class="item-detail">
+        <b>Problema</b>: 3 sottosistemi paralleli che non si parlano:<br>
+        (1) <code>GigiMemory.swift</code> CloudKit, ~417 righe, vivo<br>
+        (2) <code>GigiVectorStore.swift</code> sidecar embedding, ~259 righe, sperimentale dormiente<br>
+        (3) <code>03_HARNESS/memory/store.js</code> JSON locale, ~100 righe, zero caller iOS<br>
+        <b>Direzione ideale</b>: CloudKit come source of truth, sync iOS↔harness, vector search integrato, schema condiviso prefix-keys.<br>
+        <b>Implicazione</b>: Q8 (memory store factory simplify) parcheggiata fino a phase "Unificazione memoria".
+      </div>
+      <div class="item-meta"><span>commit 88da495</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== OPEN ========== -->
+<section>
+  <h2><span class="badge badge-orange">OPEN</span> Lavoro residuo (non chiuso) <span class="count">2 fronti</span></h2>
+  <div class="desc">Cose da fare appena puoi per dichiarare il rework "completato".</div>
+
+  <div class="item-grid">
+    <div class="item item-todo">
+      <div class="item-name">🧪 Validazione sul device fisico</div>
+      <div class="item-detail">L'IPA è in <code>_IPA_DROP/GIGI-armando-rework.ipa</code> (4.2MB). Build SUCCEEDED su MacInCloud Xcode 26.3 ma <b>non ancora installata</b> sull'iPhone. Senza un giro reale non sappiamo se qualche ref rotta è scappata.<br>
+      Test critico: voice flow base (call/message/calendar), Onboarding senza step Gemini, Settings, Dashboard senza row Wake Word.</div>
+      <div class="item-meta"><span>⏱ ~30 min su iPhone</span></div>
+    </div>
+
+    <div class="item item-todo">
+      <div class="item-name">🛠 Pbxproj cleanup manuale</div>
+      <div class="item-detail">In Xcode 26.3 i 7 file Swift cancellati restano referenziati nel <code>project.pbxproj</code> come red links + <code>GoogleSignIn</code> SDK ancora linkato in Package Dependencies. Build passa lo stesso (warning, non error) ma è cosmeticamente sporco.<br>
+      Fix: Project navigator → file rossi → Cmd-Click → Delete → Remove Reference. Project → Package Dependencies → GoogleSignIn → (-) Remove. <code>xcodebuild -resolvePackageDependencies</code> per rigenerare Package.resolved.</div>
+      <div class="item-meta"><span>⏱ ~5 min in Xcode</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== COMMIT LIST ========== -->
+<section>
+  <h2><span class="badge badge-blue">COMMITS</span> Tutti i 18 commit del rework</h2>
+
+  <details open>
+    <summary>Mostra cronologia (più recente in alto)</summary>
+    <div class="commit-list">
+      <div class="row"><span class="sha">0265cda</span> docs(architecture): §21 — Q12 health-check.yml TENUTO</div>
+      <div class="row"><span class="sha">660418d</span> feat(claude): subagent timeline-poster + bug-tracker — Q11</div>
+      <div class="row"><span class="sha">88da495</span> docs(architecture): TD-002 — parcheggia memoria a phase finale</div>
+      <div class="row"><span class="sha">55ff1dc</span> docs(rename): "Architecture Armando Revision" → kebab-case</div>
+      <div class="row"><span class="sha">bf6fe45</span> docs(rename): ARCHITETTURA_V3.md → "Architecture Armando Revision"</div>
+      <div class="row"><span class="sha">ee78a16</span> docs(architecture): §21 — Q7 endpoint debug TENUTI</div>
+      <div class="row"><span class="sha">ebfda88</span> chore(harness): sposta watchers template in examples/ — Q6</div>
+      <div class="row"><span class="sha">92d74a8</span> chore(harness): kill modalità tunnel "lan" — Q9</div>
+      <div class="row"><span class="sha">1eeafb8</span> docs(architecture): §21 — sub-sezione "Debiti architetturali"</div>
+      <div class="row"><span class="sha">e17b105</span> feat(ios): unregister propose_day_plan tool</div>
+      <div class="row"><span class="sha">a98b90a</span> feat(ios)+docs: GigiDayPlanReasoner soft-kill + indice "Codice congelato"</div>
+      <div class="row"><span class="sha">f838dff</span> docs(architecture): §21 — log build verify post-Phase 2 + IPA</div>
+      <div class="row"><span class="sha">1bb6d63</span> fix(ios): re-aggiungi struct GigiToolCall (era in GigiRealtimeEngine)</div>
+      <div class="row"><span class="sha">8b3cfaa</span> feat(ios)+docs: sradica Gemini (Live + REST) e Google Sign-In — ADR-0004</div>
+      <div class="row"><span class="sha">7e587fb</span> feat(ios)+docs: wake word soft-kill MVP + rework log in ARCHITETTURA</div>
+      <div class="row"><span class="sha">0d6ddc1</span> docs(adr): 0002 — formalizza doppio path Claude (CLI vs SDK)</div>
+      <div class="row"><span class="sha">455a36e</span> docs(rework): aggiungi capability map iniziale</div>
+      <div class="row"><span class="sha">7e4a7f5</span> chore(rework): phase 1 kill list — remove verified dead code</div>
+    </div>
+  </details>
+</section>
+
+<footer>
+  Generated 2026-05-07 · branch <code>armando-rework</code> · IPA in <code>_IPA_DROP/GIGI-armando-rework.ipa</code>
+</footer>
+
+</body>
+</html>

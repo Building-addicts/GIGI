@@ -9,7 +9,7 @@ Questa cartella contiene tutta la documentazione **project-level**. I `README.md
 | `GETTING_STARTED.md` | Onboarding utente: pairing iPhone↔PC, sideload IPA, troubleshooting |
 | `MVP_SCOPE.md` | **Source of truth del lancio 1 maggio 2026** — cosa è in scope, cosa non lo è, acceptance criteria del demo |
 | `TASK_PLAN.md` | Piano task corrente (autoritativo, granulare per fase) |
-| `Architecture-Armando-Revision.md` | Paper architettura "True Agent" V3 (aprile 2026, rev. 2 peer-reviewed) |
+| `rework/Architecture-Armando-Revision.md` | Paper architettura "True Agent" V3 (aprile 2026, rev. 2 peer-reviewed) |
 | `PIANO_INTEGRAZIONE_HARNESS.md` | Piano integrazione backend Node nell'app iOS |
 | `TEST_E2E.md` | Scenari test end-to-end |
 | `COMPONENTS.md` | Mappa "quale file fa cosa" raggruppata per funzione |

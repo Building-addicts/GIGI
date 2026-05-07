@@ -2,7 +2,7 @@
 
 > Vista trasversale: ogni capability user-facing attraversa iOS + harness Node + (a volte) Shortcut iOS / APNS / MDM. Questo doc traccia il flusso end-to-end per ogni capability principale, in modo che decidendo di sfoltire una parte si veda subito cosa rompe a valle/monte.
 >
-> Fonti: `docs/MVP_SCOPE.md`, `docs/Architecture-Armando-Revision.md` (rev. 2), `docs/COMPONENTS.md`, `docs/PIANO_INTEGRAZIONE_HARNESS.md`, `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/memory/PROJECT.md`, `docs/memory/CONTEXT.md`, `docs/adr/`, `03_HARNESS/docs/api/ios-integration.md`, `docs/runbooks/talk-to-gigi-universal-shortcut.md`.
+> Fonti: `docs/MVP_SCOPE.md`, `docs/rework/Architecture-Armando-Revision.md` (rev. 2), `docs/COMPONENTS.md`, `docs/PIANO_INTEGRAZIONE_HARNESS.md`, `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/memory/PROJECT.md`, `docs/memory/CONTEXT.md`, `docs/adr/`, `03_HARNESS/docs/api/ios-integration.md`, `docs/runbooks/talk-to-gigi-universal-shortcut.md`.
 >
 > Data: 2026-05-07. Riflette stato repo a inizio "Settimana lancio MVP" (deadline 1 maggio già scaduta; il repo conserva tutta la struttura del lancio).
 
@@ -79,7 +79,7 @@ Capability che l'utente finale percepisce, una riga ciascuna. Le otto numerate d
   - Harness: `server/api/ios-agent.js`, `server/api/ios-stream.js`, `server/session-manager.js`, `server/claude-runner.js`, `server/queue.js`
   - Altro: APNS opzionale per recovery
 - **ADR rilevanti**: nessuno (Presence Mode emerso da `VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, pre-ADR)
-- **Doc rilevanti**: `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/MVP_SCOPE.md` §2, `docs/Architecture-Armando-Revision.md` §5
+- **Doc rilevanti**: `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/MVP_SCOPE.md` §2, `docs/rework/Architecture-Armando-Revision.md` §5
 - **Risk se rimossa**: si perde l'intera tesi MVP. Quick Talk è un degraded substitute (singolo turno, non conversazione)
 - **Sostituibile da**: Quick Talk + Background Talk loop su Shortcut Dictate Text (50 iterazioni). Funziona per demo se wake word non è affidabile
 
@@ -158,7 +158,7 @@ Capability che l'utente finale percepisce, una riga ciascuna. Le otto numerate d
   - Harness: `server/api/ios-memory.js`, `memory/store.js`, `memory/backends/json-store.js`
   - Altro: CloudKit (Apple e2e encrypted)
 - **ADR rilevanti**: nessuno (decisione "MVP JSON → swap LanceDB" è in `PIANO_INTEGRAZIONE_HARNESS.md` §5, non promosso ad ADR)
-- **Doc rilevanti**: `docs/Architecture-Armando-Revision.md` §11, `03_HARNESS/memory-upgrade/` (design only, non implementato)
+- **Doc rilevanti**: `docs/rework/Architecture-Armando-Revision.md` §11, `03_HARNESS/memory-upgrade/` (design only, non implementato)
 - **Risk se rimossa**: si perde AC#6/#7 della demo. Il "personale" del prodotto sparisce
 - **Sostituibile da**: hardcoded curated demo memory (allowed da MVP_SCOPE §3 "small curated demo memory"). È il path di taglio realistico
 

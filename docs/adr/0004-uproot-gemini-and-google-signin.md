@@ -7,7 +7,7 @@
 
 ## Context
 
-Il design originale di GIGI v3 (`docs/Architecture-Armando-Revision.md`) prevedeva una cascade a 4 livelli per il reasoning lato app:
+Il design originale di GIGI v3 (`docs/rework/Architecture-Armando-Revision.md`) prevedeva una cascade a 4 livelli per il reasoning lato app:
 
 - **L0** — Gemini Live WebSocket (`BidiGenerateContent`, streaming ~200ms con barge-in)
 - **L1** — Apple Foundation Models (on-device, iOS 18.1+ con Apple Intelligence)
@@ -75,7 +75,7 @@ In v1.1 o successivamente, se vorremo riattivare ambient mode (full-duplex voice
 - `docs/rework/CAPABILITIES_iOS.md` — entry Gemini Live + GoogleSignIn classificate come "experimental / removable"
 - `docs/rework/CAPABILITIES_crosscut.md` — Gemini Live in lista "out-of-scope MVP"
 - `02_GIGI_APP/GIGI/GigiBrainPipeline.swift` — cascade simplificata (post-edit)
-- `docs/Architecture-Armando-Revision.md` §13 — sezione Gemini Live storica marcata RIMOSSO
+- `docs/rework/Architecture-Armando-Revision.md` §13 — sezione Gemini Live storica marcata RIMOSSO
 
 ---
 
