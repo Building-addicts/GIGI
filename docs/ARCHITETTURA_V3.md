@@ -2033,6 +2033,41 @@ Il numero deve combaciare con le righe in tabella sopra. Se ne trovi di più →
 5. Aggiungi una riga a questa tabella.
 6. Aggiungi sotto-sezione in §21 phase corrente con SHA del commit.
 
+### Debiti architetturali (TODO post-rework, living)
+
+> **Indice vivo** dei debiti tecnici / inefficienze emerse durante il rework armando-rework ma **NON affrontate** nello stesso (per scope o perché richiedono refactor non triviali). Diventa lo spazio dove parcheggiamo "questa cosa va rivista" senza dimenticarsene. Non sono bug — sono scelte oggi accettabili che meritano riprogettazione quando ci sarà bandwidth.
+
+#### TD-001 — Meccanismo di tool selection inefficiente
+
+**Stato corrente** (verificato 2026-05-07):
+Il `GigiToolRegistry.selectRelevant(for: text)` decide quali tool mandare al modello LLM ad ogni richiesta vocale, con questa logica:
+
+1. **44 tool registrati** in `all`. Ognuno ha un array `tags: [String]` (parole chiave hard-coded, italiano + inglese).
+2. **14 tool "always included"** in `alwaysIncluded`: vengono SEMPRE inseriti nel prompt LLM indipendentemente dal contesto (`make_call`, `send_message`, `ask_time`, `ask_date`, `weather`, `torch_on/off`, `set_timer/alarm`, `toggle_wifi/bluetooth`, `media_*`, `read_calendar`, `ask_claude`).
+3. **Score per match dei tag**: ogni tool della lista `all` riceve `+10` per ogni `tag` che compare come substring nel testo utente lowercased, `+5` bonus per match esatto di parola.
+4. **Top 12 selezionati** dal score sort, mandati come tool declarations al modello LLM.
+
+**Costo concreto stimato**: ~12-18 tool per richiesta × ~120 token ciascuno = ~1.5-2k token solo di tools nel prompt, ad ogni singola voice turn.
+
+**Inefficienze rilevate**:
+
+- **Keyword matching brittle**: i tag sono hard-coded e NON semantici. *"Voglio fissare un appuntamento col dottore"* non matcha `set_reminder` perché il tag set non include "appuntamento" o "dottore". Risultato: si appoggia sui tool always-included e magari sceglie il tool sbagliato.
+- **Always-included rigido**: 14 tool entrano SEMPRE. Se l'utente chiede *"che ore sono?"*, il prompt include `weather`, `wifi`, `torch`, `timer`, `alarm`, `media_*`, `calendar` — tutti irrilevanti per quella richiesta. ~1.5k token sprecati.
+- **Tag manutenzione manuale**: aggiungere un tool nuovo richiede al dev di scrivere a mano una lista di tag rappresentativa. Facile dimenticarsene, facile essere inconsistenti tra developer.
+- **Nessuna learning loop**: il sistema non impara quali tool vengono effettivamente chiamati su quali frasi. Tool che falliscono spesso non vengono down-weight-ati. Tool mai chiamati non vengono dropped.
+- **Nessuna cache**: la stessa frase ricorrente (*"che ore sono?"*) ricompila la selezione ogni volta da zero, anche se il risultato è deterministicamente lo stesso.
+
+**Miglioramenti possibili** (ranking effort/impact):
+
+1. **🟢 Quick win (~2 ore)**: drop `alwaysIncluded` per tool veramente specifici (`weather`, `wifi`, `torch`, `media_*`). Tieni only `make_call`, `send_message`, `ask_claude` come fallback universali. Risparmio: ~50% token wasted on irrilevanti.
+2. **🟡 Medio (~1 settimana)**: migra il scoring da keyword tag → **embedding semantico**. Pre-calcola embedding ogni tool description al boot (~50ms one-shot). A runtime, embed la query utente, retrieve top-K per cosine similarity. Apple Foundation Models o un piccolo CoreML embedder fanno il lavoro on-device gratis. Risultato: scoring molto più resiliente a variazioni linguistiche.
+3. **🔴 Grosso (~2 settimane)**: **two-stage selection**. Stage 1: micro-modello classifica la richiesta in 1 dei ~8 domini (call/message/calendar/media/home/web/cloud/info). Stage 2: solo i tool del dominio selezionato passano al modello principale. Riduce tool per request a ~3-5. Scaling-friendly: aggiungere il 100° tool non degrada le performance.
+4. **Bonus**: cache LRU della selezione per N frasi più frequenti (es. ultime 50). Hit rate atteso >70% in uso reale (le voice turn sono molto ripetitive).
+
+**Note**: il #1 è il primo da fare — è low-risk, high-value, no breaking change. Gli altri sono refactor sostanziali da pianificare.
+
+---
+
 ### Convenzione per future modifiche
 
 Ogni commit del rework deve aggiungere una riga sotto la phase corrente di questa sezione 21, con:
