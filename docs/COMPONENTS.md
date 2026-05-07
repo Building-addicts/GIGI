@@ -2,7 +2,7 @@
 
 > Fonte di verità "quale file fa cosa" raggruppato **per funzione/feature**, non per path.
 > Per layout fisico delle cartelle: `CLAUDE.md` §Layout monorepo.
-> Per architettura concettuale: `docs/ARCHITETTURA_V3.md`.
+> Per architettura concettuale: `docs/Architecture Armando Revision.md`.
 
 ---
 
@@ -205,7 +205,7 @@ Server Node per distribuzione profili MDM iOS (accessibility).
 - `README.md` — indice docs
 - `GETTING_STARTED.md` — onboarding utente (pairing, sideload)
 - `TASK_PLAN.md` — piano task corrente (autoritativo)
-- `ARCHITETTURA_V3.md` — paper architettura "True Agent" V3 rev. 2
+- `Architecture Armando Revision.md` — paper architettura "True Agent" V3 rev. 2
 - `PIANO_INTEGRAZIONE_HARNESS.md` — piano integrazione backend
 - `TEST_E2E.md` — scenari test E2E
 - `COMPONENTS.md` — questo file

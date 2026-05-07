@@ -147,6 +147,6 @@ lives on the PC. Memory is yours, on your machine.
 
 ## Where to go next
 
-- `docs/ARCHITETTURA_V3.md` — full architecture
+- `docs/Architecture Armando Revision.md` — full architecture
 - `docs/TASK_PLAN.md` — current development plan
 - `03_HARNESS/docs/api/ios-integration.md` — HTTP/WS API spec

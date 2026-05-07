@@ -21,4 +21,4 @@ Per le ultime attività leggi le ultime 5–10 entry di `docs/memory/ACTIVITY_LO
 - **debugger:** se utente dice "il fix non funziona", PRIMA verificare via SSH sul Mac quale versione del file Swift è stata buildata (`grep` nel file sul Mac), POI debuggare il codice.
 - **researcher:** `iroh-ffi` archived da Feb 2025 — non riproporre come MVP. Vedi `docs/research/pairing-landscape-2026.md`.
 - **code-mapper:** mappare incrementalmente; non retro-mappare le fasi 1–3 / harness 10–18 finché un task non tocca quei moduli.
-- **documenter:** `docs/ARCHITETTURA_V3.md` è la fonte canonica V3. `03_HARNESS/docs/api/ios-integration.md` è autoritativo per il contratto iOS↔harness.
+- **documenter:** `docs/Architecture Armando Revision.md` è la fonte canonica V3. `03_HARNESS/docs/api/ios-integration.md` è autoritativo per il contratto iOS↔harness.

@@ -18,4 +18,4 @@ Ogni nuovo template config che il team vuole conservare ma NON spedire come defa
 2. Come si attiva
 3. Quali dipendenze servono prima di flippare il flag
 
-Vedi anche `docs/ARCHITETTURA_V3.md` §21 per il razionale del rework.
+Vedi anche `docs/Architecture Armando Revision.md` §21 per il razionale del rework.
