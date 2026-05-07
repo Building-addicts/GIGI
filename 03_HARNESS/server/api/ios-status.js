@@ -68,11 +68,11 @@ function inferTunnelMode(cfg) {
 
 function inferPublicUrl(cfg) {
   // Prefer explicit named/quick URL, fall back to manual base URL.
+  // (modalità 'lan' rimossa nel rework armando-rework)
   const t = cfg?.tunnel || {};
   return (
     t.named?.publicUrl ||
     t.quick?.publicUrl ||
-    t.lan?.advertisedUrl ||
     cfg?.ios?.public_url ||
     null
   );

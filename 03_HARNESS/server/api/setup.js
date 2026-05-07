@@ -2,11 +2,14 @@
 // Mode switching + status readout. The wizard HTML lives at
 // server/public/setup.html and hits these endpoints client-side.
 //
-// Mode matrix (Phase 5 MVP):
+// Mode matrix (post rework armando-rework, 2026-05-07):
 //   "manual"  — legacy flow: user pastes URL+secret in iOS Settings (Phase 4)
 //   "quick"   — cloudflared --url http://localhost:7779 → trycloudflare.com
-//   "lan"     — mDNS advertise _gigi._tcp.local only (no internet exposure)
 //   "named"   — OAuth-driven Cloudflare Named Tunnel with user domain (PHASE 5.2)
+//
+// Modalità "lan" (mDNS advertise _gigi._tcp.local) rimossa nel rework
+// — mai usata in pratica (richiede iPhone+Mac sulla stessa rete LAN, edge
+// case fuori dal target demo). Vedi ARCHITETTURA_V3 §21 per dettagli.
 //
 // Named mode endpoints are stubbed and return 501 NOT_IMPLEMENTED — they
 // require a Cloudflare OAuth app registration which is follow-up work.
@@ -14,7 +17,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { cloudflared } from '../tunnel/cloudflared-manager.js';
-import { startAdvertise, stopAdvertise } from '../tunnel/mdns.js';
 
 function allowedCorsOrigin(req) {
   const origin = req.headers.origin || '';
@@ -50,28 +52,24 @@ async function readBody(req) {
 function saveConfigMode(cfgPath, liveCfg, mode, patch = {}) {
   try {
     const onDisk = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    onDisk.tunnel = onDisk.tunnel || { mode: 'manual', named: {}, quick: {}, lan: {} };
+    onDisk.tunnel = onDisk.tunnel || { mode: 'manual', named: {}, quick: {} };
     onDisk.tunnel.mode = mode;
     if (patch.quick)  Object.assign(onDisk.tunnel.quick = onDisk.tunnel.quick || {}, patch.quick);
-    if (patch.lan)    Object.assign(onDisk.tunnel.lan   = onDisk.tunnel.lan   || {}, patch.lan);
     if (patch.named)  Object.assign(onDisk.tunnel.named = onDisk.tunnel.named || {}, patch.named);
     fs.writeFileSync(cfgPath, JSON.stringify(onDisk, null, 2), 'utf8');
 
     // Mirror into the caller's in-memory cfg object so handlers that close
     // over it (pair.js, ios-router.js) see the update immediately.
     if (liveCfg) {
-      liveCfg.tunnel = liveCfg.tunnel || { mode: 'manual', named: {}, quick: {}, lan: {} };
+      liveCfg.tunnel = liveCfg.tunnel || { mode: 'manual', named: {}, quick: {} };
       liveCfg.tunnel.mode = mode;
       if (patch.quick) Object.assign(liveCfg.tunnel.quick = liveCfg.tunnel.quick || {}, patch.quick);
-      if (patch.lan)   Object.assign(liveCfg.tunnel.lan   = liveCfg.tunnel.lan   || {}, patch.lan);
       if (patch.named) Object.assign(liveCfg.tunnel.named = liveCfg.tunnel.named || {}, patch.named);
     }
   } catch (e) {
     console.error('setup: config write failed:', e.message);
   }
 }
-
-let mdnsHandle = null;
 
 /**
  * Returns true if the request matched a /api/setup/* route.
@@ -119,8 +117,7 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
       data: {
         mode:         cfg?.tunnel?.mode || 'manual',
         cloudflared:  cloudflared.status(),
-        lan:          { advertising: !!mdnsHandle, serviceName: cfg?.tunnel?.lan?.service_name || null },
-        supported:    ['manual', 'quick', 'lan', 'named'],
+        supported:    ['manual', 'quick', 'named'],
         namedReady:   false                   // flip to true when OAuth wizard ships in P5.2
       }
     }), true;
@@ -149,30 +146,8 @@ export async function handleSetup(req, res, { cfg, cfgPath }) {
     return json(res, 200, { ok: true, data: cloudflared.status() }), true;
   }
 
-  // ---- LAN / mDNS ----
-  if (p === '/api/setup/lan/start' && req.method === 'POST') {
-    try {
-      if (mdnsHandle) { mdnsHandle.stop(); mdnsHandle = null; }
-      mdnsHandle = startAdvertise({
-        port:        cfg?.server?.port || 7779,
-        deviceName:  process.env.COMPUTERNAME || process.env.HOSTNAME || 'gigi-harness',
-        version:     '1.0'
-      });
-      saveConfigMode(cfgPath, cfg, 'lan', { lan: { service_name: process.env.COMPUTERNAME || 'gigi-harness' } });
-      return json(res, 200, { ok: true, data: { advertising: true } }), true;
-    } catch (e) {
-      return json(res, 500, { ok: false, error: { code: 'LAN_START_FAIL', message: e.message } }), true;
-    }
-  }
-
-  if (p === '/api/setup/lan/stop' && req.method === 'POST') {
-    if (mdnsHandle) { mdnsHandle.stop(); mdnsHandle = null; }
-    return json(res, 200, { ok: true, data: { advertising: false } }), true;
-  }
-
   // ---- manual mode switch back ----
   if (p === '/api/setup/manual' && req.method === 'POST') {
-    if (mdnsHandle) { mdnsHandle.stop(); mdnsHandle = null; }
     await cloudflared.stop();
     saveConfigMode(cfgPath, cfg, 'manual');
     return json(res, 200, { ok: true, data: { mode: 'manual' } }), true;

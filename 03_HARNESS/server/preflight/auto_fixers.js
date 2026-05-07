@@ -91,7 +91,7 @@ async function fix_config_secret_strength({ cfg, cfgPath }) {
 
 /**
  * Sets tunnel.mode = "quick" if it was "manual" (the default placeholder).
- * If mode is already chosen (lan / quick / named), this is a no-op success
+ * If mode is already chosen (quick / named), this is a no-op success
  * — we don't override an intentional choice.
  */
 async function fix_tunnel_mode_active({ cfg, cfgPath }) {
@@ -104,11 +104,11 @@ async function fix_tunnel_mode_active({ cfg, cfgPath }) {
   }
   try {
     const onDisk = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    onDisk.tunnel = onDisk.tunnel || { named: {}, quick: {}, lan: {} };
+    onDisk.tunnel = onDisk.tunnel || { named: {}, quick: {} };
     onDisk.tunnel.mode = 'quick';
     fs.writeFileSync(cfgPath, JSON.stringify(onDisk, null, 2), 'utf8');
 
-    cfg.tunnel = cfg.tunnel || { named: {}, quick: {}, lan: {} };
+    cfg.tunnel = cfg.tunnel || { named: {}, quick: {} };
     cfg.tunnel.mode = 'quick';
 
     return {
@@ -121,15 +121,15 @@ async function fix_tunnel_mode_active({ cfg, cfgPath }) {
 }
 
 /**
- * Starts cloudflared in the configured mode. If mode is "lan" or
- * "manual" this is a no-op success.
+ * Starts cloudflared in the configured mode. If mode is "manual" this is
+ * a no-op success (modalità 'lan' rimossa nel rework armando-rework).
  */
 async function fix_tunnel_running({ cfg, cloudflared }) {
   const mode = cfg?.tunnel?.mode || 'manual';
-  if (mode === 'manual' || mode === 'lan') {
+  if (mode === 'manual') {
     return {
       fixed: true,
-      detail: `Mode is "${mode}", tunnel process not required.`
+      detail: `Mode is "manual", tunnel process not required.`
     };
   }
   if (!cloudflared) {

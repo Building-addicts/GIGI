@@ -254,8 +254,8 @@ export async function tunnel_mode_active({ cfg }) {
 
 export async function tunnel_running({ cfg, cloudflared }) {
   const mode = cfg?.tunnel?.mode || 'manual';
-  if (mode === 'manual' || mode === 'lan') {
-    // Tunnel not expected for these modes.
+  if (mode === 'manual') {
+    // Tunnel not expected for manual mode (modalità 'lan' rimossa nel rework).
     return {
       id: 'tunnel_running',
       label: 'Tunnel process running',

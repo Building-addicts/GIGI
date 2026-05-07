@@ -1987,6 +1987,27 @@ Commit (in arrivo) · ADR: [ADR-0005](adr/0005-day-plan-reasoner-soft-kill-mvp.m
 
 **Razionale**: la feature "Day Plan capability" è post-MVP. ~300 righe restano dormienti, riattivazione v1.1 = 3 step (flip flag + chiudi sub 4/4 + decommenta smoke test). Naming clash con `GigiPlannerEngine` ora chiarito da ADR.
 
+#### Setup wizard — kill modalità `lan` (mDNS)
+
+Commit (in arrivo)
+
+**Decisione**: la matrix delle modalità tunnel passa da 4 → 3 (`manual`, `quick`, `named`). La modalità `lan` (mDNS advertise `_gigi._tcp.local`) viene rimossa completamente — mai usata in pratica nella demo (richiede iPhone+Mac sulla stessa rete fisica, edge case fuori dal target).
+
+**File toccati**:
+- `tunnel/mdns.js` — DELETED (libreria mDNS non più importata da nessuno)
+- `api/setup.js` — rimosso import mdns, mdnsHandle, endpoint `/api/setup/lan/start`+`/stop`, riferimenti `lan` in status / saveConfigMode / supported list
+- `api/pair.js` — comment update
+- `api/ios-status.js` — rimosso `t.lan?.advertisedUrl` da inferPublicUrl
+- `preflight/auto_fixers.js` + `checks.js` — rimossi guard su `mode === 'lan'`
+- `public/setup.html` — rimossa Card C "Home Wi-Fi only (mDNS)" + bottone trigger
+- `public/app.js` — rimosso label "LAN (mDNS)"
+- `config.example.json` — rimosso block `tunnel.lan`
+
+**Modalità rimaste** (ognuna ha il suo ADR/doc rilevante):
+- `manual` — fallback storico, l'utente paste URL+secret in iOS Settings
+- `quick` — Cloudflare Quick Tunnel con URL `*.trycloudflare.com` random (default demo)
+- `named` — Cloudflare Named Tunnel con dominio user (stub 501, ancora da implementare in Phase 5.2 — utente vuole tenerlo come placeholder per il futuro)
+
 #### Build verify — Post-Phase 2 (commit `1bb6d63`)
 
 Eseguito 2026-05-07 su MacInCloud (FF125, Xcode 26.3, Build 17C529):

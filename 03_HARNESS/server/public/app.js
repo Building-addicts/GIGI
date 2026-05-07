@@ -133,7 +133,6 @@ function tunnelLabel(mode) {
   switch (mode) {
     case 'quick':  return 'Cloudflare Quick Tunnel';
     case 'named':  return 'Cloudflare Named Tunnel';
-    case 'lan':    return 'LAN (mDNS)';
     case 'manual': return 'Manuale (Tailscale o relay custom)';
     default:       return mode || '—';
   }

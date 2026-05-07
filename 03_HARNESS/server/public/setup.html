@@ -168,10 +168,6 @@
         <span>☁️</span><span>One-time setup, then a stable URL forever (have a domain)</span>
         <span class="arrow">→ Named</span>
       </button>
-      <button class="opt" data-target="card-lan">
-        <span>🏠</span><span>Maximum privacy, only when I'm at home</span>
-        <span class="arrow">→ LAN</span>
-      </button>
       <button class="opt" data-target="card-manual">
         <span>⚙️</span><span>I have my own setup (Tailscale, VPS, reverse SSH…)</span>
         <span class="arrow">→ Manual</span>
@@ -199,23 +195,7 @@
       <div class="status-line" id="status-quick">Status: —</div>
     </div>
 
-    <!-- Card C — LAN -->
-    <div class="card" id="card-lan">
-      <div class="header-row">
-        <h2>🏠 Home Wi-Fi only (mDNS) <span class="tier local">Local only</span><span id="pill-lan" class="pill gray">off</span></h2>
-      </div>
-      <p>Zero setup. GIGI visible only on your home Wi-Fi.</p>
-      <ul>
-        <li>✅ Zero config, zero account</li>
-        <li>✅ Maximum privacy (traffic never leaves home)</li>
-        <li>❌ Doesn't work away from home (4G, other Wi-Fi)</li>
-      </ul>
-      <div class="row">
-        <button class="primary" id="btn-lan-start">Start LAN mode</button>
-        <button class="secondary" id="btn-lan-stop">Stop</button>
-      </div>
-      <div class="status-line" id="status-lan">Status: —</div>
-    </div>
+    <!-- Card C — LAN: rimossa nel rework armando-rework (mai usata). -->
 
     <!-- Card A — Named Tunnel -->
     <div class="card" id="card-named">
@@ -330,15 +310,6 @@
         ? `URL: <strong>${quickStatus.publicUrl}</strong> · uptime ${quickStatus.uptime_s || 0}s`
         : (quickStatus.running ? 'Starting… wait a few seconds' : (quickStatus.lastError ? `Error: ${quickStatus.lastError}` : 'Status: stopped'));
 
-      // LAN card
-      const lanAdv = s.lan?.advertising;
-      document.getElementById('pill-lan').textContent = lanAdv ? 'active' : 'off';
-      document.getElementById('pill-lan').className = 'pill ' + (lanAdv ? 'green' : 'gray');
-      document.getElementById('card-lan').classList.toggle('active', mode === 'lan');
-      document.getElementById('status-lan').textContent = lanAdv
-        ? `Advertising _gigi._tcp.local as "${s.lan.serviceName || 'gigi-harness'}"`
-        : 'Status: not advertising';
-
       // Manual card
       document.getElementById('pill-manual').textContent = mode === 'manual' ? 'active' : 'off';
       document.getElementById('pill-manual').className = 'pill ' + (mode === 'manual' ? 'green' : 'gray');
@@ -362,8 +333,6 @@
 
   wireButton('btn-quick-start', '/api/setup/quick/start');
   wireButton('btn-quick-stop',  '/api/setup/quick/stop');
-  wireButton('btn-lan-start',   '/api/setup/lan/start');
-  wireButton('btn-lan-stop',    '/api/setup/lan/stop');
   wireButton('btn-manual',      '/api/setup/manual');
   wireButton('btn-named-stop',  '/api/setup/named/stop');
 

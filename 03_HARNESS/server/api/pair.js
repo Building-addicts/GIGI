@@ -83,7 +83,8 @@ function resolveTunnelUrl(cfg) {
     return { ready: false, url: null, reason: 'QUICK_TUNNEL_NOT_READY' };
   }
 
-  // mode === 'lan' | 'manual' → LAN fallback is intentional, always ready.
+  // mode === 'manual' → fallback intenzionale, sempre ready (l'utente passa
+  // URL e secret manualmente; modalità 'lan' rimossa nel rework armando-rework).
   return { ready: true, url: null }; // url filled by caller via pickHostIp
 }
 
