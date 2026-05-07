@@ -2023,6 +2023,26 @@ Commit (in arrivo)
 
 **Convenzione** (per future modifiche): qualsiasi config template dimostrativo che il team vuole conservare ma NON spedire come default attivo va in `server/examples/` con suffisso `.example.{json,yml}`.
 
+#### `health-check.yml` — TENUTO dopo valutazione (gap monitoring noto)
+
+Commit (in arrivo) — **decisione di non-kill**, documentata per evitare ri-valutazione futura.
+
+**Stato verificato (2026-05-07)**:
+- Workflow GitHub `.github/workflows/health-check.yml` gira ogni mattina alle 8:00 CET
+- Compila status report (workflow failures ultime 24h, issue P0/blockers/bugs counts, PR aperte) e posta su **Discord** via webhook (`secrets.DISCORD_WEBHOOK`)
+- **Gap noto**: monitora solo 5 workflow hardcoded (`pr-lint, discord-notify, auto-timeline, project-status, progress-tracker`) su ~10 attivi nel repo
+
+**Considerato per kill**, ma **tenuto perché**:
+- Costo zero (gratis su GitHub Actions free tier, nessun consumo team-license)
+- Anche se il team Discord è morto col team, il webhook continua a postare — utile come "log silenzioso" che il PM può consultare on-demand se serve un riassunto giornaliero
+- Killare significherebbe ricostruirlo da zero se in futuro torna un team
+
+**Gap monitoring noto e accettato**: i 5 workflow non monitorati possono fallire silenziosamente. Se uno di loro è critico (es. `auto-blocked-label.yml` non monitorato → label `blocked` non più applicate → dashboard rotta), potresti accorgertene solo manualmente. Trade-off accettato: il PM non ha bandwidth per fix questo gap ora, e l'impatto reale è basso visto che il PM è ora unico dev e usa la dashboard solo come reference.
+
+**Quando ri-considerare il fix (opzione 2)**: se torna un team o se un workflow non monitorato genera un incidente. A quel punto, refactor: lista workflow auto-popolata via `gh workflow list` + destinazione cambia da Discord a "apri issue auto su failure" nel repo (più robusto di Discord chat).
+
+**Quando ri-considerare il kill (opzione 1)**: se entro 6 mesi il PM verifica di non aver mai consultato il report Discord generato.
+
 #### Endpoint debug `/api/ios/push/test` + `/api/ios/memory/all` — TENUTI dopo valutazione
 
 Commit (in arrivo) — **decisione di non-kill**, documentata per evitare ri-valutazione futura.
