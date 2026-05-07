@@ -2008,6 +2008,21 @@ Commit (in arrivo)
 - `quick` — Cloudflare Quick Tunnel con URL `*.trycloudflare.com` random (default demo)
 - `named` — Cloudflare Named Tunnel con dominio user (stub 501, ancora da implementare in Phase 5.2 — utente vuole tenerlo come placeholder per il futuro)
 
+#### Watchers default — sposta template in `examples/`
+
+Commit (in arrivo)
+
+**Decisione**: `server/watchers.json` produzione torna `{"watchers": []}`. I 2 template pre-esistenti (`gigi-morning-briefing` + `gigi-meeting-prep`, entrambi `enabled: false`) si trasferiscono in `server/examples/watchers.example.json` con un campo `_README` che spiega come attivarli.
+
+**Razionale**: i template presupponevano tool MCP non garantiti (calendar bridge, meteo API, news MCP). Mantenerli nella config produzione confondeva: dev nuovi vedevano le 2 entry e si chiedevano se andassero attivate o no. Spostandoli in `examples/` la separazione è esplicita: produzione = vuoto, esempi = documentazione.
+
+**File toccati**:
+- `server/watchers.json` — svuotato a `{"watchers": []}`
+- `server/examples/watchers.example.json` — NUOVO, contiene i 2 template + `_README` field con istruzioni di attivazione
+- `server/examples/README.md` — NUOVO, codifica la convenzione "template config vanno in examples/ con suffisso .example, non nella config viva"
+
+**Convenzione** (per future modifiche): qualsiasi config template dimostrativo che il team vuole conservare ma NON spedire come default attivo va in `server/examples/` con suffisso `.example.{json,yml}`.
+
 #### Build verify — Post-Phase 2 (commit `1bb6d63`)
 
 Eseguito 2026-05-07 su MacInCloud (FF125, Xcode 26.3, Build 17C529):
