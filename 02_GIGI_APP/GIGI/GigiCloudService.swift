@@ -213,11 +213,6 @@ final class GigiCloudService {
         }
     }
 
-    // Legacy alias used by GigiBrainPipeline
-    func processWithGemini(_ text: String, history: String) async -> GigiAgentResponse? {
-        await processWithGroq(text, history: history)
-    }
-
     // MARK: - Task extraction (Sub #14 1/3)
 
     func extractTasksRaw(transcript: String) async throws -> String {

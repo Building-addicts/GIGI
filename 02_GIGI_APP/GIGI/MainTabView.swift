@@ -2,7 +2,6 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject var auth = GigiAuthManager.shared
     @ObservedObject private var orchestrator = GigiSmartOrchestrator.shared
     @ObservedObject private var presence = PresenceSessionController.shared
     @ObservedObject private var liveActivity = GigiLiveActivityController.shared

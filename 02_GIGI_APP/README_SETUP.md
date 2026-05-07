@@ -1,31 +1,31 @@
 # Setup sviluppatore — GIGI (iOS)
 
-**Nota — SPM e prima build:** dopo il clone o l’aggiunta del pacchetto **Porcupine** (`Picovoice/porcupine`), Xcode o `xcodebuild` possono restare a lungo su *Resolve Package Graph* / *Fetching…* senza output apparente: è normale (rete e cache). In **Xcode**: **File → Packages → Resolve Package Versions**, attendi il completamento, poi **Product → Build** (⌘B). Da terminale, `xcodebuild -resolvePackageDependencies` può richiedere diversi minuti al primo giro.
+> Aggiornato dopo il rework `armando-rework` (2026-05-07): Gemini sradicato (ADR-0004), wake word soft-killed per MVP (ADR-0003).
 
-## Chiave API Gemini (Vision)
+## API key richiesta — Groq
 
-La chiave non è nel repository. Per compilare ed eseguire le funzioni che usano Gemini Vision:
+GIGI usa Groq come backend cloud per reasoning, NLU e Vision. Serve una chiave API:
 
-1. Nella cartella `02_GIGI_APP/`, copia il template:
-   ```bash
-   cp Config.example.xcconfig Config.xcconfig
-   ```
-2. Apri `Config.xcconfig` e sostituisci `YOUR_API_KEY_HERE` con la tua chiave API Google AI (Gemini), ottenibile dalla [Google AI Studio](https://aistudio.google.com/apikey).
-3. In Xcode, verifica che il target **GIGI** usi `Config.xcconfig` per le configurazioni **Debug** e **Release** (Project → Info → Configurations).
-4. Esegui **Clean Build Folder** (⇧⌘K) e poi **Build** (⌘B).
+1. Registrati gratuitamente su [console.groq.com](https://console.groq.com/) → API Keys.
+2. La chiave si inserisce nell'app durante onboarding (step "API key") oppure in **Settings → API key**.
 
-Se `Config.xcconfig` manca o la chiave è vuota, `GigiConfig.geminiAPIKey` sarà una stringa vuota e le chiamate Vision a Gemini non funzioneranno finché non configuri la chiave.
+Se manca, GIGI gira in modalità "Limited" (solo Apple Foundation Models on-device + NLU rule-based locale).
 
-## Wake word (Porcupine)
+## Niente più Gemini API key
 
-1. Ottieni una **AccessKey** gratuita da [Picovoice Console](https://console.picovoice.ai/).
-2. In `Config.xcconfig`, imposta `PICOVOICE_ACCESS_KEY = <la_tua_chiave>`.
-3. (Opzionale) Scarica il bundle **Hey GIGI** in formato `.ppn` e aggiungi `HeyGIGI.ppn` al target GIGI (Copy Bundle Resources). Senza questo file, l’app usa la keyword integrata **«Jarvis»** come fallback.
-4. In app: **Dashboard → Wake word → Always-on listening** per attivare il monitoraggio.
+Storicamente l'app usava Gemini Live (WebSocket) e Gemini REST. Entrambi rimossi nel rework — non serve più alcuna chiave Google AI Studio. Vision è gestita da Groq.
+
+## Niente più Porcupine
+
+Il wake word "Hey GIGI" via Porcupine è stato sostituito da `SFSpeechRecognizer` on-device, ed è ora soft-killed per MVP (issue #102). Riferimenti residui in `Info.plist` e `Config.example.xcconfig` (`PICOVOICE_ACCESS_KEY`) sono dormienti — possono essere rimossi in una fase futura del rework.
+
+I trigger MVP sono:
+- **Action Button** (iPhone 15 Pro+) → Shortcut "Talk to GIGI"
+- **Back Tap** (iPhone 14 e precedenti) → stesso Shortcut
+- **Siri AppIntent** → "Hey Siri, talk to GIGI"
 
 ## File sensibili
 
-- **Non committare** `Config.xcconfig`. È elencato in `.gitignore`.
-- **Committare** `Config.example.xcconfig` come riferimento per il team.
+`Config.xcconfig` (gitignored) è ancora supportato per chi vuole iniettare `GROQ_API_KEY` build-time invece che dall'UI. `Config.example.xcconfig` è committato come template.
 
 Prima del primo commit in un nuovo clone, verifica con `git status` che `Config.xcconfig` non compaia tra i file tracciati.

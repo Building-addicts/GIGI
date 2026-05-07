@@ -2,11 +2,15 @@ import Foundation
 
 // MARK: - GigiBrainPipeline
 //
-// Owns the 4-level response cascade:
-//   0. Gemini Live WebSocket (streaming, ~200 ms)
-//   1. Apple Foundation Models (on-device, iOS 18.1+)
-//   2. Gemini REST API (online, all devices)
-//   3. Local rule-based NLU (offline, always works)
+// Owns the response cascade:
+//   1. Apple Foundation Models (on-device, iOS 18.1+ — primary brain when supported)
+//   2. Local rule-based NLU (offline, always works — fallback)
+//
+// Cloud reasoning lives in the harness (Groq/Claude) accessed via
+// GigiHarnessClient when the agent path needs it — not in this pipeline.
+//
+// Removed in rework armando-rework (2026-05-07, ADR-0004): Gemini Live (L0)
+// and Gemini REST (L2). See ARCHITETTURA_V3.md §21 rework log.
 //
 // Returns a GigiAgentResponse regardless of which level fires.
 
@@ -15,12 +19,13 @@ final class GigiBrainPipeline {
     static let shared = GigiBrainPipeline()
 
     private let agent   = GigiFoundationAgent.shared
-    private let cloud   = GigiCloudService.shared
     private let nlu     = GigiNLUEngine.shared
 
     private init() {}
 
-    // Action intents that must be executed — never handed to Gemini Live text path.
+    // Action intents that the local NLU classifier knows about. Used by
+    // refineBrainOutput to override a weak `respond` from Foundation Models
+    // when the local classifier is highly confident the intent is actionable.
     private static let actionIntents: Set<String> = [
         "make_call", "send_message", "navigate", "navigation", "play_music", "open_app",
         "set_reminder", "create_event", "set_alarm", "set_timer", "weather", "search_web",
@@ -41,40 +46,12 @@ final class GigiBrainPipeline {
 
     func resolve(text: String, history: String) async -> GigiAgentResponse {
 
-        // Pre-check: if local NLU is confident about an action intent (≥0.85),
-        // skip Gemini Live (which returns plain text, not tool calls) and go straight
-        // to structured brain levels. Fixes "call mom" being answered conversationally.
+        // Pre-classify with the local NLU so refineBrainOutput has a baseline
+        // to override weak `respond` outputs from Foundation Models.
         let localIntent = nlu.classify(text)
-        let isHighConfidenceAction = localIntent.confidence >= 0.85
-            && Self.actionIntents.contains(localIntent.label)
 
-        // Level 0: Gemini Live WebSocket — only for conversational/question turns.
-        // Lazy connect: if not yet connected, trigger in background for the next request.
-        if !isHighConfidenceAction, !GigiRealtimeEngine.shared.isConnected {
-            GigiRealtimeEngine.shared.connect()
-        }
-        if !isHighConfidenceAction, GigiRealtimeEngine.shared.isConnected {
-            let prompt = history.isEmpty
-                ? text
-                : "--- Conversation history ---\n\(history)\n--- End history ---\n\nCurrent message: \(text)"
-            if let speech = await GigiRealtimeEngine.shared.sendTextAwaitingReply(
-                userText: prompt,
-                timeoutSeconds: 15
-            ) {
-                let trimmed = speech.trimmingCharacters(in: .whitespacesAndNewlines)
-                let sanitized = GigiFoundationAgent.sanitizeSpeech(trimmed)
-                if !sanitized.isEmpty {
-                    print("GIGI brain: Realtime ✓")
-                    return GigiAgentResponse(
-                        action: "respond", contact: "", body: "", platform: "",
-                        dest: "", query: "", app: "", taskText: "", date: "", time: "",
-                        speech: sanitized, followUp: ""
-                    )
-                }
-            }
-        }
-
-        // Level 1: Apple Foundation Models (on-device)
+        // Level 1: Apple Foundation Models (on-device, iOS 18.1+ devices with
+        // Apple Intelligence). Primary brain when supported.
         if GigiFoundationAgent.isSupported {
             if let r = await agent.process(text: text, history: history) {
                 let refined = refineBrainOutput(r, userText: text, localIntent: localIntent)
@@ -83,17 +60,13 @@ final class GigiBrainPipeline {
             }
         }
 
-        // Level 2: Gemini REST API — skip for high-confidence local action intents
-        if !isHighConfidenceAction, let r = await cloud.processWithGemini(text, history: history) {
-            let refined = refineBrainOutput(r, userText: text, localIntent: localIntent)
-            print("GIGI brain: Gemini ✓")
-            return refined
-        }
-
-        // Level 3: Local offline fallback — notify user that AI is unavailable
+        // Level 2: Local offline fallback — Apple Intelligence unavailable on
+        // this device or declined to handle. Cloud reasoning (Groq/Claude) is
+        // available via the harness path, not this pipeline — the agent loop
+        // in GigiAgentEngine routes there when needed.
         print("GIGI brain: local fallback")
         Task { @MainActor in
-            GigiSmartOrchestrator.shared.showBanner("⚠️ Offline — limited responses", autoHideAfter: 3)
+            GigiSmartOrchestrator.shared.showBanner("⚠️ Limited mode — Apple Intelligence unavailable", autoHideAfter: 3)
         }
         return localFallback(text: text, precomputed: localIntent)
     }

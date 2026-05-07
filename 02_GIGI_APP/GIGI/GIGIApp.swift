@@ -1,12 +1,12 @@
 import SwiftUI
 import AppIntents
-import GoogleSignIn
 import WebKit
+
+// GoogleSignIn + GigiAuthManager rimossi nel rework armando-rework (ADR-0004).
 
 @main
 struct GIGIApp: App {
     @UIApplicationDelegateAdaptor(GigiAppDelegate.self) var appDelegate
-    @StateObject var auth = GigiAuthManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -86,15 +86,15 @@ struct GIGIApp: App {
                     }
                 }
                 .onOpenURL { url in
+                    // gigi:// custom scheme handled here. Google OAuth callback
+                    // scheme rimosso con il kill GoogleSignIn (ADR-0004).
                     if url.scheme?.lowercased() == "gigi" {
                         if url.host == "listen" {
                             startListenFromControl()
                             return
                         }
                         NotificationCenter.default.post(name: .gigiGatewayCallback, object: url)
-                        return
                     }
-                    _ = GIDSignIn.sharedInstance.handle(url)
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { handlePendingControlListenIfAny() }

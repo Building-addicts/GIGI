@@ -10,17 +10,18 @@ import UserNotifications
 
 // MARK: - OnboardingView
 //
-// Multi-step onboarding: welcome → permissions → API keys (Groq + Gemini) →
+// Multi-step onboarding: welcome → permissions → API key (Groq) →
 // harness (Mac backend URL+secret, skippable) → profile → wake word → done.
 // Only shown once (UserDefaults flag). Permissions are requested in-flow.
+//
+// Gemini key step removed in rework armando-rework (2026-05-07, ADR-0004)
+// — Gemini Live + Gemini REST sradicati.
 
 struct OnboardingView: View {
     @Binding var isPresented: Bool
     @State private var step = 0
     @State private var apiKey = ""
-    @State private var geminiKey = ""
     @State private var showKey = false
-    @State private var showGemini = false
     @State private var micGranted = false
     @State private var contactsGranted = false
     @State private var calendarGranted = false
@@ -211,32 +212,6 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, 24)
 
-                // Gemini (realtime voice)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Gemini key — realtime voice (optional)")
-                        .font(.caption).foregroundColor(.white.opacity(0.5))
-                    HStack {
-                        if showGemini {
-                            TextField("AIza...", text: $geminiKey)
-                                .font(.system(.body, design: .monospaced))
-                                .autocorrectionDisabled()
-                        } else {
-                            SecureField("Paste Gemini key (AIza...)", text: $geminiKey)
-                                .font(.system(.body, design: .monospaced))
-                        }
-                        Button(action: { showGemini.toggle() }) {
-                            Image(systemName: showGemini ? "eye.slash" : "eye")
-                                .foregroundColor(.white.opacity(0.4))
-                        }
-                    }
-                    .padding(14)
-                    .background(Color.white.opacity(0.07))
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.purple.opacity(0.4), lineWidth: 1))
-                    Text("Free tier at aistudio.google.com/apikey. Without it, voice falls back to on-device TTS (slower, flat).")
-                        .font(.caption2).foregroundColor(.white.opacity(0.4))
-                }
-                .padding(.horizontal, 24)
             }
             .padding(.vertical, 8)
         }
@@ -642,14 +617,10 @@ struct OnboardingView: View {
     // MARK: - Actions
 
     private func handleContinue() {
-        // Save keys when leaving step 2
+        // Save key when leaving step 2 (Groq only after Gemini removal — ADR-0004)
         if step == 2 {
             let g = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if !g.isEmpty { GigiConfig.setGroqAPIKey(g) }
-            let gem = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !gem.isEmpty {
-                GigiKeychain.save(gem, forKey: GigiKeychain.Key.geminiAPIKey)
-            }
         }
         // Save profile when leaving step 4
         if step == 4 {
@@ -701,9 +672,6 @@ struct OnboardingView: View {
         let existing = GigiConfig.groqAPIKey
         if !existing.isEmpty, existing != "$(GROQ_API_KEY)" {
             apiKey = existing
-        }
-        if let g = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !g.isEmpty {
-            geminiKey = g
         }
         if let u = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) { harnessURL = u }
         if let s = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) { harnessSecret = s }

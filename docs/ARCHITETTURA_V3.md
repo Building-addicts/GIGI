@@ -1224,7 +1224,9 @@ func predictNextTool(from history: [GigiContent]) -> [String]? {
 
 ## 13. Gemini Live WebSocket — Barge-in e streaming
 
-### Architettura Live
+> ⛔ **RIMOSSO nel rework armando-rework (2026-05-07, ADR-0004)**. Tutto il path Gemini Live + Gemini REST è stato sradicato: file `GigiRealtimeEngine.swift` cancellato, classe `GigiAuthManager` cancellata, dipendenza `GoogleSignIn` rimossa, cascade `GigiBrainPipeline` semplificata a `Apple Foundation Models → local NLU`. Cloud reasoning vive ora solo nel harness (Groq/Claude via `GigiHarnessClient`). Sezione mantenuta sotto come archeologia tecnica.
+
+### Architettura Live (storica — non più presente nel codice)
 
 ```
 AVAudioEngine
@@ -1940,11 +1942,42 @@ Commit `0d6ddc1` · ADR: [ADR-0002](adr/0002-claude-dual-path-cli-vs-sdk.md)
 
 #### Wake Word "Hey GIGI" — soft-kill MVP
 
-Commit (in arrivo) · ADR: [ADR-0003](adr/0003-wake-word-soft-kill-mvp.md)
+Commit `7e587fb` · ADR: [ADR-0003](adr/0003-wake-word-soft-kill-mvp.md)
 
 **Decisione**: kill soft. Engine `GigiWakeWordEngine` resta nel codebase, gated da `static let isDisabledForMVP = true`. La capability row "Wake Word" in `DashboardView` è ora condizionata sul flag (nascosta in MVP). Settings ha già la sezione "🎙️ Talk to GIGI" sostitutiva con copy esplicativa.
 
 **Razionale**: iOS non permette mic continuo background per app non-VoIP. Sostituito da Back Tap / Action Button / Siri AppIntent (issue [#102](https://github.com/Building-addicts/GIGI/issues/102)). Riattivazione v1.1 = flip flag + remove condition guard (~2 righe).
+
+#### Gemini (Live + REST) + Google Sign-In — kill totale
+
+Commit (in arrivo) · ADR: [ADR-0004](adr/0004-uproot-gemini-and-google-signin.md)
+
+**Decisione**: kill totale. ~1200 righe rimosse, dipendenza `GoogleSignIn` SDK eliminata.
+
+File cancellati:
+- `GigiRealtimeEngine.swift` (1062 righe — Gemini Live WebSocket full-duplex con barge-in)
+- `GigiAuthManager.swift` (134 righe — pure Google Sign-In OAuth wrapper)
+
+Edit principali:
+- `GigiBrainPipeline.swift` — cascade da 4 livelli a 2: Apple Foundation Models → local NLU. Rimossi L0 (Gemini Live) e L2 (Gemini REST, che era già un alias verso Groq).
+- `GigiSmartOrchestrator.swift` — handler `onStreamingUtteranceComplete` + `onBargein` rimossi, metodo `executeRealtimeToolCall` rimosso, var `usingRealtimeMic` rimossa (era write-only).
+- `GigiActionDispatcher.swift` — metodo `executeRealtimeTool` rimosso.
+- `GigiCloudService.swift` — alias legacy `processWithGemini` rimosso (puntava già a `processWithGroq`).
+- `GIGIApp.swift` — import `GoogleSignIn` + `GigiAuthManager.shared` + `GIDSignIn.handle(url)` rimossi.
+- `MainTabView.swift` — `@StateObject auth` rimosso.
+- `OnboardingView.swift` — step "Gemini key (optional)" rimosso, `geminiKey` state + save logic rimossi.
+- `SettingsView.swift` — campo + `saveGeminiKey()` + `SettingsField.geminiKey` rimossi.
+- `GigiConfig.swift` — `geminiAPIKey` getter, `setGeminiAPIKey` setter, e migration helper rimossi.
+- `GigiKeychain.swift` — chiave `geminiAPIKey` rimossa.
+- `Info.plist` — `CFBundleURLTypes` block "GoogleSignIn" rimosso (URL scheme `com.googleusercontent.apps.*`).
+- `Config.example.xcconfig` — `GEMINI_API_KEY` rimosso, `PICOVOICE_ACCESS_KEY` rimosso (Porcupine deprecato), `GROQ_API_KEY` aggiunto come canonical.
+- `README_SETUP.md` — riscritto: niente più Gemini Vision, niente più Porcupine wake word.
+- `ARCHITETTURA_V3.md §13` — sezione "Gemini Live WebSocket" marcata RIMOSSO con nota archeologica.
+
+⚠️ **Cleanup manuale residuo** (richiede Xcode):
+- Apri Xcode → **Project → Package Dependencies → GoogleSignIn → (-) Remove**. Senza questo step, `Package.resolved` + `project.pbxproj` mantengono la pin GoogleSignIn-iOS (e le 6 dipendenze transitive Google: `app-check`, `appauth-ios`, `googleutilities`, `gtm-session-fetcher`, `gtmappauth`, `promises`).
+- Esegui `xcodebuild -resolvePackageDependencies` per rigenerare `Package.resolved` clean.
+- I 5 file Swift cancellati nelle phase 1+2 vanno rimossi anche dalle reference `project.pbxproj` (file rossi in Project navigator → Cmd-Click → Delete → Remove Reference).
 
 ### Convenzione per future modifiche
 

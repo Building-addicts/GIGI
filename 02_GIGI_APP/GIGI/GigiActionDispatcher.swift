@@ -74,44 +74,6 @@ final class GigiActionDispatcher {
         }
     }
 
-    // MARK: - Execute from Realtime tool call (Gemini Live WebSocket)
-
-    func executeRealtimeTool(_ call: GigiToolCall) async -> String {
-        let intent = Self.mapToolCall(call)
-        print("GIGI realtime tool → intent: \(intent.label)")
-
-        switch intent.label {
-        case "remember":
-            let contact = intent.params["contact"] ?? intent.params["key"] ?? ""
-            let rawBody = intent.params["body"]    ?? intent.params["value"] ?? ""
-            if let (key, value) = GigiMemory.parseRememberKeyValue(contact: contact, body: rawBody) {
-                await longMemory.remember(key: key, value: value)
-                let msg = "Got it — saved."
-                speech.speak(msg)
-                return msg
-            }
-            return "I need a key and value to save."
-
-        case "recall":
-            let query = intent.params["query"] ?? intent.params["key"] ?? ""
-            if query.isEmpty { return "What should I look up?" }
-            if let value = await longMemory.recallResolving(query) {
-                speech.speak(value)
-                return value
-            }
-            return "Nothing saved for '\(query)'."
-
-        default:
-            let result = await bridge.execute(intent)
-            if intent.label == "make_call", result.hasPrefix("Calling ") {
-                let c = intent.params["contact"] ?? ""
-                if !c.isEmpty { await longMemory.touchContactIfKnown(c) }
-            }
-            if !result.isEmpty { speech.speak(result) }
-            return result
-        }
-    }
-
     // MARK: - Caption for Live Activity
 
     private func caption(for intent: GigiIntent) -> String {

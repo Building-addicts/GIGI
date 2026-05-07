@@ -5,7 +5,7 @@ import SwiftUI
 // All configuration in one place: API keys, wake word, privacy, debug.
 
 enum SettingsField: Hashable {
-    case groqKey, geminiKey, harnessURL, harnessSecret
+    case groqKey, harnessURL, harnessSecret
 }
 
 private enum SettingsSheet: String, Identifiable {
@@ -19,7 +19,6 @@ private enum SettingsSheet: String, Identifiable {
 
 struct SettingsView: View {
     @State private var groqKey = ""
-    @State private var geminiKey = ""
     @State private var showQRScanner = false
     @State private var showKey = false
     @State private var connectionStatus: String = "—"
@@ -759,13 +758,6 @@ struct SettingsView: View {
         guard !trimmed.isEmpty else { return }
         GigiConfig.setGroqAPIKey(trimmed)
         connectionStatus = "Key saved"
-    }
-
-    private func saveGeminiKey() {
-        let trimmed = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        GigiConfig.setGeminiAPIKey(trimmed)
-        connectionStatus = "Gemini key saved"
     }
 
     private func testConnection() async {

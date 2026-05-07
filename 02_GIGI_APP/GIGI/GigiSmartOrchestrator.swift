@@ -66,7 +66,6 @@ class GigiSmartOrchestrator: ObservableObject {
     private let speech       = GigiSpeechService.shared
     private let memory       = GigiConversationMemory.shared
 
-    private var usingRealtimeMic   = false
     private var pendingCallContact = ""
 
     // Turn finalization: completeWithDone is deferred until TTS reports finished so the
@@ -134,21 +133,6 @@ class GigiSmartOrchestrator: ObservableObject {
                 self.currentVoiceTurnId = nil
             }
         }
-        GigiRealtimeEngine.shared.onStreamingUtteranceComplete = { [weak self] text in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.isListening = false
-                await self.process(text: text)
-            }
-        }
-
-        // Barge-in: user spoke while realtime voice was playing audio → stop TTS, listen
-        GigiRealtimeEngine.shared.onBargein = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.interruptAndListen(source: "realtime")
-            }
-        }
-
         // Wire interim events from agent loop → status bar + sound/haptics
         agentEngine.onInterimEvent = { [weak self] event in
             guard let self else { return }
@@ -418,12 +402,6 @@ class GigiSmartOrchestrator: ObservableObject {
         }
     }
 
-    // MARK: - Realtime voice tool execution (called by GigiRealtimeEngine)
-
-    func executeRealtimeToolCall(_ call: GigiToolCall) async -> String {
-        await dispatcher.executeRealtimeTool(call)
-    }
-
     // MARK: - Listening control
 
     // MARK: - Quick Talk entry point
@@ -439,7 +417,6 @@ class GigiSmartOrchestrator: ObservableObject {
         speech.stopSpeaking()
         isListening = true
         status = "GIGI: Listening..."
-        usingRealtimeMic = false
         GigiAudioManager.shared.startRecording()
         Task { await GigiLiveActivityController.shared.beginListening() }
     }
@@ -460,7 +437,6 @@ class GigiSmartOrchestrator: ObservableObject {
         speech.stopSpeaking()
         isListening = true
         status      = "GIGI: Listening..."
-        usingRealtimeMic = false
         GigiAudioManager.shared.startRecording()
         Task { await GigiLiveActivityController.shared.beginListening() }
     }
@@ -481,7 +457,6 @@ class GigiSmartOrchestrator: ObservableObject {
         isListening = true
         isThinking = false
         status = "GIGI: Listening..."
-        usingRealtimeMic = false
 
         if GigiAudioManager.shared.state == .speaking {
             GigiAudioManager.shared.startRecording()

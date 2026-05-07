@@ -6,25 +6,12 @@ enum GigiConfig {
 
     static var groqAPIKey: String {
         if let k = GigiKeychain.load(forKey: GigiKeychain.Key.groqAPIKey), !k.isEmpty { return k }
-        // Fallback: migrate existing Gemini key slot if present (one-time migration)
-        if let k = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !k.isEmpty { return k }
         let raw = Bundle.main.object(forInfoDictionaryKey: "GROQ_API_KEY") as? String ?? ""
         return raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func setGroqAPIKey(_ key: String) {
         GigiKeychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.groqAPIKey)
-    }
-
-    // MARK: - Gemini API key (Realtime WebSocket engine — stored in Keychain only)
-
-    static var geminiAPIKey: String {
-        if let k = GigiKeychain.load(forKey: GigiKeychain.Key.geminiAPIKey), !k.isEmpty { return k }
-        return ""
-    }
-
-    static func setGeminiAPIKey(_ key: String) {
-        GigiKeychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: GigiKeychain.Key.geminiAPIKey)
     }
 
 }
