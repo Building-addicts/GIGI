@@ -2023,6 +2023,24 @@ Commit (in arrivo)
 
 **Convenzione** (per future modifiche): qualsiasi config template dimostrativo che il team vuole conservare ma NON spedire come default attivo va in `server/examples/` con suffisso `.example.{json,yml}`.
 
+#### Endpoint debug `/api/ios/push/test` + `/api/ios/memory/all` — TENUTI dopo valutazione
+
+Commit (in arrivo) — **decisione di non-kill**, documentata per evitare ri-valutazione futura.
+
+**Stato verificato (2026-05-07)**:
+- `POST /api/ios/push/test` (file dedicato `server/api/ios-push-test.js`, ~22 righe) — manda push APNS di test al deviceId. **Zero caller iOS** (nessun client Swift lo invoca).
+- `GET /api/ios/memory/all` (funzione `handleAll` dentro `server/api/ios-memory.js`) — dump completo della memoria harness per deviceId. **Zero caller iOS**.
+
+**Considerati per kill**, ma **tenuti perché**:
+- Sono **debug tools** standalone via curl, non feature user-facing. Costo runtime zero (dormono finché non chiamati).
+- `/push/test` salva ~20 min nel giorno in cui si configura APNS su device nuovo (alternativa: triggerare un watcher per testarlo, più macchinoso).
+- `/memory/all` salva ~30 min nel giorno in cui si debug un problema di memoria server-side (alternativa: scrivere script ad-hoc per leggere il JSON).
+- Niente manutenzione ongoing (~80 righe totali, semplici, non toccano stack rotto).
+
+**Quando ri-considerare il kill**: se entro 6 mesi nessuno li chiama via curl per debug E se decidi che la memoria harness non sarà mai usata da app (oggi: app usa CloudKit, harness memory inerte). A quel punto, kill safe via `git revert` o nuovo commit.
+
+**NON sono "dimenticati"** — sono tenuti per scelta. Se torni qui pensando "a che servono?" → leggi questa entry prima di toccare.
+
 #### Build verify — Post-Phase 2 (commit `1bb6d63`)
 
 Eseguito 2026-05-07 su MacInCloud (FF125, Xcode 26.3, Build 17C529):
