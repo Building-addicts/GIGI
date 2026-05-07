@@ -2120,6 +2120,53 @@ Il `GigiToolRegistry.selectRelevant(for: text)` decide quali tool mandare al mod
 
 **Note**: il #1 è il primo da fare — è low-risk, high-value, no breaking change. Gli altri sono refactor sostanziali da pianificare.
 
+#### TD-002 — Memoria GIGI: 3 layer scollegati da unificare
+
+**Stato corrente** (verificato 2026-05-07):
+La "memoria utente" di GIGI vive oggi in **3 sottosistemi paralleli** che NON si parlano:
+
+1. **`GigiMemory.swift`** (iOS, ~417 righe)
+   - Backend: CloudKit `iCloud.com.killsiri.GIGI` (private database) + RAM cache write-through
+   - Schema: `Dictionary<String, String>` con prefix-keys (`contact:`, `routine:`, `pref:`, `place:`, `person:`)
+   - Fallback graceful: local-only mode su Sideloadly (bundle ID rifirmato) / simulatore / free Apple ID
+   - **È quello che usi oggi** — i tool `remember`/`recall` lo chiamano
+
+2. **`GigiVectorStore.swift`** (iOS, ~259 righe, sidecar)
+   - Indice vettoriale parallelo aggiornato ad ogni `GigiMemory.remember()`
+   - Scopo: recall semantico (es. *"chi è il familiare di Anna?"* → trova `contact:marco fratello di anna` per significato)
+   - **Sperimentale** — non wired ai tool production, classificato in capability map come kill-candidate
+
+3. **`03_HARNESS/memory/store.js` + `backends/json-store.js`** (Node, ~100 righe)
+   - File JSON locale sul Mac, uno per `userId` (= deviceId iPhone)
+   - Esposto via 4 endpoint HTTP (`/api/ios/memory/{put,query,delete,all}`)
+   - **Zero caller iOS** — l'app non lo usa, va su CloudKit
+   - Costruito come infrastruttura per uso futuro (multi-device sync? watcher context? unclear)
+   - Factory pattern con branch `lancedb` broken (file `lancedb-store.js` non esiste)
+
+**Problemi della frammentazione attuale**:
+
+- **Sovrapposizione concettuale**: tutti e 3 dicono di salvare "memoria utente". Quale è la sorgente di verità?
+- **Scollegamento funzionale**: il harness non sa cosa l'utente ha salvato in CloudKit. Se un watcher proattivo vuole *"ricordagli del compleanno di Marco"*, non ha accesso a `contact:marco` perché vive solo su iPhone.
+- **Vector store dormiente**: il sidecar è completamente isolato dal flow tool, non viene mai interrogato per recall.
+- **3 schema diversi**: prefix-keys (iOS), JSON entries con tags (harness), embedding vectors (sidecar). Niente shared contract.
+- **Decisioni puntuali rischiose**: cambiare uno dei 3 layer senza una visione unitaria genera debito (es. la Q8 del rework — kill della factory harness — sarebbe una patch chirurgica isolata che non risolve la frammentazione).
+
+**Direzione progettuale ideale** (da definire):
+
+Unificare i 3 layer in un'**architettura della memoria coerente** con questi possibili principi:
+
+- **Una sola sorgente di verità** per la memoria utente (probabilmente CloudKit, perché è dove l'utente si aspetta di trovarla cross-device).
+- **Sync bidirezionale iOS ↔ harness** quando l'utente è online (così i watcher proattivi possono leggere il context utente).
+- **Vector search integrato**, non sidecar. Embedding + retrieval come parte dello stack standard di `recall()`.
+- **Schema condiviso** (probabilmente schema iOS prefix-keys come canonical).
+- **Layered cache**: RAM in app, JSON locale sul harness come cache offline, CloudKit come sorgente.
+
+**Quando affrontare**:
+
+**Alla fine del rework armando-rework**, dopo aver chiuso le altre domande aperte (subagent gap, health-check, ecc.). Razionale del PM (@ArmandoBattaglino, 2026-05-07): patch isolate sui sotto-layer (es. opzione 1/2/3 della Q8) sono spreco — meglio aspettare e fare un design coerente in una phase dedicata, dopo che il resto del repo è pulito.
+
+**Implicazione operativa**: per ora **NON tocchiamo** la factory `memory/store.js`, il branch `lancedb` broken, o i 2 example config con `"upgrade_target": "lancedb"`. Convivono col loro stato attuale. Verranno toccati nella phase "Unificazione memoria" come parte di un design unitario.
+
 ---
 
 ### Convenzione per future modifiche
