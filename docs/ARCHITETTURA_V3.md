@@ -30,6 +30,7 @@
 18. [Struttura file del progetto](#18-struttura-file-del-progetto)
 19. [Roadmap implementativa](#19-roadmap-implementativa)
 20. [Metriche di successo](#20-metriche-di-successo)
+21. [Rework log (living)](#21-rework-log-living) — tracking modifiche dal 2026-05-07 in poi
 
 ---
 
@@ -610,6 +611,8 @@ Giro 3: make_call { contact: "Marco", contact_id: "contact:marco_ufficio" }
 ```
 idle → wakeWordListening → recording → speaking → idle
 ```
+
+> ⚠️ **MVP gating (rework 2026-05-07)** — Lo stato `wakeWordListening` è raggiungibile solo se `GigiWakeWordEngine.isDisabledForMVP == false`. In MVP la flag è `true`, quindi la state machine si riduce di fatto a `idle → recording → speaking → idle`, attivata da Action Button / Back Tap / Siri AppIntent. Riattivazione in v1.1: flip della flag (vedi [ADR-0003](adr/0003-wake-word-soft-kill-mvp.md)).
 
 ### Dynamic Silence — timeout adattivo
 
@@ -1870,5 +1873,89 @@ Il resto dell'app non sa nulla del cambiamento — riceve ancora lo stesso
 
 ---
 
+## 21. Rework log (living)
+
+> Sezione **viva** — aggiornata a ogni commit del rework `armando-rework`.
+> Tracciamento delle modifiche fatte dal 2026-05-07 in poi (post-deescalation team, Armando ora unico dev).
+> Ogni voce link-a il commit + ADR + file di analisi nel `docs/rework/`.
+
+### Indice rework
+- [Capability map iniziale](#capability-map-iniziale-2026-05-07) — audit di partenza, ~160 capability mappate
+- [Phase 1 — Kill list](#phase-1--kill-list-2026-05-07) — 16 file dead-code rimossi
+- [Phase 2 — Chirurgia](#phase-2--chirurgia-2026-05-07) — consolidamenti che richiedono decisione di prodotto
+
+### Capability map iniziale (2026-05-07)
+
+Commit `455a36e` · file: `docs/rework/`
+
+Audit completo del codebase pre-rework. Output: 5 file di inventario (160 capability totali) + cruscotto decisionale con kill list / chirurgia / non-toccare.
+
+| File | Capability | Scope |
+|---|---|---|
+| `CAPABILITY_MAP.md` | — | cruscotto decisionale (TL;DR per ogni decisione) |
+| `CAPABILITIES_iOS.md` | 56 | app Swift `02_GIGI_APP/` |
+| `CAPABILITIES_harness.md` | 38 | harness Node `03_HARNESS/` |
+| `CAPABILITIES_infra.md` | 38 | MDM, GH Actions, hooks, scripts, runbooks |
+| `CAPABILITIES_crosscut.md` | 30 user-facing | flussi end-to-end iOS+Harness |
+
+### Phase 1 — Kill list (2026-05-07)
+
+Commit `7e4a7f5` · razionale: codice ad alta confidenza con zero call-site verificati via grep.
+
+**iOS (5 file)**:
+- `GigiMDNSDiscovery.swift` — Bonjour LAN browser mai attivato (LAN-only mode mai applicato)
+- `PermissionConfirmationSheet.swift` — sheet orfano (residuo sub-issue #79)
+- `HarnessQRScanner.swift` — duplicato AVFoundation; mantenuto VisionKit `GigiPairScanner`
+- `GIGIWidget/GIGIWidget.swift` + `AppIntent.swift` — boilerplate Xcode `Time:/favoriteEmoji`, non registrato in `GIGIWidgetBundle`
+
+**Harness — channel router stack (8 file + 2 edit)**:
+- `api/channel-router.js` + `channels/{telegram,whatsapp,channel-interface}.js` + `audio/{stt,tts,normalize}.js` + `identity/user-mapper.js`
+- `server.js`: rimosso import + init + handle()
+- `config.example.mac.json`: rimossi blocchi `telegram` / `whatsapp`
+- Razionale: GIGI è iPhone-only post-MVP. Il file stesso dichiarava `_default disabled`.
+
+**Harness — browser-pool legacy (1 file)**:
+- `browser-pool/server.js` (Puppeteer MCP) — soppiantato da `driver.js`. NB: `server-playwright.js` resta vivo, è ancora usato da `claude-runner.js` via `mcp-browser.json`.
+
+**Infra (2 file)**:
+- `.github/workflows/setup-post-mvp-status.yml` — workflow_dispatch one-shot già eseguito
+- `scripts/setup-project.sh` — bootstrap GitHub Project v2 idempotente già eseguito
+
+⚠️ **Xcode pbxproj**: i 5 `.swift` cancellati restano referenziati in `02_GIGI_APP/GIGI.xcodeproj/project.pbxproj`. Aprire Xcode → file rossi → Cmd-Click → Delete → Remove Reference prima della prossima build su MacInCloud.
+
+### Phase 2 — Chirurgia (2026-05-07)
+
+Consolidamenti che richiedono decisione di prodotto (non puro kill di dead-code). Ogni decisione formalizzata in ADR.
+
+#### Doppio path Claude — boundary esplicito
+
+Commit `0d6ddc1` · ADR: [ADR-0002](adr/0002-claude-dual-path-cli-vs-sdk.md)
+
+**Decisione**: tenere entrambi i path con scope esclusivo.
+
+- `claude-runner.js` (CLI subprocess via subscription Claude Code) → unico canale per voice / agent / orchestration generale.
+- `ios-computer-use.js` (Anthropic SDK con API key, billing per-token) → unico canale per computer-use server-side (Playwright loop).
+
+**Vincolo**: nessun altro file può importare `@anthropic-ai/sdk`. Boundary già pulito nel codice — l'ADR lo blinda.
+
+#### Wake Word "Hey GIGI" — soft-kill MVP
+
+Commit (in arrivo) · ADR: [ADR-0003](adr/0003-wake-word-soft-kill-mvp.md)
+
+**Decisione**: kill soft. Engine `GigiWakeWordEngine` resta nel codebase, gated da `static let isDisabledForMVP = true`. La capability row "Wake Word" in `DashboardView` è ora condizionata sul flag (nascosta in MVP). Settings ha già la sezione "🎙️ Talk to GIGI" sostitutiva con copy esplicativa.
+
+**Razionale**: iOS non permette mic continuo background per app non-VoIP. Sostituito da Back Tap / Action Button / Siri AppIntent (issue [#102](https://github.com/Building-addicts/GIGI/issues/102)). Riattivazione v1.1 = flip flag + remove condition guard (~2 righe).
+
+### Convenzione per future modifiche
+
+Ogni commit del rework deve aggiungere una riga sotto la phase corrente di questa sezione 21, con:
+- SHA breve del commit
+- 1 riga di summary
+- Link ADR se la decisione è strutturale
+
+Quando una phase è chiusa (tutti i todo del cruscotto `CAPABILITY_MAP.md` evasi), aggiungere una nuova `### Phase N` sotto.
+
+---
+
 *GIGI v3 — Paper tecnico — Aprile 2026 — Rev. 2 (peer reviewed)*
-*Leonardo Corte + Claude Code*
+*Rework — Maggio 2026 — Armando Battaglino (solo dev) + Claude Code*

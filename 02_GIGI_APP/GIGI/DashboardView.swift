@@ -77,7 +77,12 @@ struct DashboardView: View {
                                   detail: groqReady ? "Vision loop active" : "Needs Groq key")
                     capabilityRow("Long-term Memory",   icon: "brain",                  color: .purple, active: memoryCount > 0,
                                   detail: "\(memoryCount) memories saved")
-                    capabilityRow("Wake Word",          icon: "ear.fill",               color: .yellow, active: wakeWordEnabled)
+                    // Wake Word row hidden while GigiWakeWordEngine.isDisabledForMVP gates
+                    // the engine (#102, ADR-0003). Triggers documented in Settings →
+                    // "Talk to GIGI" (Back Tap / Action Button / Siri AppIntent).
+                    if !GigiWakeWordEngine.isDisabledForMVP {
+                        capabilityRow("Wake Word",      icon: "ear.fill",               color: .yellow, active: wakeWordEnabled)
+                    }
                     capabilityRow("Music (Apple)",      icon: "music.note",             color: .pink,   active: true)
                     capabilityRow("Spotify",            icon: "music.mic",              color: .green,  active: false,
                                   detail: "Opens app, tap to play")
