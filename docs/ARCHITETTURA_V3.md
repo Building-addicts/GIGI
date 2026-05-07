@@ -1979,6 +1979,14 @@ Edit principali:
 - Esegui `xcodebuild -resolvePackageDependencies` per rigenerare `Package.resolved` clean.
 - I 5 file Swift cancellati nelle phase 1+2 vanno rimossi anche dalle reference `project.pbxproj` (file rossi in Project navigator → Cmd-Click → Delete → Remove Reference). Xcode 26.3 li gestisce graziosamente come warning, ma è cosmetico.
 
+#### GigiDayPlanReasoner — soft-kill MVP
+
+Commit (in arrivo) · ADR: [ADR-0005](adr/0005-day-plan-reasoner-soft-kill-mvp.md)
+
+**Decisione**: kill soft, stesso pattern del Wake Word. `GigiPlannerEngine` (task decomposer del flow agent) **resta vivo e centrale**. `GigiDayPlanReasoner` (day planner, sub 1/4 di parent #15) viene gated da `isDisabledForMVP = true` perché la sub 4/4 (#59) — registrazione del tool `propose_day_plan` in `GigiToolRegistry` — non è mai stata chiusa, quindi nessun caller production lo invoca: gli unici 3 smoke test in `GIGIApp.swift` `#if DEBUG` sono ora commentati.
+
+**Razionale**: la feature "Day Plan capability" è post-MVP. ~300 righe restano dormienti, riattivazione v1.1 = 3 step (flip flag + chiudi sub 4/4 + decommenta smoke test). Naming clash con `GigiPlannerEngine` ora chiarito da ADR.
+
 #### Build verify — Post-Phase 2 (commit `1bb6d63`)
 
 Eseguito 2026-05-07 su MacInCloud (FF125, Xcode 26.3, Build 17C529):
@@ -1996,6 +2004,34 @@ Risultato: ** BUILD SUCCEEDED ** (al 2° tentativo dopo fix `GigiToolCall`)
 - Risolto: re-introdotto come prefix in `GigiActionDispatcher.swift` (3 campi `name/args/callId`). No edit pbxproj richiesto perché il file ospitante è già nel target.
 
 **IPA generata**: `_IPA_DROP/GIGI-armando-rework.ipa` (4.2 MB Debug, unsigned — Sideloadly firma in-flight per installazione).
+
+### Codice congelato — index (living)
+
+> **Indice unico** dei pezzi di codice attualmente parcheggiati ma conservati nel codebase per riattivazione futura. Convenzione uniforme: ogni pezzo ha una `static let isDisabledForMVP = true` nella sua classe principale + un ADR che documenta scope, motivazione, e procedura di riattivazione.
+>
+> Quando torni a guardare il repo dopo mesi e ti chiedi "cosa avevo congelato?", **leggi questa tabella per primo**.
+
+| Capability | Flag | File principale | ADR | Per riattivare |
+|---|---|---|---|---|
+| **Wake Word "Hey GIGI"** | `GigiWakeWordEngine.isDisabledForMVP` | [GigiWakeWordEngine.swift:41](../02_GIGI_APP/GIGI/GigiWakeWordEngine.swift) | [ADR-0003](adr/0003-wake-word-soft-kill-mvp.md) | flip flag a `false` + remove condition guard nella DashboardView (~2 righe) |
+| **Day Plan Reasoner** | `GigiDayPlanReasoner.isDisabledForMVP` | [GigiDayPlanReasoner.swift:75](../02_GIGI_APP/GIGI/GigiDayPlanReasoner.swift) | [ADR-0005](adr/0005-day-plan-reasoner-soft-kill-mvp.md) | flip flag + chiudi sub 4/4 ([#59](https://github.com/Building-addicts/GIGI/issues/59), registra tool `propose_day_plan` in `GigiToolRegistry`) + decommenta i 3 smoke test in `GIGIApp.swift` |
+
+#### Verifica veloce: quanti pezzi sono congelati ora?
+
+```bash
+grep -rn "isDisabledForMVP\s*=\s*true" 02_GIGI_APP/GIGI/ | wc -l
+```
+
+Il numero deve combaciare con le righe in tabella sopra. Se ne trovi di più → qualcuno ha aggiunto un soft-kill senza aggiornare questa tabella + senza scrivere ADR. Convenzione: **niente flag senza ADR + entry in tabella**.
+
+#### Convenzione per aggiungere nuovi pezzi congelati
+
+1. Aggiungi `static let isDisabledForMVP = true` alla classe principale, con commento esplicativo che cita issue + ADR.
+2. Tutti i public entry point della classe hanno guard `Self.isDisabledForMVP` early-return.
+3. Disabilita / commenta i caller production con riferimento all'ADR.
+4. Scrivi ADR `NNNN-<feature>-soft-kill-mvp.md` (copia da `0003` o `0005`).
+5. Aggiungi una riga a questa tabella.
+6. Aggiungi sotto-sezione in §21 phase corrente con SHA del commit.
 
 ### Convenzione per future modifiche
 

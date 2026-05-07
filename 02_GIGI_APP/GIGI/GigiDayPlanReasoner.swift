@@ -68,12 +68,25 @@ final class GigiDayPlanReasoner {
     static let shared = GigiDayPlanReasoner()
     private init() {}
 
+    /// MVP soft-kill flag (rework armando-rework, ADR-0005). Quando `true`,
+    /// tutti gli entry points ritornano `nil` immediatamente. Il codice della
+    /// classe resta intatto: la sub-issue 4/4 (#59) non è mai stata chiusa,
+    /// quindi nessun tool registrato chiama questo engine in produzione. I
+    /// 3 smoke test DEBUG in `GIGIApp.swift` sono stati disabilitati nello
+    /// stesso commit.
+    ///
+    /// Per riattivare in v1.1: flip a `false` + completa sub 4/4 (registra
+    /// tool `propose_day_plan` in `GigiToolRegistry`) + ri-abilita i debug
+    /// runner in `GIGIApp.swift` se servono. Tutto il resto è già pronto.
+    static let isDisabledForMVP = true
+
     // MARK: - Public entry point (sub #57: real calendar)
 
     /// Compone un piano per OGGI usando il calendario utente reale via tool
     /// `read_week_calendar` (preferito) o `read_calendar` (fallback). Il
     /// caller passa pref + task espliciti.
     func reasonForToday(preferences: [String], tasks: [String]) async -> DayPlanOutput? {
+        guard !Self.isDisabledForMVP else { return nil }
         let events = await loadCalendarEvents()
         let nowISO = ISO8601DateFormatter().string(from: Date())
         let input = DayPlanInput(events: events, preferences: preferences, tasks: tasks, nowISO: nowISO)
@@ -87,6 +100,7 @@ final class GigiDayPlanReasoner {
         preferenceSource: DayPlanPreferenceSource = LivePreferenceSource(),
         taskSource: DayPlanTaskSource = LiveTaskSource()
     ) async -> DayPlanOutput? {
+        guard !Self.isDisabledForMVP else { return nil }
         let prefs = preferenceSource.currentPreferences()
         let tasks = taskSource.currentSessionTasks()
         return await reasonForToday(preferences: prefs, tasks: tasks)
@@ -131,6 +145,7 @@ final class GigiDayPlanReasoner {
     // MARK: - Engine (sub #56)
 
     func reason(input: DayPlanInput) async -> DayPlanOutput? {
+        guard !Self.isDisabledForMVP else { return nil }
         let prompt = Self.buildSystemPrompt(input: input)
         let t0 = Date()
 
