@@ -1,5 +1,19 @@
 import Foundation
 
+// MARK: - GigiToolCall
+//
+// Generic tool/function call structure used by the agent loop and on-device
+// tool dispatcher. Originally lived in GigiRealtimeEngine.swift (Gemini Live
+// schema) but the type itself is provider-agnostic — kept here after Gemini
+// removal (ADR-0004) since `mapToolCall` and the +Native extension still
+// consume it.
+
+struct GigiToolCall: Sendable {
+    let name: String
+    let args: [String: String]
+    let callId: String
+}
+
 // MARK: - GigiActionDispatcher
 //
 // Translates a GigiAgentResponse / GigiToolCall into a concrete action and executes it
