@@ -1251,7 +1251,11 @@ final class GigiToolRegistry {
         TorchOnTool(), TorchOffTool(), FaceTimeTool(), FaceTimeAudioTool(),
         MediaPlayPauseTool(), MediaNextTool(), MediaPreviousTool(),
         ReadCalendarTool(), ReadWeekCalendarTool(), FindFreeSlotTool(),
-        ProposeDayPlanTool(),
+        // ProposeDayPlanTool() — soft-killed nel rework armando-rework (ADR-0005).
+        // GigiDayPlanReasoner è gated da isDisabledForMVP=true → questo tool
+        // ritornava sempre .failure ad ogni invocazione del modello, degradando
+        // l'UX. Riattivare insieme alla sub 4/4 #59. La struct ProposeDayPlanTool
+        // resta definita più sopra nel file per facile recupero.
         SearchWebTool(), ReadNewsTool(), SendEmailTool(),
         ToggleWifiTool(), ToggleBluetoothTool(),
         HomekitOnTool(), HomekitOffTool(), HomekitDimTool(),
@@ -1273,11 +1277,9 @@ final class GigiToolRegistry {
         "toggle_wifi", "toggle_bluetooth",
         "media_next", "media_previous", "media_play_pause",
         "read_calendar",
-        "ask_claude",
-        // Sub #59: chiave demo scene 5. Tag-match già presente, ma sempre
-        // incluso per garantire che l'agent loop possa proporre il piano
-        // anche su query laterali ("organizziamo la giornata", etc.).
-        "propose_day_plan"
+        "ask_claude"
+        // "propose_day_plan" — rimosso col soft-kill ADR-0005 (vedi commento sopra
+        // nella lista `all`). Riattivare insieme alla sub 4/4 #59.
     ]
 
     private lazy var byName: [String: any GigiTool] = {

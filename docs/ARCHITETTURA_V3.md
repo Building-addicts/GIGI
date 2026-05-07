@@ -2014,7 +2014,7 @@ Risultato: ** BUILD SUCCEEDED ** (al 2° tentativo dopo fix `GigiToolCall`)
 | Capability | Flag | File principale | ADR | Per riattivare |
 |---|---|---|---|---|
 | **Wake Word "Hey GIGI"** | `GigiWakeWordEngine.isDisabledForMVP` | [GigiWakeWordEngine.swift:41](../02_GIGI_APP/GIGI/GigiWakeWordEngine.swift) | [ADR-0003](adr/0003-wake-word-soft-kill-mvp.md) | flip flag a `false` + remove condition guard nella DashboardView (~2 righe) |
-| **Day Plan Reasoner** | `GigiDayPlanReasoner.isDisabledForMVP` | [GigiDayPlanReasoner.swift:75](../02_GIGI_APP/GIGI/GigiDayPlanReasoner.swift) | [ADR-0005](adr/0005-day-plan-reasoner-soft-kill-mvp.md) | flip flag + chiudi sub 4/4 ([#59](https://github.com/Building-addicts/GIGI/issues/59), registra tool `propose_day_plan` in `GigiToolRegistry`) + decommenta i 3 smoke test in `GIGIApp.swift` |
+| **Day Plan Reasoner** | `GigiDayPlanReasoner.isDisabledForMVP` | [GigiDayPlanReasoner.swift:75](../02_GIGI_APP/GIGI/GigiDayPlanReasoner.swift) | [ADR-0005](adr/0005-day-plan-reasoner-soft-kill-mvp.md) | flip flag + chiudi sub 4/4 ([#59](https://github.com/Building-addicts/GIGI/issues/59), registra tool `propose_day_plan` in `GigiToolRegistry`) + decommenta i 3 smoke test in `GIGIApp.swift` + decommenta la riga `ProposeDayPlanTool()` in `GigiToolRegistry.all` + riaggiungi `"propose_day_plan"` a `alwaysIncluded` |
 
 #### Verifica veloce: quanti pezzi sono congelati ora?
 
