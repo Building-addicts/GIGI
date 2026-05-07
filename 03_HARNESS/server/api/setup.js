@@ -9,7 +9,7 @@
 //
 // Modalità "lan" (mDNS advertise _gigi._tcp.local) rimossa nel rework
 // — mai usata in pratica (richiede iPhone+Mac sulla stessa rete LAN, edge
-// case fuori dal target demo). Vedi Architecture Armando Revision §21 per dettagli.
+// case fuori dal target demo). Vedi Architecture-Armando-Revision §21 per dettagli.
 //
 // Named mode endpoints are stubbed and return 501 NOT_IMPLEMENTED — they
 // require a Cloudflare OAuth app registration which is follow-up work.

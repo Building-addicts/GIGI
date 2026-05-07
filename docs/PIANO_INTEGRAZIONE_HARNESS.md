@@ -262,7 +262,7 @@ Decisione 1: parti con JSON, upgrade dopo. API stabile, backend swappabile.
 
 - [ ] **14.1** `browser-pool/driver.js` — API diretta (no MCP), esponi `lease/release/execute(page, action)`
 - [ ] **14.2** Aggiungi dipendenza `@anthropic-ai/sdk` a `03_HARNESS/server/package.json`
-- [ ] **14.3** `server/api/ios-computer-use.js` — loop Anthropic Computer Use (ref: `Architecture Armando Revision.md §9`)
+- [ ] **14.3** `server/api/ios-computer-use.js` — loop Anthropic Computer Use (ref: `Architecture-Armando-Revision.md §9`)
   - Model `claude-opus-4-7` con tool `computer_20241022` (decisione 2)
   - Screenshot scaled 1280×800 JPEG q70
   - CONFIRM_REQUIRED pattern match → pausa + APNS
@@ -308,7 +308,7 @@ Decisione 3: drop completo. Niente `clients/telegram/`.
 ### Fase 18 — Docs + test E2E (4h)
 
 - [ ] **18.1** Scrivi `03_HARNESS/docs/api/ios-integration.md` completo
-- [ ] **18.2** Aggiorna `Architecture Armando Revision.md` §9.BIS con architettura finale
+- [ ] **18.2** Aggiorna `Architecture-Armando-Revision.md` §9.BIS con architettura finale
 - [ ] **18.3** Aggiorna `docs/COMPONENTS.md` con nuovo layout
 - [ ] **18.4** Scrivi `03_HARNESS/README.md` (quick start Mac + deploy)
 - [ ] **18.5** Test E2E scenario 1: iOS → "ricordati che Marco è allergico alle noci" → memoria persiste → query dopo riavvio app

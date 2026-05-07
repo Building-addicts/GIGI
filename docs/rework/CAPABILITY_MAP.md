@@ -67,7 +67,7 @@ Questo doc è il **cruscotto** per decidere cosa tagliare. Le 4 sezioni dettagli
 - Zero test in `03_HARNESS/` — niente `test/`, niente `*.test.js`. Se introduci breakage durante il rework, te ne accorgi solo a runtime.
 - 8 decisioni de-facto NON sono ADR (memory backend, computer-use model, drop Telegram, env-var, port mapping, Bearer secret, `GigiPlanner` deprecato, no ambient listening). Da promuovere ad ADR per blindare il rework.
 - ADR `0001` (Cloudflare Tunnel) è l'unico esistente ed è coerente. Tutto il resto del routing è "tribal knowledge".
-- `Architecture Armando Revision.md` ha contraddizioni interne: §"Struttura" cita ancora `telegram-bridge/` (driopato), §8 descrive `GigiWebAgent` (assente in `COMPONENTS.md`), §13 descrive `GigiRealtimeEngine` (assente in MVP_SCOPE), §9 vs §9.BIS descrivono due backend diversi.
+- `Architecture-Armando-Revision.md` ha contraddizioni interne: §"Struttura" cita ancora `telegram-bridge/` (driopato), §8 descrive `GigiWebAgent` (assente in `COMPONENTS.md`), §13 descrive `GigiRealtimeEngine` (assente in MVP_SCOPE), §9 vs §9.BIS descrivono due backend diversi.
 
 ## Cosa rimane MVP-critical (NON tagliare prima del lancio)
 
@@ -93,6 +93,6 @@ Tutto il resto (~20 capability user-facing + 100+ moduli interni) è candidato s
 **Fase 3 — Sfoltimento Tool Registry (1 commit)**: `GigiToolRegistry` da 38 → 8 tool MVP.
 **Fase 4 — Sperimentali (1 commit)**: stralcio 14 capability sperimentali.
 **Fase 5 — ADR formalization**: scrivi gli 8 ADR mancanti.
-**Fase 6 — Doc reconciliation**: allinea `Architecture Armando Revision.md` + `COMPONENTS.md` allo stato reale post-rework.
+**Fase 6 — Doc reconciliation**: allinea `Architecture-Armando-Revision.md` + `COMPONENTS.md` allo stato reale post-rework.
 
 Build verify dopo ogni fase. Se rompe qualcosa di MVP, rollback solo della fase rotta.

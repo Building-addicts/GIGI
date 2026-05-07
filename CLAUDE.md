@@ -13,7 +13,7 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | Devi… | Apri |
 |---|---|
 | **Scope MVP del lancio (cosa serve venerdì)** | **`docs/MVP_SCOPE.md`** |
-| Capire l'architettura V3 | `docs/Architecture Armando Revision.md` |
+| Capire l'architettura V3 | `docs/Architecture-Armando-Revision.md` |
 | Piano integrazione harness | `docs/PIANO_INTEGRAZIONE_HARNESS.md` |
 | Test E2E | `docs/TEST_E2E.md` |
 | Onboarding utente / pairing / sideload | `docs/GETTING_STARTED.md` |

@@ -1572,7 +1572,7 @@ struct AgentResult {
 ```
 GIGI/
 ├── docs/
-│   ├── Architecture Armando Revision.md   ← questo documento (rev. Armando)
+│   ├── Architecture-Armando-Revision.md   ← questo documento (rev. Armando)
 │   ├── PIANO_INTEGRAZIONE_HARNESS.md
 │   ├── TEST_E2E.md
 │   ├── COMPONENTS.md            ← mappa "quale file fa cosa" per funzione
@@ -1972,7 +1972,7 @@ Edit principali:
 - `Info.plist` — `CFBundleURLTypes` block "GoogleSignIn" rimosso (URL scheme `com.googleusercontent.apps.*`).
 - `Config.example.xcconfig` — `GEMINI_API_KEY` rimosso, `PICOVOICE_ACCESS_KEY` rimosso (Porcupine deprecato), `GROQ_API_KEY` aggiunto come canonical.
 - `README_SETUP.md` — riscritto: niente più Gemini Vision, niente più Porcupine wake word.
-- `Architecture Armando Revision.md §13` — sezione "Gemini Live WebSocket" marcata RIMOSSO con nota archeologica.
+- `Architecture-Armando-Revision.md §13` — sezione "Gemini Live WebSocket" marcata RIMOSSO con nota archeologica.
 
 ⚠️ **Cleanup manuale residuo** (NON bloccante — build passa lo stesso, ma cosmetico):
 - Apri Xcode → **Project → Package Dependencies → GoogleSignIn → (-) Remove**. Senza questo step, `Package.resolved` + `project.pbxproj` mantengono la pin GoogleSignIn-iOS (e le 6 dipendenze transitive Google: `app-check`, `appauth-ios`, `googleutilities`, `gtm-session-fetcher`, `gtmappauth`, `promises`). Il framework resta linkato ma non importato — overhead binary minimo.

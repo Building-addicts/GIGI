@@ -436,13 +436,13 @@
 
 ## FASE 9 — Integrazione Harness (`03_HARNESS/`)
 
-Il sottosistema Node è stato assorbito nel repo GIGI. Vedi `Architecture Armando Revision.md` §9.BIS per contesto.
+Il sottosistema Node è stato assorbito nel repo GIGI. Vedi `Architecture-Armando-Revision.md` §9.BIS per contesto.
 
 ### 9.0 — Git / layout
 
 - [x] **9.0.1** Rimuovere `.git` nested di `03_HARNESS/` (1 commit, in sync, zero lavoro locale) ✅
 - [x] **9.0.2** Aggiornare path refs stale (`Harness/` → `03_HARNESS/`) in docs harness ✅
-- [x] **9.0.3** Aggiungere sezione 9.BIS ad `Architecture Armando Revision.md` ✅
+- [x] **9.0.3** Aggiungere sezione 9.BIS ad `Architecture-Armando-Revision.md` ✅
 - [x] **9.0.4** Aggiornare `INVENTARIO_COMPLETO.md` con contenuto harness ✅
 
 ### 9.1 — Bootstrap Mac
@@ -506,4 +506,4 @@ Task 9.3–9.5 sotto si attivano solo se C/D/E scelti. Se A o B: chiudere fase 9
 
 ---
 
-*Task plan generato: 2026-04-21 — basato su Architecture Armando Revision.md rev.2*
+*Task plan generato: 2026-04-21 — basato su Architecture-Armando-Revision.md rev.2*

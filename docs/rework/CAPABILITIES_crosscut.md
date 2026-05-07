@@ -2,7 +2,7 @@
 
 > Vista trasversale: ogni capability user-facing attraversa iOS + harness Node + (a volte) Shortcut iOS / APNS / MDM. Questo doc traccia il flusso end-to-end per ogni capability principale, in modo che decidendo di sfoltire una parte si veda subito cosa rompe a valle/monte.
 >
-> Fonti: `docs/MVP_SCOPE.md`, `docs/Architecture Armando Revision.md` (rev. 2), `docs/COMPONENTS.md`, `docs/PIANO_INTEGRAZIONE_HARNESS.md`, `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/memory/PROJECT.md`, `docs/memory/CONTEXT.md`, `docs/adr/`, `03_HARNESS/docs/api/ios-integration.md`, `docs/runbooks/talk-to-gigi-universal-shortcut.md`.
+> Fonti: `docs/MVP_SCOPE.md`, `docs/Architecture-Armando-Revision.md` (rev. 2), `docs/COMPONENTS.md`, `docs/PIANO_INTEGRAZIONE_HARNESS.md`, `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/memory/PROJECT.md`, `docs/memory/CONTEXT.md`, `docs/adr/`, `03_HARNESS/docs/api/ios-integration.md`, `docs/runbooks/talk-to-gigi-universal-shortcut.md`.
 >
 > Data: 2026-05-07. Riflette stato repo a inizio "Settimana lancio MVP" (deadline 1 maggio già scaduta; il repo conserva tutta la struttura del lancio).
 
@@ -79,7 +79,7 @@ Capability che l'utente finale percepisce, una riga ciascuna. Le otto numerate d
   - Harness: `server/api/ios-agent.js`, `server/api/ios-stream.js`, `server/session-manager.js`, `server/claude-runner.js`, `server/queue.js`
   - Altro: APNS opzionale per recovery
 - **ADR rilevanti**: nessuno (Presence Mode emerso da `VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, pre-ADR)
-- **Doc rilevanti**: `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/MVP_SCOPE.md` §2, `docs/Architecture Armando Revision.md` §5
+- **Doc rilevanti**: `docs/VOICE_ASSISTANT_SYSTEM_ANALYSIS.md`, `docs/MVP_SCOPE.md` §2, `docs/Architecture-Armando-Revision.md` §5
 - **Risk se rimossa**: si perde l'intera tesi MVP. Quick Talk è un degraded substitute (singolo turno, non conversazione)
 - **Sostituibile da**: Quick Talk + Background Talk loop su Shortcut Dictate Text (50 iterazioni). Funziona per demo se wake word non è affidabile
 
@@ -158,7 +158,7 @@ Capability che l'utente finale percepisce, una riga ciascuna. Le otto numerate d
   - Harness: `server/api/ios-memory.js`, `memory/store.js`, `memory/backends/json-store.js`
   - Altro: CloudKit (Apple e2e encrypted)
 - **ADR rilevanti**: nessuno (decisione "MVP JSON → swap LanceDB" è in `PIANO_INTEGRAZIONE_HARNESS.md` §5, non promosso ad ADR)
-- **Doc rilevanti**: `docs/Architecture Armando Revision.md` §11, `03_HARNESS/memory-upgrade/` (design only, non implementato)
+- **Doc rilevanti**: `docs/Architecture-Armando-Revision.md` §11, `03_HARNESS/memory-upgrade/` (design only, non implementato)
 - **Risk se rimossa**: si perde AC#6/#7 della demo. Il "personale" del prodotto sparisce
 - **Sostituibile da**: hardcoded curated demo memory (allowed da MVP_SCOPE §3 "small curated demo memory"). È il path di taglio realistico
 
@@ -220,7 +220,7 @@ Capability che l'utente finale percepisce, una riga ciascuna. Le otto numerate d
 - **Status MVP**: probabilmente post-MVP per la maggior parte dei siti — MVP_SCOPE §"Out of scope" #6 esclude "Full WhatsApp automation"
 - **Flusso end-to-end**: iOS AgentEngine → `web_whatsapp` / `web_book_restaurant` → `GigiWebAgent` WKWebView nascosto Desktop UA → click selectors → result string
 - **File chiave**:
-  - iOS: `GigiWebAgent.swift` (riferito in `Architecture Armando Revision.md` §8 ma non in `COMPONENTS.md` — possibile assenza nel codice attuale)
+  - iOS: `GigiWebAgent.swift` (riferito in `Architecture-Armando-Revision.md` §8 ma non in `COMPONENTS.md` — possibile assenza nel codice attuale)
   - Harness: nessuno (è on-device)
 - **Risk se rimossa**: cade Scene 6 (WhatsApp Fede). Ma è sostituibile da `OPEN:whatsapp://send?phone=...` Shortcut path che apre WhatsApp e lascia all'utente premere Send
 - **Sostituibile da**: deep link `whatsapp://send` via Apple Shortcut → soluzione raccomandata da `talk-to-gigi-universal-shortcut.md` per la demo
@@ -357,7 +357,7 @@ Capability che l'utente finale percepisce, una riga ciascuna. Le otto numerate d
 
 ### 27. CoreML Instant Commands
 
-- **Status MVP**: probabilmente sperimentale — `Architecture Armando Revision.md` §7 lo descrive ma `GigiNLU.mlmodel` esiste in repo come modello generico, non c'è evidence di "Instant Commands" branch
+- **Status MVP**: probabilmente sperimentale — `Architecture-Armando-Revision.md` §7 lo descrive ma `GigiNLU.mlmodel` esiste in repo come modello generico, non c'è evidence di "Instant Commands" branch
 - **Flusso**: STT testo → CoreML classifier → se score alto e label in `instantCommands` → exec sync (< 50ms), bypass tutto
 - **File chiave**: `GigiNLUEngine.swift`, `GigiNLU.mlmodel`, `GigiNLU_Transformer.mlpackage`, `gigi_labels.json`
 - **Risk se rimossa**: "torch on" passa da 50ms a 800ms. Demo non lo richiede
@@ -367,7 +367,7 @@ Capability che l'utente finale percepisce, una riga ciascuna. Le otto numerate d
 
 - **Status MVP**: **fuori scope MVP** (MVP_SCOPE §"Out of scope" #3 esclude ambient listening; Live è fattualmente non-ambient ma è feature complessa). Talking Session usa REST + STT, non Live
 - **Flusso**: `GigiRealtimeEngine` apre WSS Gemini → stream PCM 16kHz → Gemini emette functionCall + audio TTS → barge-in
-- **File chiave**: `GigiRealtimeEngine.swift` (riferito in `Architecture Armando Revision.md` §13 ma non in `COMPONENTS.md` — **possibile orfano / non implementato**)
+- **File chiave**: `GigiRealtimeEngine.swift` (riferito in `Architecture-Armando-Revision.md` §13 ma non in `COMPONENTS.md` — **possibile orfano / non implementato**)
 - **Risk se rimossa**: zero per MVP
 - **Sostituibile da**: già sostituito da REST + on-device VAD (è il path attuale). **Forte candidato sfoltimento**
 
@@ -394,17 +394,17 @@ Feature che il codice/docs accenna ma non sembrano completamente vivi/implementa
 
 | Capability | Status | Evidence |
 |---|---|---|
-| **Gemini Live full-duplex (`GigiRealtimeEngine`)** | Sperimentale / orfano | Citato in `Architecture Armando Revision.md` §13 e §18 (struttura file), assente da `COMPONENTS.md`. Probabile decisione di tagliarlo silenziosamente |
-| **GigiWebAgent (WhatsApp Web/TheFork on-device)** | Sperimentale / progettato | `Architecture Armando Revision.md` §8 lo descrive in dettaglio, **non compare in `COMPONENTS.md` §iOS App**. Solo `GigiAutoSender.swift` come surrogate |
-| **`GigiVectorStore` (RAG locale NL embeddings)** | Sperimentale | `Architecture Armando Revision.md` §11/§18 lo descrive, NON in `COMPONENTS.md` |
-| **Context Caching Gemini** | Sperimentale | `Architecture Armando Revision.md` §3 lo descrive, fase 6 roadmap. Nessuna evidenza implementazione |
-| **Meta-classifier locale** | Sperimentale | `Architecture Armando Revision.md` §3 idem, fase 6 roadmap |
+| **Gemini Live full-duplex (`GigiRealtimeEngine`)** | Sperimentale / orfano | Citato in `Architecture-Armando-Revision.md` §13 e §18 (struttura file), assente da `COMPONENTS.md`. Probabile decisione di tagliarlo silenziosamente |
+| **GigiWebAgent (WhatsApp Web/TheFork on-device)** | Sperimentale / progettato | `Architecture-Armando-Revision.md` §8 lo descrive in dettaglio, **non compare in `COMPONENTS.md` §iOS App**. Solo `GigiAutoSender.swift` come surrogate |
+| **`GigiVectorStore` (RAG locale NL embeddings)** | Sperimentale | `Architecture-Armando-Revision.md` §11/§18 lo descrive, NON in `COMPONENTS.md` |
+| **Context Caching Gemini** | Sperimentale | `Architecture-Armando-Revision.md` §3 lo descrive, fase 6 roadmap. Nessuna evidenza implementazione |
+| **Meta-classifier locale** | Sperimentale | `Architecture-Armando-Revision.md` §3 idem, fase 6 roadmap |
 | **Streaming TTS pipeline** | Sperimentale | `GigiSpeechService.streamSpeak()` riferito in §3 + roadmap fase 6 |
 | **CoreML Instant Commands** | Sperimentale | Concept in §7. Modello esiste, branch dedicato no |
-| **`GigiPlanner.swift`** | **Deprecato esplicitamente** | `Architecture Armando Revision.md` §2 + §18 + Note finali "DEPRECATO (sostituito da agent loop)". File esiste in `COMPONENTS.md` (`GigiOrchestrator.swift`, `GigiSmartOrchestrator.swift` lo sostituiscono) |
+| **`GigiPlanner.swift`** | **Deprecato esplicitamente** | `Architecture-Armando-Revision.md` §2 + §18 + Note finali "DEPRECATO (sostituito da agent loop)". File esiste in `COMPONENTS.md` (`GigiOrchestrator.swift`, `GigiSmartOrchestrator.swift` lo sostituiscono) |
 | **`memory-upgrade/` (LanceDB + BGE-M3 v4)** | Design only | `03_HARNESS/memory-upgrade/README.md` dice esplicitamente "design only, non implementato" |
 | **Multi-user federated fine-tuning** | Design only | `03_HARNESS/memory-upgrade/multi-user-v1/` |
-| **`telegram-bridge/` Telegram I/O** | **Removed (fase 17 PIANO)** | `PIANO_INTEGRAZIONE_HARNESS.md` §5 decisione 3 "DROPPA TUTTO". `Architecture Armando Revision.md` §9.BIS conferma drop. Vecchio paragrafo §"Struttura" alla fine del doc lo lista ancora — incoerenza interna del paper |
+| **`telegram-bridge/` Telegram I/O** | **Removed (fase 17 PIANO)** | `PIANO_INTEGRAZIONE_HARNESS.md` §5 decisione 3 "DROPPA TUTTO". `Architecture-Armando-Revision.md` §9.BIS conferma drop. Vecchio paragrafo §"Struttura" alla fine del doc lo lista ancora — incoerenza interna del paper |
 | **Iroh / iroh-ffi P2P** | **Killed** | `ADR-0001` esplicitamente esclude (libreria archiviata Feb 2025) |
 | **Tailscale come default** | Killed for default | `ADR-0001` esclude come default, ammesso come "advanced path" |
 | **Apple Foundation Models L1** | Conditional / iOS 18+ | Referenced ma usabilità reale incerta su device sideload |
@@ -423,9 +423,9 @@ Solo 2 ADR esistono in `docs/adr/`:
 2. "Computer-use model = `claude-opus-4-7`" — idem decisione 2
 3. "Drop completo Telegram" — idem decisione 3
 4. "Mac dev / VPS prod via env-var, no path hardcoded" — idem decisione 4
-5. "Porte 7777 admin / 7778 RPC / 7779 iOS" — `Architecture Armando Revision.md` §9.BIS
+5. "Porte 7777 admin / 7778 RPC / 7779 iOS" — `Architecture-Armando-Revision.md` §9.BIS
 6. "Bearer secret in iOS Keychain" — idem
-7. "GigiPlanner deprecato in favore di GigiAgentEngine loop" — `Architecture Armando Revision.md` §2 §"Note finali"
+7. "GigiPlanner deprecato in favore di GigiAgentEngine loop" — `Architecture-Armando-Revision.md` §2 §"Note finali"
 8. "Talking Session = killer MVP, non ambient listening" — `MVP_SCOPE.md` §2
 
 → **Questi 8 punti sono ottimi candidati per essere promossi a ADR formali** durante il rework, in modo che decisioni di sfoltimento non re-litighino ground già concordato.
@@ -492,11 +492,11 @@ Top-3 per **costo manutenzione** (numero file iOS + Harness + dipendenze esterne
 
 Solo 1 ADR esiste, e non è apparentemente contraddetto dal codice. Ma ci sono **incoerenze fra docs** che meritano un ADR di chiarimento:
 
-1. **`Architecture Armando Revision.md` §"Struttura" finale** elenca ancora `telegram-bridge/`, `browser-mcp/`, `transcribe.js` come parte attiva, MA **§9.BIS dice "Telegram droppato fase 17"** e `PIANO_INTEGRAZIONE_HARNESS.md` §5 lo conferma. → Servirebbe ADR "Telegram dropped" + cleanup paper
-2. **`Architecture Armando Revision.md` §8 dichiara `GigiWebAgent` come pilastro web automation on-device**, ma `COMPONENTS.md` non lo elenca tra i file iOS. → o è non implementato, o è documentazione stale
-3. **`Architecture Armando Revision.md` §13 descrive `GigiRealtimeEngine` con Gemini Live**, ma `COMPONENTS.md` non lo elenca. `MVP_SCOPE.md` non parla di Live. → probabile sperimentale orfano
-4. **`PROJECT.md` Tech Stack dice "Apple FM iOS 17+"**, ma `Architecture Armando Revision.md` dice "iOS 18+" per Apple Foundation Models. → minor inconsistency
-5. **`Architecture Armando Revision.md` §9 (backend Anthropic-SDK-diretto + BullMQ + Redis)** vs **§9.BIS (harness reale, no Redis, no BullMQ)** → §9 e §9.BIS descrivono due backend potenzialmente diversi. §9 stesso ammette "L'overlap funzionale è parziale" — ma il gap concreto NON è chiarito. → ADR per riconciliare
+1. **`Architecture-Armando-Revision.md` §"Struttura" finale** elenca ancora `telegram-bridge/`, `browser-mcp/`, `transcribe.js` come parte attiva, MA **§9.BIS dice "Telegram droppato fase 17"** e `PIANO_INTEGRAZIONE_HARNESS.md` §5 lo conferma. → Servirebbe ADR "Telegram dropped" + cleanup paper
+2. **`Architecture-Armando-Revision.md` §8 dichiara `GigiWebAgent` come pilastro web automation on-device**, ma `COMPONENTS.md` non lo elenca tra i file iOS. → o è non implementato, o è documentazione stale
+3. **`Architecture-Armando-Revision.md` §13 descrive `GigiRealtimeEngine` con Gemini Live**, ma `COMPONENTS.md` non lo elenca. `MVP_SCOPE.md` non parla di Live. → probabile sperimentale orfano
+4. **`PROJECT.md` Tech Stack dice "Apple FM iOS 17+"**, ma `Architecture-Armando-Revision.md` dice "iOS 18+" per Apple Foundation Models. → minor inconsistency
+5. **`Architecture-Armando-Revision.md` §9 (backend Anthropic-SDK-diretto + BullMQ + Redis)** vs **§9.BIS (harness reale, no Redis, no BullMQ)** → §9 e §9.BIS descrivono due backend potenzialmente diversi. §9 stesso ammette "L'overlap funzionale è parziale" — ma il gap concreto NON è chiarito. → ADR per riconciliare
 6. **`MVP_SCOPE.md` §"Out of scope" #6 esclude "Full WhatsApp automation"** ma **§"In scope" #4 demo example è `Write to Fede on WhatsApp`** → la riconciliazione è "draft-only, no real send" ma codice (`GigiAutoSender.swift`) lascia ambiguità
 7. **`CONTEXT.md` Active Threads** menziona "U0: utente deve installare Tailscale" ma **ADR-0001 dice Cloudflare Quick Tunnel = default MVP, Tailscale = advanced path** → context.md scritto prima di ADR-0001? Possibile. Da aggiornare
 

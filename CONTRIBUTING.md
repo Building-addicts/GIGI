@@ -168,6 +168,6 @@ Salvalo e prosegui. Il `CLAUDE.local.md` viene letto dal tuo Claude Code in aggi
 - `CLAUDE.md` — context per agenti AI
 - `docs/README.md` — indice cartella docs
 - `docs/GETTING_STARTED.md` — onboarding utente finale (non dev)
-- `docs/Architecture Armando Revision.md` — architettura "True Agent" V3
+- `docs/Architecture-Armando-Revision.md` — architettura "True Agent" V3
 - `docs/adr/` — decisioni storiche
 - `docs/runbooks/` — procedure ripetitive
