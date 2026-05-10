@@ -95,6 +95,17 @@ final class GigiMemory {
             print("GIGI Memory: iCloud unavailable (no ubiquity token) — local-only mode")
             return
         }
+        // TEMPORARY BYPASS (rework armando-rework, 2026-05-08):
+        // CKContainer(identifier:) raises an uncatchable NSException when the
+        // container `iCloud.com.killsiri.GIGI` is listed in entitlements but
+        // NOT yet created/deployed in CloudKit Dashboard for team R5N92QSPQ6.
+        // The app crashes at launch on first install. We skip the CKContainer
+        // init entirely; memory falls back to RAM-cache local-only mode.
+        // Remove this guard once the container is verified to exist in
+        // https://icloud.developer.apple.com → Containers.
+        print("GIGI Memory: CloudKit container init bypassed (rework v1) — local-only mode")
+        return
+
         // 4. Now safe to construct the container.
         let container = CKContainer(identifier: Self.cloudContainerID)
         self.container = container
