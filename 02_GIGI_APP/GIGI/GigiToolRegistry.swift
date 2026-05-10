@@ -1247,11 +1247,17 @@ final class GigiToolRegistry {
 
     private init() {}
 
-    // MARK: - Meta-classifier
+    // MARK: - Meta-classifier (DEPRECATED — to be replaced by Apple FM Tool calling in Phase 2)
 
     /// Returns max 10 tools most relevant to `text`. Always includes the 5 high-frequency tools.
     /// Uses tag-based matching (keyword → tool) — no regex, no CoreML required.
-    func selectRelevant(for text: String) -> [any GigiTool] {
+    ///
+    /// DEPRECATED 2026-05-11: brittle keyword scoring. The 5-path plan (Phase 2) replaces
+    /// this with Apple FM `Tool` protocol native selection (iOS 26) — constrained decoding
+    /// picks the right tool from a 15-tool subset without keyword heuristics. Rename
+    /// preserved for grep-ability; remove when GigiFoundationToolRegistry lands.
+    @available(*, deprecated, message: "Replaced by Apple FM Tool calling in Phase 2. See plan §3.6.")
+    func selectRelevant_DEPRECATED(for text: String) -> [any GigiTool] {
         let lower = text.lowercased()
         let words = Set(lower.components(separatedBy: .whitespacesAndNewlines)
             .flatMap { $0.components(separatedBy: .punctuationCharacters) }

@@ -1200,9 +1200,10 @@ class GigiActionBridge {
             return msg
         }
         if !restaurant.isEmpty {
-            let q = "I don't see any delivery apps installed. Want me to call \(restaurant) directly?"
-            GigiSmartOrchestrator.shared.setPendingCallAction(contact: restaurant, prompt: q)
-            return q
+            // setPendingCallAction call removed (2026-05-11, zombie audit): the side-effect
+            // var pendingCallContact was never read elsewhere. The follow-up question is
+            // surfaced via speech only — user can respond by saying "call <restaurant>".
+            return "I don't see any delivery apps installed. Want me to call \(restaurant) directly?"
         }
         return "I don't see any delivery apps. Try installing Deliveroo, Uber Eats, or Glovo."
     }
@@ -1218,9 +1219,8 @@ class GigiActionBridge {
             let gLabel = guests == 1 ? "person" : "people"
             return "Done! Table booked at \(restaurant) for \(guests) \(gLabel) at \(time.isEmpty ? "8 PM" : time)."
         }
-        let q = "I couldn't book online at \(restaurant). Want me to call them?"
-        GigiSmartOrchestrator.shared.setPendingCallAction(contact: restaurant, prompt: q)
-        return q
+        // setPendingCallAction call removed (2026-05-11, zombie audit): see note above.
+        return "I couldn't book online at \(restaurant). Want me to call them?"
     }
 
     // MARK: - Helpers

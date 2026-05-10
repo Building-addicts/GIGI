@@ -66,7 +66,8 @@ class GigiSmartOrchestrator: ObservableObject {
     private let speech       = GigiSpeechService.shared
     private let memory       = GigiConversationMemory.shared
 
-    private var pendingCallContact = ""
+    // pendingCallContact removed (2026-05-11, zombie audit): was assigned by
+    // setPendingCallAction but never read elsewhere.
 
     // Turn finalization: completeWithDone is deferred until TTS reports finished so the
     // pill stays in `.speaking` while the synthesizer plays. `pendingDoneMessage` carries
@@ -160,10 +161,7 @@ class GigiSmartOrchestrator: ObservableObject {
     func refreshGatewayInstallPrompt() {
         showGatewayInstallPrompt = !UserDefaults.standard.bool(forKey: GigiGateway.isInstalledUserDefaultsKey)
     }
-    func markGatewayShortcutInstalled() {
-        UserDefaults.standard.set(true, forKey: GigiGateway.isInstalledUserDefaultsKey)
-        showGatewayInstallPrompt = false
-    }
+    // markGatewayShortcutInstalled() removed (2026-05-11, zombie audit): no call sites.
     func openGatewayShortcutDownloadPage() {
         // Open Shortcuts app directly. The iCloud link is user-specific — guide them to
         // create a shortcut named "GIGI_Gateway" that accepts text and runs a Phone call action.
@@ -175,9 +173,9 @@ class GigiSmartOrchestrator: ObservableObject {
             UIApplication.shared.open(icloud)
         }
     }
-    func setPendingCallAction(contact: String, prompt: String) {
-        pendingCallContact = contact
-    }
+    // setPendingCallAction(contact:prompt:) removed (2026-05-11, zombie audit):
+    // assigned pendingCallContact var that was never read elsewhere.
+    // Call sites in GigiActionBridge also removed in the same commit.
 
     func showBanner(_ message: String, autoHideAfter seconds: Double = 2.5) {
         bannerMessage = message
@@ -522,49 +520,7 @@ class GigiSmartOrchestrator: ObservableObject {
         return String(cap) + "…"
     }
 
-    /// Splits a text containing multiple sequential commands into individual parts.
-    /// Returns nil if only one command is detected (avoids false splits like "call mom and dad").
-    static func splitMultipleIntents(_ text: String) -> [String]? {
-        let lower = text.lowercased()
-
-        // Explicit sequential connectors — must separate two complete action phrases
-        let separators = [
-            ", and then ", " and then ", ", then ",
-            ", and also ", " and also ",
-            "; ", ", also ",
-        ]
-
-        var splitParts: [String] = []
-        for sep in separators {
-            if lower.contains(sep) {
-                splitParts = text.components(separatedBy: sep)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                if splitParts.count >= 2 { break }
-            }
-        }
-
-        guard splitParts.count >= 2 else { return nil }
-
-        // Each part must look like an independent actionable command
-        let actionKeywords: [String] = [
-            "call", "text", "message", "send",
-            "play", "listen", "queue",
-            "navigate", "directions", "take me to",
-            "open", "launch",
-            "timer", "create event", "set a reminder",
-            "remind", "weather", "forecast",
-            "search", "google", "look up",
-            "alarm", "email", "read email",
-            "turn on", "turn off", "news",
-        ]
-
-        let validParts = splitParts.filter { part in
-            let pl = part.lowercased()
-            return actionKeywords.contains { pl.contains($0) }
-        }
-
-        return validParts.count >= 2 ? validParts : nil
-    }
-
+    // splitMultipleIntents() removed (2026-05-11, zombie audit): no call sites.
+    // Multi-intent decomposition delegated to the 5-path router (Apple FM
+    // FoundationRouterDecision) and to Claude Code subprocess.
 }

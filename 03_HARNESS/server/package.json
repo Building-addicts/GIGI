@@ -9,6 +9,9 @@
     "panel": "node panel.js",
     "start:all": "bash start-all.sh"
   },
+  "_phase2_todos": [
+    "@anthropic-ai/sdk ^0.90.0 — tagged 2026-05-11: imported ONLY by api/ios-computer-use.js (Anthropic SDK loop with computer_20241022 tool). To be removed in Phase 3 (ADR-0007 TBD) when computer-use migrates to Claude Code CLI subprocess + MCP harness-browser. Removal also closes the silent API-billing risk (Issue claude-code#45572) — bootstrap script must unset ANTHROPIC_API_KEY at setup."
+  ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "bonjour-service": "^1.3.0",

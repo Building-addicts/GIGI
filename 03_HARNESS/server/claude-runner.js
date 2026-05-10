@@ -225,8 +225,13 @@ export async function runClaude(cfg, prompt, deviceId, onEvent, onSpawn, onSessi
   // options.domain: route to domain-specific system prompt + MCP config
   // options.schema: append JSON schema constraint to prompt
   // options.mcp_config: explicit MCP config path override
+  // options.mcpServers: array of named MCP servers to include (Phase 3 prep,
+  //   2026-05-11). Resolves each name to a config path via MCP_SERVER_PATHS,
+  //   then picks the first valid one (full multi-server merge will come with
+  //   the 5-path computer-use rewrite — see plan §4 / ADR-0007 TBD).
   const domain = options?.domain || null;
   const schema = options?.schema || null;
+  const mcpServers = Array.isArray(options?.mcpServers) ? options.mcpServers : [];
   const mcpConfigPath = options?.mcp_config || cfg.claude.mcp_config || null;
 
   const __dirname = path.dirname(new URL(import.meta.url).pathname);
@@ -237,6 +242,16 @@ export async function runClaude(cfg, prompt, deviceId, onEvent, onSpawn, onSessi
     research: path.join(__dirname, 'mcp-browser.json'),
   };
 
+  // Named MCP server registry (Phase 3 prep). Add new MCP servers here as
+  // they land. The iOS app passes server names — never raw paths — so the
+  // harness owns the actual config file locations.
+  const MCP_SERVER_PATHS = {
+    'harness-browser': path.join(__dirname, 'mcp-browser.json'),
+  };
+  const mcpServersConfigPath = mcpServers.length > 0
+    ? (MCP_SERVER_PATHS[mcpServers[0]] || null)
+    : null;
+
   // Domain → system prompt override
   const now = new Date().toISOString().slice(0, 10);
   const DOMAIN_PROMPTS = {
@@ -246,7 +261,10 @@ export async function runClaude(cfg, prompt, deviceId, onEvent, onSpawn, onSessi
     messaging:`You are GIGI's communication assistant. Draft messages, emails, and notifications concisely. Today: ${now}.`,
   };
 
-  const effectiveMcpConfig = mcpConfigPath || (domain ? DOMAIN_MCP[domain] : null);
+  // Precedence: explicit mcp_config > named mcpServers > domain default
+  const effectiveMcpConfig = mcpConfigPath
+    || mcpServersConfigPath
+    || (domain ? DOMAIN_MCP[domain] : null);
   const domainSystemPrompt = domain ? DOMAIN_PROMPTS[domain] : null;
 
   // If schema requested, append constraint to prompt

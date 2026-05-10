@@ -186,32 +186,9 @@ final class GigiCloudService {
         }
     }
 
-    // MARK: - NLU / Brain pipeline (Groq)
-
-    func processWithGroq(_ text: String, history: String) async -> GigiAgentResponse? {
-        let apiKey = GigiConfig.groqAPIKey
-        guard !apiKey.isEmpty else { return nil }
-
-        let prompt = history.isEmpty
-            ? text
-            : "--- Conversation history ---\n\(history)\n--- End history ---\n\nCurrent message: \(text)"
-
-        do {
-            let injectedSystem = await GigiUserProfile.shared.injectMVPContext(into: GigiFoundationAgent.systemPrompt)
-            GigiDebugLogger.log("LLM[groq-nlu] systemPrompt prefix=\(injectedSystem.prefix(80))")
-            let raw = try await callGroqRaw(
-                system: injectedSystem,
-                user: prompt,
-                model: agentModel,
-                maxTokens: 512,
-                temperature: 0.2
-            )
-            return GigiFoundationAgent.parse(raw: raw)
-        } catch {
-            print("GIGI Groq NLU error: \(error.localizedDescription)")
-            return nil
-        }
-    }
+    // processWithGroq removed (2026-05-11, zombie audit): was the old NLU brain
+    // pipeline level 2, no call sites since cascade replacement. Kept in git
+    // history if needed for reactivation.
 
     // MARK: - Task extraction (Sub #14 1/3)
 
@@ -240,39 +217,10 @@ final class GigiCloudService {
 
     // MARK: - NLU intent classification
 
-    func classifyIntent(_ text: String) async -> GigiIntent? {
-        let apiKey = GigiConfig.groqAPIKey
-        guard !apiKey.isEmpty else {
-            print("GIGI NLU [Groq]: API key missing — using local fallback")
-            return nil
-        }
-
-        let system = nluSystemPrompt()
-        let user   = "User input: \"\(text)\""
-
-        do {
-            let raw = try await withThrowingTaskGroup(of: String.self) { group in
-                group.addTask {
-                    try await self.callGroqRaw(system: system, user: user,
-                                               model: self.fastModel, maxTokens: 300, temperature: 0.0)
-                }
-                group.addTask {
-                    try await Task.sleep(nanoseconds: 3_000_000_000)
-                    throw GigiCloudError.timeout
-                }
-                let result = try await group.next()!
-                group.cancelAll()
-                return result
-            }
-            return parseIntentJSON(raw, originalText: text)
-        } catch GigiCloudError.timeout {
-            print("GIGI NLU [Groq]: timeout — local fallback")
-            return nil
-        } catch {
-            print("GIGI NLU [Groq]: \(error.localizedDescription)")
-            return nil
-        }
-    }
+    // classifyIntent + nluSystemPrompt + parseIntentJSON removed (2026-05-11,
+    // zombie audit): NLU intent classification migrated entirely to local
+    // GigiNLUEngine (Gate 2 fast-path). No call sites remain for Groq NLU.
+    // Kept in git history for reactivation if/when cloud NLU is reconsidered.
 
     // MARK: - Chat (generic question, no OAuth needed with Groq)
 
@@ -351,11 +299,9 @@ final class GigiCloudService {
         }
     }
 
-    // MARK: - Context cache stub (Groq has no cache — kept for API compat)
-
-    func createContextCache(systemPrompt: String = "", tools: [FunctionDeclaration]) async -> String? {
-        return nil
-    }
+    // createContextCache stub removed (2026-05-11, zombie audit): Groq has no
+    // context cache API, the stub returned nil and had zero call sites. Was
+    // a Gemini-era API compat placeholder.
 
     // MARK: - Private: HTTP
 
@@ -534,70 +480,9 @@ final class GigiCloudService {
         return text
     }
 
-    // MARK: - NLU system prompt + parser (unchanged from Gemini version)
-
-    private func nluSystemPrompt() -> String {
-        """
-        You are the NLU engine of GIGI, an iOS voice assistant. English only.
-        Analyze the text and return ONLY valid JSON, no extra text:
-
-        {"intent":"<label>","params":{"contact":"","body":"","platform":"","destination":"","query":"","app":"","text":"","title":"","date":"","time":"","restaurant":"","guests":""}}
-
-        Available intents (pick the most precise):
-        navigation      → wants to go somewhere / navigate
-        play_music      → wants to listen to music or an artist
-        make_call       → wants to call someone
-        send_message    → wants to send a message (WhatsApp, iMessage, SMS)
-        set_reminder    → wants a reminder
-        create_event    → wants to create a calendar event
-        ask_time        → asking the current time
-        ask_date        → asking today's date
-        weather         → asking about weather / forecast
-        open_app        → wants to open a specific app
-        torch_on        → turn on the flashlight
-        torch_off       → turn off the flashlight
-        toggle_wifi     → enable/disable wifi
-        toggle_bluetooth → enable/disable bluetooth
-        set_alarm       → set an alarm
-        search_web      → search something online
-        read_news       → read/listen to news on a topic
-        order_food      → order food from a restaurant via delivery
-        book_restaurant → book a table at a restaurant
-        ask_cloud       → generic question / historical fact (use when no other intent fits)
-        remember        → save a fact about a person/thing
-        recall          → ask what is known about someone
-
-        Param rules:
-        - contact: person's name (e.g. "mom", "John", "Sara Smith")
-        - body: message text to send
-        - platform: "whatsapp", "imessage", "telegram" — empty if not specified
-        - destination: place/address
-        - query: artist/song for play_music, or search query for search_web
-        - app: app name to open
-        - text: reminder text
-        - title: event title
-        - date: "tomorrow", "monday", "april 15"
-        - time: HH:MM format
-        """
-    }
-
-    private func parseIntentJSON(_ raw: String, originalText: String) -> GigiIntent? {
-        guard let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { return nil }
-        let jsonString = String(raw[start...end])
-        guard let data = jsonString.data(using: .utf8),
-              let obj  = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let intentLabel = obj["intent"] as? String
-        else { return nil }
-
-        var params: [String: String] = ["raw": originalText]
-        if let rawParams = obj["params"] as? [String: Any] {
-            for (k, v) in rawParams {
-                let s = (v as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !s.isEmpty { params[k] = s }
-            }
-        }
-        return GigiIntent(label: intentLabel, confidence: 0.97, params: params)
-    }
+    // nluSystemPrompt() + parseIntentJSON() removed (2026-05-11, zombie audit):
+    // were used only by classifyIntent() above, which is also removed. Local
+    // GigiNLUEngine + Gate 2 fast-path covers intent classification now.
 }
 
 // MARK: - Errors

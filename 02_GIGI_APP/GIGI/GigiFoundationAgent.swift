@@ -337,4 +337,88 @@ final class GigiFoundationAgent {
 
         return speech
     }
+
+    // MARK: - Local speech (moved from GigiBrainPipeline, 2026-05-11)
+    //
+    // Pure mapping `intent → English speech string`. Used by GigiAgentEngine
+    // fast-path (Gate 2) for instant TTS without LLM round-trip. Was the
+    // only live function left in GigiBrainPipeline (now archived to _legacy/).
+
+    static func localSpeech(for intent: GigiIntent) -> String {
+        let contact = intent.params["contact"]     ?? ""
+        let dest    = intent.params["destination"] ?? ""
+        let query   = intent.params["query"]       ?? ""
+        let app     = intent.params["app"]         ?? ""
+
+        switch intent.label {
+        case "make_call":
+            return contact.isEmpty ? "Who do you want to call?" : "Calling \(contact)."
+        case "send_message":
+            let platform = (intent.params["platform"] ?? "iMessage").capitalized
+            return contact.isEmpty ? "Who should I message?" : "Messaging \(contact) on \(platform)."
+        case "navigate", "navigation":
+            return dest.isEmpty ? "Where do you want to go?" : "Opening Maps to \(dest)."
+        case "play_music":
+            return query.isEmpty ? "Opening your music." : "Playing \(query)."
+        case "open_app":
+            return app.isEmpty ? "Which app?" : "Opening \(app)."
+        case "set_reminder":   return "Reminder set."
+        case "create_event":   return "Adding that to your calendar."
+        case "set_alarm":      return "Setting your alarm."
+        case "set_timer":      return "Timer started."
+        case "weather":        return "Checking the weather."
+        case "torch_on":       return "Flashlight on."
+        case "torch_off":      return "Flashlight off."
+        case "toggle_wifi":    return "Opening Wi-Fi settings."
+        case "toggle_bluetooth": return "Opening Bluetooth settings."
+        case "ask_time":
+            let f = DateFormatter(); f.locale = Locale(identifier: "en-US"); f.dateFormat = "h:mm a"
+            return "It's \(f.string(from: Date()))."
+        case "ask_date":
+            let f = DateFormatter(); f.locale = Locale(identifier: "en-US"); f.dateStyle = .full
+            return "Today is \(f.string(from: Date()))."
+        case "ask_cloud":      return "I need internet to answer that."
+        case "facetime":
+            return contact.isEmpty ? "Who do you want to FaceTime?" : "Starting FaceTime with \(contact)."
+        case "facetime_audio":
+            return contact.isEmpty ? "Who do you want to call?" : "FaceTime audio with \(contact)."
+        case "media_play_pause": return "Done."
+        case "media_next":       return "Next track."
+        case "media_previous":   return "Previous track."
+        case "read_calendar":    return "Checking your calendar."
+        case "read_week_calendar": return "Checking this week's schedule."
+        case "read_email":       return "Opening your inbox."
+        case "find_free_slot":   return "Looking for a free slot."
+        case "search_web":
+            return query.isEmpty ? "What do you want to search?" : "Searching for \(query)."
+        case "send_email":
+            return contact.isEmpty ? "Who should I email?" : "Opening email to \(contact)."
+        case "remember":         return "Got it — I'll remember that."
+        case "recall":           return "One moment."
+        case "read_news":        return query.isEmpty ? "Let me check the news." : "Fetching news about \(query)."
+        case "order_food":
+            let rest = intent.params["restaurant"] ?? ""
+            return rest.isEmpty ? "Checking delivery options." : "Looking for delivery from \(rest)."
+        case "book_restaurant":
+            let rest = intent.params["restaurant"] ?? ""
+            return rest.isEmpty ? "Let me book that." : "Booking a table at \(rest)."
+        case "homekit_on":       return "Turning it on."
+        case "homekit_off":      return "Turning it off."
+        case "homekit_dim":      return "Adjusting brightness."
+        case "homekit_temp":     return "Setting the thermostat."
+        case "homekit_lock":     return "Locking the door."
+        case "homekit_unlock":   return "Unlocking the door."
+        case "homekit_scene":    return "Activating scene."
+        case "respond":
+            let lower = (intent.params["raw"] ?? "").lowercased()
+            if lower.contains("hello") || lower.contains("hey") || lower.hasPrefix("hi") {
+                return "Hey! What can I do for you?"
+            }
+            if lower.contains("thank") { return "Anytime." }
+            if lower.contains("how are you") { return "Running at full speed. What do you need?" }
+            return "I'm here — what do you need?"
+        default:
+            return "I'm not sure how to do that yet."
+        }
+    }
 }

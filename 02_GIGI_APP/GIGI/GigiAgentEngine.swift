@@ -197,7 +197,9 @@ final class GigiAgentEngine {
         let speech: String
         var executedTools: [String] = []
         if intent.label == "respond" {
-            speech = GigiBrainPipeline.localSpeech(for: intent)
+            // GigiBrainPipeline.localSpeech moved to GigiFoundationAgent on 2026-05-11
+            // (GigiBrainPipeline archived to _legacy/, was structural zombie).
+            speech = GigiFoundationAgent.localSpeech(for: intent)
         } else {
             let bridgeResult = await GigiActionDispatcher.shared.bridge.execute(intent)
             if intent.label == "make_call", bridgeResult.hasPrefix("Calling ") {
@@ -205,7 +207,7 @@ final class GigiAgentEngine {
                 if !contact.isEmpty { await GigiMemory.shared.touchContactIfKnown(contact) }
             }
             speech = bridgeResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? GigiBrainPipeline.localSpeech(for: intent)
+                ? GigiFoundationAgent.localSpeech(for: intent)
                 : bridgeResult
             executedTools = [intent.label]
         }
@@ -339,7 +341,9 @@ final class GigiAgentEngine {
         let registry = GigiToolRegistry.shared
         var relevantByName: [String: any GigiTool] = [:]
         let seed = (pastUserUtterances(in: initialContents) + [userText]).joined(separator: " ")
-        for t in registry.selectRelevant(for: seed) { relevantByName[t.name] = t }
+        // TODO Phase 2: replace selectRelevant_DEPRECATED with Apple FM Tool calling
+        // (constrained decoding on 15-tool subset). See plan §3.6, ADR-0008 (TBD).
+        for t in registry.selectRelevant_DEPRECATED(for: seed) { relevantByName[t.name] = t }
 
         // Carry-forward: any tool the model already called in history must stay visible.
         for name in pastToolCallNames(in: initialContents) where relevantByName[name] == nil {
