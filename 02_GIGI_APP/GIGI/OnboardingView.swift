@@ -44,7 +44,10 @@ struct OnboardingView: View {
     @State private var profileZip = ""
     @State private var isSavingProfile = false
 
-    private let totalSteps = 7
+    // 6 steps (2026-05-11): profile step removed from onboarding flow (D6).
+    // ProfileEditSheet still available — entry point is Dashboard → "Your Profile"
+    // setup card. Friction zero at first run.
+    private let totalSteps = 6
 
     var body: some View {
         ZStack {
@@ -71,9 +74,10 @@ struct OnboardingView: View {
                     case 1: permissionsStep
                     case 2: apiKeyStep
                     case 3: harnessStep
-                    case 4: profileStep
-                    case 5: hardwareTriggerStep
-                    case 6: doneStep
+                    // case profileStep removed (D6) — profile is now an opt-in
+                    // entry from Dashboard → "Your Profile" setup card.
+                    case 4: hardwareTriggerStep
+                    case 5: doneStep
                     default: EmptyView()
                     }
                 }

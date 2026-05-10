@@ -77,7 +77,34 @@ final class GigiAgentEngine {
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
 
+        #if DEBUG
+        // === D1 debug override (5-path plan testing harness) ===
+        // Settings → Debug → Brain Path Override lets the dev force a specific
+        // routing path. `.auto` falls through to the normal flow below.
+        switch DebugBrainPath.current {
+        case .auto:
+            break  // fall through
+        case .appleFM:
+            return await processAppleFMOverride(text: text)
+        case .ollama:
+            return ollamaStubResult()
+        case .claude:
+            // Treat as if Force Claude were on — handled by the existing gate below.
+            return await processForceClaude(text: text, autoFallbackOnError: false)
+                ?? AgentResult(speech: "Force Claude path returned no result.",
+                               executedTools: [], isFollowUp: false,
+                               costEstimate: 0, requiresConfirm: nil, isError: true)
+        }
+        #endif
+
+        // Force Claude is hidden behind #if DEBUG (D1 decision, 2026-05-11) —
+        // the 5-path plan deprecates this toggle; keep the Keychain key honored
+        // for backward compatibility while the migration is in progress.
+        #if DEBUG
         let forceClaudeEnabled = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
+        #else
+        let forceClaudeEnabled = false
+        #endif
 
         // === Gate 1: Force Claude (Phase 2 — D4.a = YES, takes precedence over planner) ===
         // When Brain Mode → Force Claude is on, route the entire request to Claude
@@ -618,4 +645,93 @@ final class GigiAgentEngine {
             c.parts.compactMap { $0.text }
         }
     }
+
+    #if DEBUG
+    // MARK: - D1 Brain Path Override helpers (5-path plan testing harness)
+
+    /// Path 2 (Apple FM) stub via existing GigiFoundationAgent.
+    /// On unsupported devices, falls through to a graceful error.
+    private func processAppleFMOverride(text: String) async -> AgentResult {
+        guard GigiFoundationAgent.isSupported else {
+            return AgentResult(
+                speech: "Apple Foundation Models not available on this device. Need iOS 18.1+ with Apple Intelligence.",
+                executedTools: [],
+                isFollowUp: false,
+                costEstimate: 0,
+                requiresConfirm: nil,
+                isError: true
+            )
+        }
+        let history = GigiConversationMemory.shared.contents(pruningIfNeeded: true)
+        let historyString = history.suffix(6).map { c in
+            let role = c.role == "user" ? "User" : "Assistant"
+            let text = c.parts.compactMap { $0.text }.joined(separator: " ")
+            return "\(role): \(text)"
+        }.joined(separator: "\n")
+        guard let response = await GigiFoundationAgent.shared.process(text: text, history: historyString) else {
+            return AgentResult(
+                speech: "Apple Foundation Models returned no result for this query.",
+                executedTools: [],
+                isFollowUp: false,
+                costEstimate: 0,
+                requiresConfirm: nil,
+                isError: true
+            )
+        }
+        return AgentResult(
+            speech: response.speech,
+            executedTools: response.action.isEmpty ? [] : [response.action],
+            isFollowUp: !response.followUp.isEmpty,
+            costEstimate: 0,  // on-device, no $ cost
+            requiresConfirm: nil,
+            isError: false
+        )
+    }
+
+    /// Path 3 (Ollama) stub — surfaces "not configured" until the harness wires it up.
+    private func ollamaStubResult() -> AgentResult {
+        AgentResult(
+            speech: "Path 3 Ollama is not configured yet. Set up the harness Ollama bridge to enable this path. See docs/plans/frolicking-stargazing-pancake.md §3.",
+            executedTools: [],
+            isFollowUp: false,
+            costEstimate: 0,
+            requiresConfirm: nil,
+            isError: true
+        )
+    }
+
+    /// Path 4 (Claude Code) — same effect as forceClaude=true.
+    /// Returns nil if the harness is not paired and autoFallback is requested.
+    private func processForceClaude(text: String, autoFallbackOnError: Bool) async -> AgentResult? {
+        guard GigiHarnessClient.shared.isConfigured else {
+            return AgentResult(
+                speech: "Brain path Claude requires a paired harness. Pair it from Settings.",
+                executedTools: [],
+                isFollowUp: false,
+                costEstimate: 0,
+                requiresConfirm: nil,
+                isError: true
+            )
+        }
+        let result = await GigiClaudeBridge.shared.run(task: text, context: nil)
+        if let err = result.error {
+            return AgentResult(
+                speech: err,
+                executedTools: [],
+                isFollowUp: false,
+                costEstimate: 0,
+                requiresConfirm: nil,
+                isError: true
+            )
+        }
+        return AgentResult(
+            speech: result.value,
+            executedTools: ["ask_claude"],
+            isFollowUp: false,
+            costEstimate: Double(result.tokenEstimate) * costPerToken,
+            requiresConfirm: nil,
+            isError: false
+        )
+    }
+    #endif
 }

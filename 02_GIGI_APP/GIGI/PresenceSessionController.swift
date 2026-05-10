@@ -13,7 +13,8 @@ import SwiftUI
 @MainActor
 final class PresenceSessionController: ObservableObject {
     static let shared = PresenceSessionController()
-    static let alwaysAvailableKey = GigiWakeWordEngine.userDefaultsEnabledKey
+    // Was: GigiWakeWordEngine.userDefaultsEnabledKey — engine moved to _legacy/ (ADR-0003).
+    static let alwaysAvailableKey = "gigi.wakeWord.enabled"
 
     static var isAlwaysAvailableEnabled: Bool {
         UserDefaults.standard.bool(forKey: alwaysAvailableKey)

@@ -40,9 +40,15 @@ struct SettingsView: View {
     @State private var forceClaude: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
     @State private var autoFallback: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
     #if DEBUG
-    @State private var toneRawDraft: String = "posso passare alle 18 oggi"
-    @State private var toneResult: String = "—"
-    @State private var toneRunning: Bool = false
+    // D1 — Brain Path Override picker (DEBUG only). Lets you force a specific
+    // routing path during testing instead of relying on automatic gate decisions.
+    // - .auto: normal flow (NLU fast-path → Groq planner/agent loop)
+    // - .appleFM: forces a direct GigiFoundationAgent.process() call (stub-equivalent
+    //   for Path 2 of the 5-path plan)
+    // - .ollama: stub — shows "not configured" toast (Path 3 not yet implemented)
+    // - .claude: same effect as forceClaude=true
+    @State private var brainPathOverride: BrainPathOverride =
+        BrainPathOverride(rawValue: UserDefaults.standard.string(forKey: "gigi.debug.brainPath") ?? "auto") ?? .auto
     #endif
     @FocusState var focusedField: SettingsField?
 
@@ -181,45 +187,12 @@ struct SettingsView: View {
 
     // MARK: - Harness section (backend GIGI)
 
-    // Phase 5.11 — migration banner: shown when the paired URL is a
-    // Tailscale 100.* address, suggesting the user upgrade to Cloudflare
-    // Tunnel for a smoother cross-network experience.
-    @ViewBuilder
-    private var migrationBannerIfNeeded: some View {
-        if shouldShowMigrationBanner {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "cloud.bolt")
-                    .foregroundColor(.purple)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Tip: switch to Cloudflare Tunnel")
-                        .font(.subheadline.weight(.semibold))
-                    Text("You're paired via a Tailscale 100.* address. Cloudflare Tunnel works without Tailscale and reconnects faster across networks. Open localhost:7777/setup on your PC.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Button("Don't show again") {
-                        UserDefaults.standard.set(true, forKey: "gigi.migration.cf.dismissed")
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.purple)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(10)
-            .background(Color.purple.opacity(0.1))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.3), lineWidth: 1))
-            .cornerRadius(10)
-        }
-    }
-
-    private var shouldShowMigrationBanner: Bool {
-        if UserDefaults.standard.bool(forKey: "gigi.migration.cf.dismissed") { return false }
-        guard let host = GigiHarnessClient.shared.pairedBaseURL?.host else { return false }
-        return host.hasPrefix("100.") // Tailscale CGNAT range
-    }
+    // Tailscale migration banner removed (2026-05-11): post-Phase 4 the only
+    // supported pairing transport is Cloudflare Tunnel via QR scan. Tailscale
+    // is no longer a fallback path. ADR-0001 §pairing-cloudflare-tunnel-mvp.
 
     private var harnessSection: some View {
         Section {
-            migrationBannerIfNeeded
 
             // Primary action: pair via QR
             Button {
@@ -274,7 +247,9 @@ struct SettingsView: View {
                 }
             }
 
-            // Advanced: manual config still available for power users / debug.
+            // Manual configuration (DEBUG only — power users / pairing recovery).
+            // QR pair flow is the official path; this is a fallback for testing.
+            #if DEBUG
             DisclosureGroup("Manual configuration (advanced)", isExpanded: $manualConfigExpanded) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Base URL").font(.caption).foregroundColor(.secondary)
@@ -299,6 +274,7 @@ struct SettingsView: View {
             }
             .font(.caption)
             .tint(.secondary)
+            #endif
         } header: {
             Text("🖥 Harness Backend")
         } footer: {
@@ -470,17 +446,29 @@ struct SettingsView: View {
     }
 
     // MARK: - HomeKit section
+    //
+    // 2026-05-11 D2 trim: simplified accessory list rendering with icon
+    // inference, replaced dev-noise footer with user-facing copy, removed
+    // dead "Refresh Accessories" — `loadState()` already refreshes on app
+    // focus + sheet dismiss. Accessory voice control runs through
+    // GigiActionDispatcher → GigiHomeKit (homekit_on / homekit_off /
+    // homekit_dim / homekit_scene tools).
 
     private var homeKitSection: some View {
         Section {
             if accessoryList.isEmpty {
-                Text("No accessories found")
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No accessories detected")
+                        .foregroundColor(.secondary)
+                    Text("Open the Home app on iPhone to pair accessories, then return here.")
+                        .font(.caption)
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
             } else {
                 ForEach(accessoryList.prefix(5), id: \.self) { name in
                     HStack {
-                        Image(systemName: "lightbulb.fill")
-                            .foregroundColor(.yellow)
+                        Image(systemName: homeKitIcon(for: name))
+                            .foregroundColor(.orange)
                         Text(name)
                     }
                 }
@@ -490,20 +478,25 @@ struct SettingsView: View {
                         .font(.subheadline)
                 }
             }
-
-            Button("Refresh Accessories") {
-                Task {
-                    GigiHomeKit.shared.invalidateCache()
-                    accessoryList = await GigiHomeKit.shared.accessoryNames()
-                }
-            }
-            .foregroundColor(.purple)
         } header: {
             Text("🏠 HomeKit")
         } footer: {
-            Text("Requires HomeKit capability in Xcode + NSHomeKitUsageDescription in Info.plist.")
+            Text("Control accessories with your voice — \"turn off the kitchen light\", \"set the thermostat to 21\".")
                 .font(.caption)
         }
+    }
+
+    /// Pick an SF Symbol that loosely matches the accessory name.
+    private func homeKitIcon(for name: String) -> String {
+        let n = name.lowercased()
+        if n.contains("light") || n.contains("lamp") || n.contains("bulb") { return "lightbulb.fill" }
+        if n.contains("therm") || n.contains("heat") || n.contains("cool") { return "thermometer.medium" }
+        if n.contains("lock") || n.contains("door") { return "lock.fill" }
+        if n.contains("plug") || n.contains("outlet") || n.contains("switch") { return "poweroutlet.type.b.fill" }
+        if n.contains("cam") { return "video.fill" }
+        if n.contains("speaker") || n.contains("audio") { return "hifispeaker.fill" }
+        if n.contains("fan") { return "fanblades" }
+        return "house.fill"
     }
 
     // MARK: - Voice section
@@ -575,14 +568,17 @@ struct SettingsView: View {
     }
 
     // MARK: - Debug section
+    //
+    // 2026-05-11 trim: removed 5 one-off test buttons (Brain Diagnostics, Task
+    // Extractor tests x3, Tone Enrichment playground with Italian seed). Kept:
+    // - Harness pairing state info
+    // - Replay Onboarding (testing convenience)
+    // - Brain Path Override picker (D1, DEBUG only) — lets you force routing
+    //   to Apple FM / Ollama / Claude for testing the 5-path plan before it
+    //   is fully wired in.
 
     private var debugSection: some View {
         Section {
-            Button("Run Brain Diagnostics") {
-                GigiBrainDiagnostics.log()
-            }
-            .foregroundColor(.purple)
-
             HStack(alignment: .top) {
                 Text("Harness pairing")
                 Spacer()
@@ -592,7 +588,7 @@ struct SettingsView: View {
                     .multilineTextAlignment(.trailing)
             }
 
-            Button("Reset Onboarding") {
+            Button("Replay Onboarding") {
                 UserDefaults.standard.removeObject(forKey: "gigi.onboarding.complete")
                 showResetOnboarding = true
             }
@@ -604,59 +600,24 @@ struct SettingsView: View {
             }
 
             #if DEBUG
-            Button("Test Task Extractor") {
-                Task {
-                    let transcript = "I need to reply to Fede about the demo, prepare for the 3pm meeting, and book lunch with Marco tomorrow"
-                    await GigiTaskExtractor.shared.extract(from: transcript)
-                    let tasks = GigiTaskExtractor.shared.tasks
-                    print("GigiTaskExtractor TASKS (\(tasks.count)):")
-                    for t in tasks {
-                        print("  - title=\(t.title) deadline=\(t.deadline ?? "nil") vip=\(t.vipContact ?? "nil")")
+            // D1 — Brain Path Override (5-path plan testing harness)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Brain Path Override (DEBUG)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Picker("Brain Path", selection: $brainPathOverride) {
+                    ForEach(BrainPathOverride.allCases, id: \.self) { path in
+                        Text(path.displayLabel).tag(path)
                     }
                 }
-            }
-            .foregroundColor(.purple)
-
-            Button("Test Extractor Dedup (run twice)") {
-                Task {
-                    let transcript = "reply to Fede about the demo and reply to Fede about the meeting"
-                    await GigiTaskExtractor.shared.extract(from: transcript)
-                    await GigiTaskExtractor.shared.extract(from: transcript)
-                    print("After 2x extract → tasks.count = \(GigiTaskExtractor.shared.tasks.count) (expect dedup ≤ 2)")
+                .pickerStyle(.segmented)
+                .onChange(of: brainPathOverride) { _, newValue in
+                    UserDefaults.standard.set(newValue.rawValue, forKey: "gigi.debug.brainPath")
+                    print("DEBUG[D1] brain path override → \(newValue.rawValue)")
                 }
-            }
-            .foregroundColor(.purple)
-
-            Button("Clear Extractor Tasks") {
-                GigiTaskExtractor.shared.clear()
-                print("GigiTaskExtractor cleared → tasks.count = \(GigiTaskExtractor.shared.tasks.count)")
-            }
-            .foregroundColor(.purple)
-
-            // Tone Enrichment debug hook (#46 AC verification — remove before #170 ships)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Tone Enrichment").font(.caption).foregroundColor(.secondary)
-                TextField("Raw draft", text: $toneRawDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-                Button(toneRunning ? "Enriching…" : "Enrich draft → Fede") {
-                    toneRunning = true
-                    toneResult = "…"
-                    Task {
-                        let out = await GigiToneEnrichment.shared.enrich(rawDraft: toneRawDraft, contactName: "Fede")
-                        await MainActor.run {
-                            toneResult = out.isEmpty ? "(empty)" : out
-                            toneRunning = false
-                        }
-                        print("ToneEnrichment[#46] raw=\"\(toneRawDraft)\" → \"\(out)\"")
-                    }
-                }
-                .disabled(toneRunning)
-                .foregroundColor(.purple)
-                Text(toneResult)
+                Text(brainPathOverride.helpText)
                     .font(.footnote)
-                    .foregroundColor(.primary)
-                    .textSelection(.enabled)
+                    .foregroundColor(.secondary)
             }
             #endif
         } header: {
@@ -780,3 +741,50 @@ struct SettingsView: View {
 private extension Double {
     var nonZero: Double? { self == 0 ? nil : self }
 }
+
+#if DEBUG
+// MARK: - Brain Path Override (D1, debug-only)
+//
+// Lets the developer force a specific routing path during testing — useful for
+// previewing how the 5-path plan will feel before it is fully wired up.
+// Persisted in UserDefaults so changes survive across app launches.
+//
+// Read in GigiAgentEngine.process() — see overrideBrainPath() helper.
+
+enum BrainPathOverride: String, CaseIterable {
+    case auto      // normal flow (NLU fast-path → Groq planner/agent loop)
+    case appleFM   // forces direct call to GigiFoundationAgent.process()
+    case ollama    // stub — surfaces "Path 3 not configured" message
+    case claude    // forces Claude Code path (equivalent to forceClaude=true)
+
+    var displayLabel: String {
+        switch self {
+        case .auto:    return "Auto"
+        case .appleFM: return "Apple FM"
+        case .ollama:  return "Ollama"
+        case .claude:  return "Claude"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .auto:
+            return "Normal flow: NLU fast-path → Groq planner / agent loop."
+        case .appleFM:
+            return "Path 2 (5-path plan): direct Apple Foundation Models call. Requires iOS 18.1+ with Apple Intelligence."
+        case .ollama:
+            return "Path 3 (5-path plan): STUB — surfaces a 'not configured' message until harness Ollama lands."
+        case .claude:
+            return "Path 4 (5-path plan): forces Claude Code subprocess via harness (same effect as Brain Mode → Force Claude)."
+        }
+    }
+}
+
+/// Helper read by GigiAgentEngine.process() to honor the debug override.
+@MainActor
+enum DebugBrainPath {
+    static var current: BrainPathOverride {
+        BrainPathOverride(rawValue: UserDefaults.standard.string(forKey: "gigi.debug.brainPath") ?? "auto") ?? .auto
+    }
+}
+#endif

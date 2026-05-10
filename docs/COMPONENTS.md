@@ -4,6 +4,9 @@
 > Per layout fisico delle cartelle: `CLAUDE.md` §Layout monorepo.
 > Per architettura concettuale: `docs/rework/Architecture-Armando-Revision.md`.
 
+> **Aggiornato 2026-05-11** post UI cleanup (ADR-0006). 3 tab in MainTabView (Chat/Dashboard/Settings).
+> File legacy disconnessi dal target: vedi `02_GIGI_APP/GIGI/_legacy/README.md`.
+
 ---
 
 ## 📱 iOS App (`02_GIGI_APP/GIGI/`)
@@ -11,16 +14,15 @@
 ### Entry & shell
 - `GIGIApp.swift` — entrypoint SwiftUI
 - `GigiAppDelegate.swift` — delegate UIKit (push, lifecycle)
-- `MainTabView.swift` — root tabs + banner pairing viola
-- `ChatView.swift` — interfaccia chat con assistente
-- `DashboardView.swift` — dashboard / stato rapido
-- `SettingsView.swift` — impostazioni (harness section, brain mode)
+- `MainTabView.swift` — root 3-tab (Chat / Dashboard / Settings) + banner pairing
+- `ChatView.swift` — interfaccia chat + mic + QuickTalk + Presence entry
+- `DashboardView.swift` — capability overview + ProfileEditSheet entry
+- `SettingsView.swift` — Brain / Brain Mode (DEBUG) / Harness / WhatsApp / Profile / Hardware Trigger / HomeKit / Voice / Privacy / Debug / About
 
 ### Auth & login
 - `GigiLoginView.swift` — schermata login
-- `GigiAuthManager.swift` — sessione / Google Sign-In
-- `client_*.googleusercontent.com.plist` — config Google Sign-In
 - `GIGI.entitlements` — entitlements app principale
+- *(Google Sign-In + GigiAuthManager + plist OAuth rimossi nel rework armando-rework — ADR-0004)*
 
 ### Audio & Voice
 - `GigiAudioManager.swift` — AVFAudio session, ducking
@@ -36,21 +38,21 @@
 - `GigiImplicationEngine.swift` — inferenze sugli intent
 
 ### Agent Engine (V3 "True Agent")
-- `GigiAgentEngine.swift` — agent loop (max 5 iter, parallel function-calling)
-- `GigiOrchestrator.swift` — orchestrazione comandi
-- `GigiSmartOrchestrator.swift` — orchestrazione avanzata
-- `GigiBrainPipeline.swift` — pipeline cervello (Groq vs Claude)
+- `GigiAgentEngine.swift` — agent loop (max 8 iter, parallel function-calling) + DEBUG Brain Path Override gate (D1, see ADR-0006)
+- `GigiSmartOrchestrator.swift` — conversation coordinator + turn lifecycle + draft preview
+- `GigiBrainPipeline.swift` — cascade Apple FM → local NLU (dormant nel main flow oggi; rivitalizzato col piano 5-path)
 - `GigiBrainDiagnostics.swift` — diagnostica brain
-- `GigiFoundationAgent.swift` / `GigiFoundationSession.swift` — Apple Foundation Models (iOS 18+)
+- `GigiFoundationAgent.swift` / `GigiFoundationSession.swift` — Apple Foundation Models (iOS 18.1+)
+- `GigiPlannerEngine.swift` — Groq llama-3.1-8b decompose (sarà deprecato dal piano 5-path)
 
 ### Bridge Claude (delegation)
 - `GigiClaudeBridge.swift` — coordinator + buildContextSnapshot + run() streaming
 - `GigiHarnessClient.swift` — HTTP client harness (Bearer)
 - `GigiHarnessStream.swift` — WebSocket /ws/ios/stream
-- `GigiCloudService.swift` — Gemini cloud client
+- `GigiCloudService.swift` — Groq backend client + Gemini-compat wire types (FunctionCallBlock/GigiPart) ancora attivi
 
 ### Tool registry & action execution
-- `GigiToolRegistry.swift` — 38 tool dichiarati + AskClaudeTool + meta-classifier
+- `GigiToolRegistry.swift` — 46 tool dichiarati + meta-classifier `selectRelevant_DEPRECATED` (TD-001, in via di sostituzione dal piano 5-path)
 - `GigiActionBridge.swift` — bridge azioni iOS/intents
 - `GigiActionDispatcher.swift` (+ `+Native.swift`, `+Web.swift`) — dispatch concreta
 - `GigiShortcutGenerator.swift` — shortcuts automatici
@@ -73,7 +75,8 @@
 ### Pairing iPhone↔harness
 - `GigiPairScanner.swift` — VisionKit DataScannerViewController wrapper
 - `GigiPairingSheet.swift` — state machine pairing (scan → validate → Keychain → health)
-- `GigiMDNSDiscovery.swift` — discovery LAN
+- `SetupDiagnosticView.swift` — post-pair diagnostic (poll 5s, autofix, walkthrough)
+- *(GigiMDNSDiscovery rimosso nel rework — pairing è solo Cloudflare Tunnel via QR, ADR-0001)*
 
 ### Diagnostics & logging
 - `GigiCommandLogger.swift` — log comandi
@@ -81,9 +84,22 @@
 - `GigiApnsSync.swift` — sync APNS token
 
 ### UI ancillari
-- `GigiLiveActivityController.swift` / `GigiActivityAttributes.swift` — Live Activities
+- `GigiLiveActivityController.swift` / `GigiActivityAttributes.swift` — Live Activities (Dynamic Island)
+- `PresenceView.swift` — orb full-screen sheet, attivato da ChatView mic long-press o Siri AppIntent
+- `QuickTalkView.swift` — overlay Siri-style (deeplink / Action Button / AppIntent), auto-presentato da MainTabView
+- `TalkingSessionTaskListView.swift` — card cyan draggable con task estratti durante Presence (TODO migrate backend to 5-path)
+- `ConfirmComputerUseSheet.swift` — confirm gating screenshot preview (post-Phase 3)
+- `MemoryHintView.swift` — toast "Memory used: X = Y" (#79 demo wow-factor)
+- `DraftMessagePreviewSheet.swift` — preview/edit/send/cancel draft messages
+- `HarnessStatusCard.swift` + `HarnessOfflineBanner.swift` — status runtime
 - `Assets.xcassets/` — icone, accent color
 - `Info.plist` (incluso `NSCameraUsageDescription` per QR)
+
+### Legacy disconnected (`_legacy/`)
+- `_legacy/README.md` — perché esistono questi file + come riattivarli
+- `_legacy/GigiWakeWordEngine.swift` (636 righe) — ADR-0003
+- `_legacy/GigiDayPlanReasoner.swift` (316 righe) — ADR-0005
+- ⚠️ In Xcode: aggiungere `_legacy/` come **folder reference (blue)** NOT group (yellow). Vedi `_legacy/README.md`.
 
 ### Siri Intents extension (`02_GIGI_APP/GigiIntents1/`)
 - `IntentHandler.swift` — handler intents

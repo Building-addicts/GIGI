@@ -41,12 +41,11 @@ final class SoundEngine {
     }
 
     /// Call when GIGI returns to idle — ensures no other app stays ducked.
-    /// Skip if wake word is monitoring: deactivating its session causes an immediate restart loop.
-    /// The wake word session uses .mixWithOthers so other apps aren't ducked during passive listening.
+    /// Was guarded against wake word monitoring (causing restart loop) — wake word
+    /// disconnected to _legacy/ (ADR-0003), guard removed.
     static func releaseSession() {
-        guard !GigiWakeWordEngine.shared.isMonitoring else { return }
         // Don't deactivate in background — iOS starts 30s kill timer if audio session goes inactive
-        // while app is backgrounded. Wake word needs the session to stay alive between turns.
+        // while app is backgrounded.
         guard UIApplication.shared.applicationState == .active else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }

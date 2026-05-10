@@ -70,13 +70,8 @@ struct GIGIApp: App {
                     #if DEBUG
                     let mvpRoundTripOK = await GigiUserProfile.shared._debugMVPRoundTrip()
                     GigiDebugLogger.log("AC5 MVPPreferences round-trip → \(mvpRoundTripOK ? "OK" : "FAIL")")
-                    // GigiDayPlanReasoner smoke test disabilitati nel rework armando-rework (ADR-0005).
-                    // L'engine è soft-killed (`GigiDayPlanReasoner.isDisabledForMVP = true`); le
-                    // 3 chiamate qui sotto tornavano nil immediatamente e generavano solo log
-                    // rumorosi al cold start. Riattivare quando si chiude la sub 4/4 (#59).
-                    // await GigiDayPlanReasoner.debugRunWithMockData()
-                    // await GigiDayPlanReasoner.debugRunWithRealCalendar()
-                    // await GigiDayPlanReasoner.debugRunWithLiveSources()
+                    // GigiDayPlanReasoner smoke tests removed (2026-05-11): engine moved
+                    // to _legacy/ (ADR-0005). Reactivate alongside sub 4/4 (#59).
                     #endif
                     GigiDebugLogger.log("MainTabView .task finished")
                 }

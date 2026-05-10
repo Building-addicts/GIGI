@@ -11,7 +11,6 @@
 		36B909F0BE3E656E3FA32929 /* GIGIWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DB30B66E68F6172E8C220129 /* GIGIWidgetExtension.appex */; };
 		46754470277A6B755EBF14B0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A8BF2AB3264B944A9E5C6C57 /* Foundation.framework */; };
 		4EA05B712F8EA72A008954D8 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4EA05B702F8EA72A008954D8 /* UserNotifications.framework */; };
-		4ECB0A462F8D84C9009066DD /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 4ECB0A452F8D84C9009066DD /* GoogleSignIn */; };
 		4ED54BE32F95D29100017360 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4ED54BE22F95D29000017360 /* ActivityKit.framework */; };
 		5E7C00122F9B010000EC9B5 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E7C00102F9B010000EC9B5 /* AVFoundation.framework */; };
 		5E7C00132F9B010000EC9B5 /* CallKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E7C00112F9B010000EC9B5 /* CallKit.framework */; };
@@ -125,7 +124,6 @@
 				5E7C00122F9B010000EC9B5 /* AVFoundation.framework in Frameworks */,
 				5E7C00132F9B010000EC9B5 /* CallKit.framework in Frameworks */,
 				4EA05B712F8EA72A008954D8 /* UserNotifications.framework in Frameworks */,
-				4ECB0A462F8D84C9009066DD /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -212,7 +210,6 @@
 			);
 			name = GIGI;
 			packageProductDependencies = (
-				4ECB0A452F8D84C9009066DD /* GoogleSignIn */,
 			);
 			productName = GIGI;
 			productReference = 4E4F378F2F898626005EC9B5 /* GIGI.app */;
@@ -266,7 +263,6 @@
 			mainGroup = 4E4F37862F898626005EC9B5;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				4ECB0A2D2F8D7731009066DD /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4E4F37902F898626005EC9B5 /* Products */;
@@ -615,24 +611,8 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		4ECB0A2D2F8D7731009066DD /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 9.1.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		4ECB0A452F8D84C9009066DD /* GoogleSignIn */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4ECB0A2D2F8D7731009066DD /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignIn;
-		};
-/* End XCSwiftPackageProductDependency section */
+/* GoogleSignIn package + product references removed (2026-05-11, ADR-0004 finalization).
+   Xcode may re-add empty section markers automatically on next save. */
 	};
 	rootObject = 4E4F37872F898626005EC9B5 /* Project object */;
 }

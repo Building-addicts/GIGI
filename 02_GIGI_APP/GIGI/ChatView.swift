@@ -9,7 +9,8 @@ struct ChatView: View {
     @State private var userInput         = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
     @State private var pulseScale: CGFloat = 1.0
-    @State private var showQuickTalk     = false
+    // showQuickTalk removed (2026-05-11): MainTabView auto-presents the sheet
+    // on quickTalk.phase changes — no need for a second presentation point here.
     @State private var showPresence      = false
     @FocusState private var isInputFocused: Bool
 
@@ -72,77 +73,8 @@ struct ChatView: View {
             }
             .zIndex(60)
 
-            #if DEBUG
-            // Debug FABs:
-            //  📨 envelope → dispatcher.executeNative(send_message) end-to-end (#48 route)
-            //  🐞 ladybug  → directly call presentDraft (#47 sheet UI in isolation)
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        Button {
-                            Task {
-                                let result = await GigiActionDispatcher.shared.executeNative(
-                                    "send_message",
-                                    args: [
-                                        "contact": "Edi",
-                                        "message": "can i come at 4 pm today?",
-                                        "platform": "whatsapp"
-                                    ]
-                                )
-                                print("DEBUG[#48] dispatcher → \(result)")
-                            }
-                        } label: {
-                            Image(systemName: "envelope.badge")
-                                .padding(10)
-                                .background(Circle().fill(Color.orange.opacity(0.85)))
-                                .foregroundColor(.white)
-                        }
-                        Button {
-                            gigi.presentDraft(
-                                contact: "Fede",
-                                platform: "whatsapp",
-                                body: "Hey Fede! Can I drop by at 4pm today? 🙌",
-                                raw: "can i come at 4pm today"
-                            )
-                        } label: {
-                            Image(systemName: "ladybug.fill")
-                                .padding(10)
-                                .background(Circle().fill(Color.purple.opacity(0.85)))
-                                .foregroundColor(.white)
-                        }
-                        // 🎤 Voice intercept simulation (#49 — PR #172)
-                        Button {
-                            Task { await gigi.process(text: "send") }
-                        } label: {
-                            Image(systemName: "paperplane.fill")
-                                .padding(10)
-                                .background(Circle().fill(Color.green.opacity(0.85)))
-                                .foregroundColor(.white)
-                        }
-                        Button {
-                            Task { await gigi.process(text: "cancel") }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .padding(10)
-                                .background(Circle().fill(Color.red.opacity(0.85)))
-                                .foregroundColor(.white)
-                        }
-                        Button {
-                            Task { await gigi.process(text: "Hey Edi, on my way at 5pm instead") }
-                        } label: {
-                            Image(systemName: "pencil.circle.fill")
-                                .padding(10)
-                                .background(Circle().fill(Color.blue.opacity(0.85)))
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 96)
-                }
-            }
-            #endif
+            // Debug FABs removed (2026-05-11) — consolidated draft/voice-intercept
+            // tests in Settings → Debug. ChatView UI now clean for demo testing.
         }
         .animation(.easeInOut(duration: 0.25), value: gigi.bannerMessage)
         .animation(.easeInOut(duration: 0.2), value: memory.messages.count)
@@ -164,28 +96,11 @@ struct ChatView: View {
                     .foregroundColor(.white.opacity(0.35))
             }
             Spacer()
-            // Brain indicator
-            HStack(spacing: 6) {
-                if GigiFoundationAgent.isSupported {
-                    Image(systemName: "apple.intelligence")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.purple)
-                    Text("Apple Intelligence")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.purple.opacity(0.8))
-                } else {
-                    Image(systemName: "brain")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.3))
-                    Text("Local AI")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.3))
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(GigiFoundationAgent.isSupported ? Color.purple.opacity(0.12) : Color.white.opacity(0.05))
-            .clipShape(Capsule())
+            // Brain indicator consolidated to Settings → Brain section.
+            // Single dot here for at-a-glance status (purple if Apple FM available, else gray).
+            Circle()
+                .fill(GigiFoundationAgent.isSupported ? Color.purple : Color.white.opacity(0.25))
+                .frame(width: 8, height: 8)
             // Clear conversation
             if !memory.messages.isEmpty {
                 Button {
@@ -282,9 +197,9 @@ struct ChatView: View {
                     pulseScale = listening ? 1.12 : 1.0
                 }
 
-                // Quick Talk button
+                // Quick Talk button — MainTabView auto-presents the sheet
+                // when quickTalk.phase becomes active.
                 Button {
-                    showQuickTalk = true
                     quickTalk.start()
                 } label: {
                     Image(systemName: "bolt.circle.fill")
@@ -296,15 +211,6 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .animation(.easeInOut(duration: 0.15), value: userInput.isEmpty)
-            .sheet(isPresented: $showQuickTalk) {
-                QuickTalkView()
-                    .presentationDetents([.fraction(0.55)])
-                    .presentationDragIndicator(.visible)
-                    .presentationBackground(.black)
-            }
-            .onChange(of: quickTalk.phase) { _, phase in
-                if phase == .idle { showQuickTalk = false }
-            }
             .sheet(isPresented: $showPresence) {
                 PresenceView()
                     .presentationDetents([.large])

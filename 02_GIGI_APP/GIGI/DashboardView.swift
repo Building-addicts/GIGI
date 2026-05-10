@@ -8,16 +8,17 @@ import WebKit
 // which referenced dead Gemini/Google integrations.
 
 struct DashboardView: View {
-    @AppStorage(GigiWakeWordEngine.userDefaultsEnabledKey) private var wakeWordEnabled = false
+    // Wake word UserDefaults key removed (2026-05-11) — engine in _legacy/ (ADR-0003),
+    // no UI row depends on it anymore. PresenceSessionController still reads the
+    // key for "always available" persistence — it owns the storage now.
     @State private var groqReady = false
     @State private var whatsappLinked = false
     @State private var profileScore: Int = 0   // 0-4 fields filled
     @State private var memoryCount = 0
     @State private var homeKitCount = 0
-    @State private var showWhatsAppSheet = false
+    // showWhatsAppSheet removed (2026-05-11): WhatsApp linking lives only in
+    // Settings → WhatsApp section now (D5 consolidation).
     @State private var showProfileSheet = false
-    @State private var showGuidedSetup = false
-    @ObservedObject private var diagnostics = GigiBrainDiagnostics.shared
 
     var body: some View {
         ZStack {
@@ -45,14 +46,9 @@ struct DashboardView: View {
                         action: nil  // managed in Settings
                     )
 
-                    setupCard(
-                        icon: "message.badge.filled.fill",
-                        iconColor: .green,
-                        title: "WhatsApp Web",
-                        subtitle: whatsappLinked ? "Linked — messages send automatically" : "Tap to link — scan QR once",
-                        status: whatsappLinked ? .ok : .action,
-                        action: { showWhatsAppSheet = true }
-                    )
+                    // WhatsApp Web card removed (2026-05-11): consolidated to a
+                    // single entry point in Settings → WhatsApp section. The
+                    // capability row below still reflects link status.
 
                     setupCard(
                         icon: "person.crop.circle.fill",
@@ -77,45 +73,16 @@ struct DashboardView: View {
                                   detail: groqReady ? "Vision loop active" : "Needs Groq key")
                     capabilityRow("Long-term Memory",   icon: "brain",                  color: .purple, active: memoryCount > 0,
                                   detail: "\(memoryCount) memories saved")
-                    // Wake Word row hidden while GigiWakeWordEngine.isDisabledForMVP gates
-                    // the engine (#102, ADR-0003). Triggers documented in Settings →
-                    // "Talk to GIGI" (Back Tap / Action Button / Siri AppIntent).
-                    if !GigiWakeWordEngine.isDisabledForMVP {
-                        capabilityRow("Wake Word",      icon: "ear.fill",               color: .yellow, active: wakeWordEnabled)
-                    }
+                    // Wake Word row removed — engine disconnected in _legacy/ (ADR-0003).
+                    // Talk to GIGI via Back Tap / Action Button / Siri AppIntent, see Settings.
                     capabilityRow("Music (Apple)",      icon: "music.note",             color: .pink,   active: true)
-                    capabilityRow("Spotify",            icon: "music.mic",              color: .green,  active: false,
-                                  detail: "Opens app, tap to play")
+                    // Spotify row removed (2026-05-11): hardcoded inactive,
+                    // no integration. Apple Music covers MVP music path.
 
-                    // ── Guided setup ───────────────────────────────
-                    SectionHeader(title: "Setup Wizard")
-
-                    Button {
-                        showGuidedSetup = true
-                    } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: "mic.badge.xmark")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .frame(width: 44, height: 44)
-                                .background(Color.purple)
-                                .cornerRadius(10)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Voice Setup")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(.white)
-                                Text("GIGI guides you through config by voice")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white.opacity(0.4))
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundColor(.white.opacity(0.3))
-                        }
-                        .padding(14)
-                        .background(Color.white.opacity(0.04))
-                        .cornerRadius(14)
-                    }
+                    // Setup Wizard (Voice Setup) section removed (2026-05-11):
+                    // GuidedSetupSheet duplicated ProfileEditSheet fields + had
+                    // an Italian seed string. Profile editing lives in
+                    // ProfileEditSheet (single source of truth).
 
                     Spacer(minLength: 40)
                 }
@@ -123,14 +90,8 @@ struct DashboardView: View {
             }
         }
         .task { await loadStatus() }
-        .sheet(isPresented: $showWhatsAppSheet, onDismiss: { Task { await loadStatus() } }) {
-            WhatsAppLinkSheet()
-        }
         .sheet(isPresented: $showProfileSheet, onDismiss: { Task { await loadStatus() } }) {
             ProfileEditSheet()
-        }
-        .sheet(isPresented: $showGuidedSetup) {
-            GuidedSetupSheet()
         }
     }
 
@@ -138,87 +99,19 @@ struct DashboardView: View {
 
     private var headerRow: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Dashboard")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-
-                // Brain ON/OFF badge
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(groqReady ? Color.green : Color.red)
-                        .frame(width: 8, height: 8)
-                        .overlay(
-                            groqReady
-                                ? Circle().stroke(Color.green.opacity(0.4), lineWidth: 4)
-                                    .scaleEffect(1.6)
-                                : nil
-                        )
-                    Text(groqReady ? "BRAIN ON" : "BRAIN OFF")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(groqReady ? .green : .red)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background((groqReady ? Color.green : Color.red).opacity(0.1))
-                .clipShape(Capsule())
-
-                // Provisional fallback indicator (Issue #63) — appears when
-                // the most recent turn was served by the local Groq path
-                // instead of the cloud harness. Decision to keep this UI
-                // permanent is pending post-build evaluation.
-                if diagnostics.lastTurnPath == .fallback {
-                    HStack(spacing: 4) {
-                        Image(systemName: "wifi.exclamationmark")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text("LOCAL AI")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    }
-                    .foregroundColor(.orange)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.orange.opacity(0.12))
-                    .clipShape(Capsule())
-                    .transition(.opacity.combined(with: .scale))
-                }
-                harnessStatusPill
-            }
-            .animation(.easeInOut(duration: 0.2), value: diagnostics.lastTurnPath)
+            Text("Dashboard")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
 
             Spacer()
 
-            ZStack {
-                Circle()
-                    .fill(groqReady ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
-                    .frame(width: 44, height: 44)
-                Image(systemName: groqReady ? "brain.filled.head.profile" : "brain")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(groqReady ? .green : .red)
-            }
+            // Single brain dot — green if AI brain is ready, red otherwise.
+            // Full status info lives in Settings → Brain section.
+            // HarnessOfflineBanner (MainTabView) covers harness offline state.
+            Circle()
+                .fill(groqReady ? Color.green : Color.red)
+                .frame(width: 10, height: 10)
         }
-    }
-
-    // MARK: - Harness reachability pill (#16 sub 3/4)
-
-    private var harnessStatusPill: some View {
-        let (label, color): (String, Color) = {
-            switch diagnostics.harnessStatus {
-            case .online:   return ("HARNESS ONLINE",   .green)
-            case .degraded: return ("HARNESS DEGRADED", .orange)
-            case .offline:  return ("HARNESS OFFLINE",  .red)
-            case .unknown:  return ("HARNESS …",        .gray)
-            }
-        }()
-        return HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(label)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundColor(color)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(color.opacity(0.1))
-        .clipShape(Capsule())
     }
 
     // MARK: - First-config banner
@@ -627,246 +520,6 @@ struct ProfileEditSheet: View {
     }
 }
 
-// MARK: - Guided Setup Sheet (voice-driven config wizard)
-
-struct GuidedSetupSheet: View {
-    @Environment(\.dismiss) var dismiss
-    @StateObject private var session = GuidedSetupSession()
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    // Conversation transcript
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 14) {
-                                ForEach(session.messages.indices, id: \.self) { i in
-                                    let msg = session.messages[i]
-                                    HStack(alignment: .bottom) {
-                                        if msg.isUser { Spacer(minLength: 60) }
-                                        Text(msg.text)
-                                            .font(.system(size: 15, design: .rounded))
-                                            .foregroundColor(msg.isUser ? .black : .white)
-                                            .padding(.horizontal, 14).padding(.vertical, 10)
-                                            .background(msg.isUser ? Color.white : Color.white.opacity(0.1))
-                                            .clipShape(Capsule())
-                                        if !msg.isUser { Spacer(minLength: 60) }
-                                    }
-                                    .id(i)
-                                }
-                            }
-                            .padding(16)
-                        }
-                        .onChange(of: session.messages.count) { _, _ in
-                            proxy.scrollTo(session.messages.count - 1, anchor: .bottom)
-                        }
-                    }
-
-                    Divider().background(Color.white.opacity(0.1))
-
-                    // Mic button
-                    VStack(spacing: 16) {
-                        if session.savedFlash {
-                            HStack(spacing: 6) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                Text("Saved!")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.green)
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                        } else if session.isListening {
-                            Text("Listening...")
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(.purple.opacity(0.8))
-                        } else if session.isThinking {
-                            ProgressView().tint(.purple)
-                        } else if !session.isDone {
-                            Text("Tap mic to answer")
-                                .font(.system(size: 13))
-                                .foregroundColor(.white.opacity(0.4))
-                        }
-
-                        if session.isDone {
-                            Button("Done") { dismiss() }
-                                .fontWeight(.semibold).foregroundColor(.white)
-                                .padding(.horizontal, 40).padding(.vertical, 14)
-                                .background(Color.purple).clipShape(Capsule())
-                        } else {
-                            Button {
-                                session.isListening ? session.stopListening() : session.startListening()
-                            } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(session.isListening ? Color.purple : Color.white.opacity(0.1))
-                                        .frame(width: 64, height: 64)
-                                    Image(systemName: session.isListening ? "waveform" : "mic.fill")
-                                        .font(.system(size: 22))
-                                        .foregroundColor(.white)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 24)
-                }
-            }
-            .navigationTitle("Voice Setup")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Skip") { dismiss() }.foregroundColor(.secondary)
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-        .task { await session.start() }
-    }
-}
-
-// MARK: - GuidedSetupSession
-
-@MainActor
-final class GuidedSetupSession: ObservableObject {
-    struct Message { let text: String; let isUser: Bool }
-
-    @Published var messages: [Message] = []
-    @Published var isListening = false
-    @Published var isThinking = false
-    @Published var isDone = false
-    @Published var savedFlash = false   // triggers green checkmark flash in UI
-
-    private let steps: [(prompt: String, key: String)] = [
-        ("What's your full name?", "pref:nome"),
-        ("What's your email address?", "pref:email"),
-        ("And your phone number?", "pref:telefono"),
-        ("What's your delivery address? Say the street and number.", "pref:indirizzo_consegna"),
-        ("City?", "pref:citta"),
-        ("ZIP or postal code?", "pref:cap"),
-    ]
-    private var currentStep = 0
-    private var savedTranscriptionHandler: ((String) -> Void)?
-    private var interruptionObserver: NSObjectProtocol?
-    private var isInterrupted = false
-
-    init() {
-        // Pause/resume on phone call or other audio interruptions
-        interruptionObserver = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor [weak self] in
-            guard let self,
-                  let userInfo = notification.userInfo,
-                  let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-                  let type = AVAudioSession.InterruptionType(rawValue: typeValue)
-            else { return }
-
-            switch type {
-            case .began:
-                // Interruption started (e.g. phone call) — pause listening without losing state
-                self.isInterrupted = true
-                if self.isListening {
-                    self.isListening = false
-                    GigiAudioManager.shared.stopRecording()
-                    // Restore orchestrator's handler so other audio still works
-                    if let saved = self.savedTranscriptionHandler {
-                        GigiAudioManager.shared.onTranscription = saved
-                    }
-                }
-            case .ended:
-                self.isInterrupted = false
-                // Re-ask the current question when audio resumes
-                if !self.isDone {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    self.addGigi("Welcome back! " + self.steps[self.currentStep].prompt)
-                }
-            @unknown default: break
-            }
-            }
-        }
-    }
-
-    deinit {
-        if let obs = interruptionObserver { NotificationCenter.default.removeObserver(obs) }
-    }
-
-    func start() async {
-        let intro = "Hi! I'll set you up in about a minute. Answer by voice — say 'skip' for anything you prefer not to share."
-        addGigi(intro)
-        GigiSpeechService.shared.speak(intro)
-        try? await Task.sleep(nanoseconds: 3_500_000_000)
-        await askCurrentStep()
-    }
-
-    func startListening() {
-        guard !isInterrupted else { return }
-        isListening = true
-        // Save orchestrator's handler, intercept for this session only
-        savedTranscriptionHandler = GigiAudioManager.shared.onTranscription
-        GigiAudioManager.shared.onTranscription = { [weak self] text in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // Restore immediately so any parallel audio (TTS etc.) still works
-                GigiAudioManager.shared.onTranscription = self.savedTranscriptionHandler
-                self.isListening = false
-                await self.handleAnswer(text)
-            }
-        }
-        GigiAudioManager.shared.startRecording()
-    }
-
-    func stopListening() {
-        isListening = false
-        if let saved = savedTranscriptionHandler {
-            GigiAudioManager.shared.onTranscription = saved
-        }
-        GigiAudioManager.shared.stopRecording()
-    }
-
-    private func askCurrentStep() async {
-        guard currentStep < steps.count else { await finish(); return }
-        let q = steps[currentStep].prompt
-        addGigi(q)
-        GigiSpeechService.shared.speak(q)
-    }
-
-    private func handleAnswer(_ text: String) async {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { await askCurrentStep(); return }
-
-        addUser(trimmed)
-
-        let isSkip = trimmed.lowercased().contains("skip") || trimmed.lowercased() == "no"
-        if !isSkip, currentStep < steps.count {
-            await GigiMemory.shared.remember(key: steps[currentStep].key, value: trimmed)
-            // Visual + haptic feedback: green flash
-            SoundEngine.play(.taskDone)
-            savedFlash = true
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            savedFlash = false
-        }
-
-        currentStep += 1
-        try? await Task.sleep(nanoseconds: 400_000_000)
-        await askCurrentStep()
-    }
-
-    private func finish() async {
-        let ending = "All done! Your profile is saved. You can update it anytime in Dashboard → Your Profile."
-        addGigi(ending)
-        GigiSpeechService.shared.speak(ending)
-        SoundEngine.play(.taskDone)
-        try? await Task.sleep(nanoseconds: 3_000_000_000)
-        isDone = true
-    }
-
-    private func addGigi(_ text: String) { messages.append(Message(text: text, isUser: false)) }
-    private func addUser(_ text: String)  { messages.append(Message(text: text, isUser: true)) }
-}
 
 // MARK: - Shared UI components
 

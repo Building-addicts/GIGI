@@ -17,18 +17,15 @@ struct MainTabView: View {
     var body: some View {
         ZStack(alignment: .top) {
             TabView(selection: $selection) {
+                // 3-tab layout (2026-05-11): tab Presence removed (D3).
+                // Presence Mode is still available — triggered via mic button
+                // in ChatView (long-press) or via Siri AppIntent. The
+                // PresenceView sheet renders the orb when active.
                 ChatView()
                     .tag(0)
                     .tabItem {
                         Image(systemName: "waveform.badge.mic")
                         Text("GIGI")
-                    }
-
-                // Presence Mode tab
-                PresenceModeTabView(showPresence: $showPresence)
-                    .tabItem {
-                        Image(systemName: presence.isActive ? "person.wave.2.fill" : "person.wave.2")
-                        Text("Presence")
                     }
 
                 DashboardView()
@@ -78,11 +75,10 @@ struct MainTabView: View {
                     .zIndex(48)
             }
 
-            if let err = liveActivity.lastActivityError, !showOnboarding {
-                liveActivityBanner(err)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(49)
-            }
+            // liveActivityBanner removed from top overlay (2026-05-11) to avoid
+            // stacking 3 banners (pairing + harness offline + LA error). LA errors
+            // surface via console + GigiDebugLogger; consider a dedicated row in
+            // Settings → Debug if needed for diagnosis.
 
             if showOnboarding {
                 OnboardingView(isPresented: $showOnboarding)
@@ -166,22 +162,7 @@ struct MainTabView: View {
         harnessConfigured = GigiHarnessClient.shared.pairingState.isConfigured
     }
 
-    private func liveActivityBanner(_ message: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14, weight: .semibold))
-            Text(message)
-                .font(.caption.weight(.medium))
-                .lineLimit(2)
-            Spacer(minLength: 0)
-        }
-        .foregroundColor(.white)
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(Color.orange.opacity(0.9))
-        .cornerRadius(12)
-        .padding(.horizontal, 14)
-        .padding(.top, harnessConfigured ? 56 : 116)
-    }
+    // liveActivityBanner helper removed (2026-05-11) — see top-of-file note.
 
     private var pairingBanner: some View {
         HStack(spacing: 10) {
@@ -212,56 +193,7 @@ struct MainTabView: View {
     }
 }
 
-// MARK: - Presence Tab Entry
-
-private struct PresenceModeTabView: View {
-    @Binding var showPresence: Bool
-    @ObservedObject private var presence = PresenceSessionController.shared
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            VStack(spacing: 24) {
-                Spacer()
-                Image(systemName: presence.isActive ? "person.wave.2.fill" : "person.wave.2")
-                    .font(.system(size: 52))
-                    .foregroundColor(presence.isActive ? .purple : .white.opacity(0.3))
-                Text(presence.isActive ? "Presence: \(presenceStateLabel)" : "Presence Mode")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                Text(presence.isActive ? "Live Activity mirrors this state" : "Start iOS-compliant wake-word Presence")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.4))
-                Button {
-                    if presence.isActive {
-                        showPresence = true
-                    } else {
-                        presence.startSession()
-                        showPresence = true
-                    }
-                } label: {
-                    Text(presence.isActive ? "Open" : "Start")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 40)
-                        .padding(.vertical, 14)
-                        .background(presence.isActive ? Color.purple : Color.purple.opacity(0.7))
-                        .clipShape(Capsule())
-                }
-                Spacer()
-            }
-        }
-    }
-
-    private var presenceStateLabel: String {
-        switch presence.state {
-        case .inactive: return "Ready"
-        case .sleeping: return "Ready"
-        case .listening: return "Listening"
-        case .thinking: return "Thinking"
-        case .speaking: return "Speaking"
-        case .muted: return "Muted"
-        case .error: return "Needs Attention"
-        }
-    }
-}
+// PresenceModeTabView removed (2026-05-11): D3 reduces MainTabView from 4 to
+// 3 tabs (Chat / Dashboard / Settings). Presence Mode is still reachable —
+// the .sheet(isPresented: $showPresence) above hosts PresenceView. Trigger
+// it from ChatView (mic long-press) or via Siri AppIntent / Action Button.

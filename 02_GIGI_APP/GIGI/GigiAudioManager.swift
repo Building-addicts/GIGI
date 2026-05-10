@@ -14,14 +14,18 @@ enum GigiAudioState: Equatable {
 
 // MARK: - GigiAudioManager
 //
-// Single coordinator for all audio states. Replaces the dual-engine conflict
-// between GigiWakeWordEngine and GigiVADEngine by enforcing a state machine:
+// Single coordinator for all audio states. State machine:
 //
 //   idle ↔ wakeWordListening ↔ recording ↔ speaking
 //
 // Only one state is active at a time — zero conflicting sessions, zero heat.
 // Existing callers (GigiSmartOrchestrator) keep their current API; this class
 // sits underneath and manages the actual audio session transitions.
+//
+// NOTE (2026-05-11): GigiWakeWordEngine moved to _legacy/ (ADR-0003).
+// State `.wakeWordListening` is preserved for switch-statement compatibility
+// across the codebase, but it is unreachable at runtime — `startWakeWordListening()`
+// returns early.
 
 @MainActor
 final class GigiAudioManager: ObservableObject {
@@ -58,21 +62,12 @@ final class GigiAudioManager: ObservableObject {
 
     /// Start passively listening for the wake word.
     ///
-    /// MVP de-scope (#102): wake word is disabled. iOS does not allow continuous
+    /// Wake word disconnected to _legacy/ (ADR-0003). iOS does not allow continuous
     /// background mic for non-VoIP apps — wake is replaced by hardware triggers
-    /// (Back Tap, Action Button) and AppIntent / Siri phrase. The engine code is
-    /// kept dormant for v1.1. All call sites become no-ops here.
+    /// (Back Tap, Action Button) and AppIntent / Siri phrase. This method is a
+    /// no-op kept to preserve call site signatures.
     func startWakeWordListening() {
-        guard !GigiWakeWordEngine.isDisabledForMVP else { return }
-        guard presenceMode else {
-            print("GigiAudioManager: startWakeWord skipped — Presence inactive")
-            return
-        }
-        guard state == .idle else {
-            print("GigiAudioManager: startWakeWord skipped — state=\(state)")
-            return
-        }
-        transition(to: .wakeWordListening)
+        // intentionally no-op
     }
 
     /// Start recording user speech (after wake word or tap).
@@ -82,7 +77,7 @@ final class GigiAudioManager: ObservableObject {
             transition(to: .recording)
 
         case .wakeWordListening:
-            GigiWakeWordEngine.shared.stopMonitoringHard(reason: "recording requested")
+            // Wake word engine disconnected to _legacy/ (ADR-0003) — no engine to stop.
             transition(to: .recording)
 
         case .speaking:
@@ -127,10 +122,7 @@ final class GigiAudioManager: ObservableObject {
     /// Notify that TTS has started.
     func notifySpeakingStarted() {
         if state == .recording { GigiVADEngine.shared.stopListening() }
-        // Wake word MUST stop before TTS starts — both fight for the audio session.
-        // Running .record category (wake word) while .playAndRecord (TTS) is active
-        // causes OSStatus -50 / "Failed to set properties" and a tight restart loop.
-        GigiWakeWordEngine.shared.stopMonitoringHard()
+        // Wake word engine disconnected to _legacy/ (ADR-0003) — no engine to stop.
         transition(to: .speaking)
         GigiAudioSequestrator.shared.notifySpeechStarted()
     }
@@ -207,7 +199,7 @@ final class GigiAudioManager: ObservableObject {
 
     /// Hard stop — resets to idle without resuming wake word.
     func stopAll() {
-        GigiWakeWordEngine.shared.stopMonitoringHard()
+        // Wake word engine disconnected to _legacy/ (ADR-0003) — no engine to stop.
         GigiVADEngine.shared.stopListening()
         transition(to: .idle)
     }
@@ -232,8 +224,9 @@ final class GigiAudioManager: ObservableObject {
             break
 
         case .wakeWordListening:
-            // WakeWordEngine manages its own session; we just let it run
-            GigiWakeWordEngine.shared.applyPreferredState()
+            // Wake word engine disconnected to _legacy/ (ADR-0003).
+            // State unreachable at runtime — startWakeWordListening() is a no-op.
+            break
 
         case .recording:
             GigiVADEngine.shared.startListening()
@@ -255,31 +248,9 @@ final class GigiAudioManager: ObservableObject {
     }
 
     private func wireEngines() {
-        // Wake word engine lifecycle → keep AudioManager state honest.
-        let wake = GigiWakeWordEngine.shared
-        wake.onMonitoringStarted = { [weak self] in
-            guard let self else { return }
-            self.wakeWordEngineRunning = true
-            self.lastWakeWordError = nil
-        }
-        wake.onMonitoringStopped = { [weak self] reason in
-            guard let self else { return }
-            self.wakeWordEngineRunning = false
-            if self.state == .wakeWordListening {
-                print("GigiAudioManager: wake engine stopped while state=wakeWordListening — reason=\(reason ?? "none")")
-                self.transition(to: .idle)
-            }
-        }
-        wake.onMonitoringFailed = { [weak self] message in
-            guard let self else { return }
-            self.wakeWordEngineRunning = false
-            self.lastWakeWordError = message
-            Task { await GigiLiveActivityController.shared.showError(message: "Audio problem — tap to retry") }
-            if self.state == .wakeWordListening {
-                print("GigiAudioManager: wake engine failed — resetting audio state to idle: \(message)")
-                self.transition(to: .idle)
-            }
-        }
+        // Wake word engine disconnected to _legacy/ (ADR-0003) — no lifecycle wiring needed.
+        // wakeWordEngineRunning / lastWakeWordError @Published kept for ABI compatibility
+        // with observers but never updated; safe to remove once Phase 2 router lands.
 
         GigiVADEngine.shared.onTranscription = { [weak self] text in
             guard let self, self.state == .recording else { return }

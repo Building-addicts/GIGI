@@ -1,5 +1,22 @@
 import SwiftUI
 
+// MARK: - TalkingSessionTaskListView
+//
+// Floating draggable card (cyan accent) that surfaces tasks extracted from
+// the live conversation transcript by GigiTaskExtractor during Presence Mode.
+// Demo wow-factor: makes real-time intent extraction visible to the user.
+//
+// TODO (5-path plan integration — 2026-05-11):
+// Once GigiRequestRouter lands, GigiTaskExtractor moves from running off Groq
+// cloud (current implementation) to running off Path 3 Ollama (offline) or
+// Path 2 Apple FM (on-device), depending on complexity. The extractor must
+// expose a new `setBackend(.appleFM | .ollama | .claude)` knob honored by
+// the Brain Path Override debug picker, so the demo can be tested across
+// all 3 paths. Also surface a row in Settings → Debug to clear the saved
+// drag offset (gigi.tasklist.offsetX/Y) once the new layout lands.
+//
+// Keep for MVP demo — confirms TaskExtractor still works end-to-end.
+
 struct TalkingSessionTaskListView: View {
     @ObservedObject var extractor = GigiTaskExtractor.shared
 

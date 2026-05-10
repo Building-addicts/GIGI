@@ -272,7 +272,7 @@ private struct MacSetupView: View {
                     Text("Expected Terminal output (step 4)")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(.white.opacity(0.4))
-                    Text("Control Panel: http://localhost:7777\n[bridge] GIGI harness server avviato\n[bridge] iOS HTTP+WS: http://0.0.0.0:<configured-port>")
+                    Text("Control Panel: http://localhost:7777\n[bridge] GIGI harness server started\n[bridge] iOS HTTP+WS: http://0.0.0.0:<configured-port>")
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundColor(Color(red: 0.4, green: 0.85, blue: 0.55))
                         .padding(12)
