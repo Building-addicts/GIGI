@@ -23,6 +23,7 @@ Questa cartella contiene tutta la documentazione **project-level**. I `README.md
 | `runbooks/` | Procedure operative ripetitive (build IPA, deploy harness, pair iPhone). Checklist, non narrativa. | dev quando cambia una procedura |
 | `plans/` | Piani implementativi per fase (cloudflare-tunnel-pairing, tailscale-qr-pairing, claude-bridge-integration, auto-fix-and-difficulty-tiers, panel-observability) | planner / project-manager |
 | `research/` | Finding tecnici e ricerche esterne (pairing-landscape-2026) | researcher |
+| `knowledge/` | Studi vivi tecnico/concettuali (LLM open source landscape, NLU primer, embeddings/RAG futuri) — base di reference per future decisioni architetturali | dev quando esplora una tech alternative |
 | `archive/` | Doc storiche superate ma conservate per riferimento (TASK_PLAN_V3) | manuale |
 
 ## Quale file leggere quando
