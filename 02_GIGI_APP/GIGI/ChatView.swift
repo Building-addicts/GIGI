@@ -13,6 +13,8 @@ struct ChatView: View {
     // on quickTalk.phase changes — no need for a second presentation point here.
     @State private var showPresence      = false
     @FocusState private var isInputFocused: Bool
+    // Auto-redraw banner when override changes from Settings tab.
+    @AppStorage("gigi.debug.brainPath") private var brainPathOverrideRaw: String = "auto"
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -24,6 +26,14 @@ struct ChatView: View {
                 headerView
                     .padding(.top, 56)
                     .padding(.bottom, 8)
+
+                // ── Brain Path Override banner ───────────────────────────────
+                // When Brain Path Override ≠ Auto, the 5-path router is bypassed
+                // and every query goes straight to one path. Without this banner
+                // users (and demo viewers) cannot tell whether the router is
+                // engaged, leading to silently passing all tests through Ollama
+                // and misinterpreting hallucinations as router behavior.
+                overrideBannerView
 
                 // ── Conversation history ──────────────────────────────────────
                 ScrollViewReader { proxy in
@@ -115,6 +125,39 @@ struct ChatView: View {
             }
         }
         .padding(.horizontal, 20)
+    }
+
+    // Bound via @AppStorage so the banner auto-redraws when Settings changes the override.
+    // Returns nil when override is .auto (banner hidden).
+    private var activeOverrideLabel: String? {
+        switch brainPathOverrideRaw {
+        case "appleFM": return "APPLE FM"
+        case "ollama":  return "OLLAMA (Path 3)"
+        case "claude":  return "CLAUDE CODE (Path 4)"
+        default:        return nil
+        }
+    }
+
+    @ViewBuilder
+    private var overrideBannerView: some View {
+        if let label = activeOverrideLabel {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                Text("OVERRIDE: \(label) · router bypassed")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                Spacer()
+                Text("Settings → Auto")
+                    .font(.system(size: 10, design: .monospaced))
+                    .opacity(0.7)
+            }
+            .foregroundColor(.black)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.yellow)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
+        }
     }
 
     private var emptyStateView: some View {
