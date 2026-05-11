@@ -187,6 +187,56 @@ final class GigiAgentEngine {
         )
     }
 
+    // MARK: - Pending confirmation API (used by GigiSmartOrchestrator)
+
+    /// Called by the orchestrator when the user explicitly confirms a destructive
+    /// action that is pending in `pendingConfirmRequest`. Executes the tool and
+    /// clears state.
+    func confirmAndContinue() async -> AgentResult {
+        guard let request = pendingConfirmRequest,
+              let tool    = pendingConfirmTool else {
+            return AgentResult(
+                speech:          "Nothing pending confirmation.",
+                executedTools:   [],
+                isFollowUp:      false,
+                costEstimate:    0,
+                requiresConfirm: nil,
+                isError:         false
+            )
+        }
+
+        // Clear pending state before execution to prevent double-confirm
+        let argsSnapshot = pendingConfirmArgs
+        pendingConfirmRequest = nil
+        pendingConfirmTool    = nil
+        pendingConfirmArgs    = [:]
+
+        let result = await tool.execute(args: argsSnapshot)
+        let speech = result.error.map { "Couldn't complete that: \($0)" } ?? result.value
+
+        GigiConversationMemory.shared.addModelSpeech(speech)
+
+        return AgentResult(
+            speech:          speech,
+            executedTools:   [request.action],
+            isFollowUp:      false,
+            costEstimate:    0,  // Claude via subscription, no marginal API cost
+            requiresConfirm: nil,
+            isError:         result.error != nil
+        )
+    }
+
+    /// Called by the orchestrator when the user's response is anything but a
+    /// clear confirmation — cancels the pending action and (if it was a
+    /// computer-use job) signals rejection to the harness.
+    func cancelConfirmation() {
+        if let jobId = pendingConfirmArgs["computerUseJobId"] as? String, !jobId.isEmpty {
+            Task { await GigiComputerUse.shared.reject(jobId: jobId) }
+        }
+        pendingConfirmRequest = nil
+        pendingConfirmTool    = nil
+        pendingConfirmArgs    = [:]
+    }
 
     #if DEBUG
     // MARK: - D1 Brain Path Override helpers (5-path plan testing harness)

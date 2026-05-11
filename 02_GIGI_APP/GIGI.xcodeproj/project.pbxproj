@@ -72,6 +72,11 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				_legacy/GigiBrainPipeline.swift,
+				_legacy/GigiDayPlanReasoner.swift,
+				_legacy/GigiPlannerEngine.swift,
+				_legacy/GigiWakeWordEngine.swift,
+				_legacy/README.md,
 			);
 			target = 4E4F378E2F898626005EC9B5 /* GIGI */;
 		};
