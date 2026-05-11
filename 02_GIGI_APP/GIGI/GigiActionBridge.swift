@@ -139,6 +139,12 @@ class GigiActionBridge {
         case "read_email":
             return await openEmail()
 
+        case "create_note":
+            return await createNote(
+                title: intent.params["title"] ?? intent.params["taskText"] ?? "GIGI note",
+                body: intent.params["body"] ?? intent.params["text"] ?? intent.params["raw"] ?? ""
+            )
+
         case "read_calendar":
             return await readTodayEvents()
 
@@ -755,6 +761,34 @@ class GigiActionBridge {
 
     private func mediaPrevious() -> String {
         MPMusicPlayerController.systemMusicPlayer.skipToPreviousItem(); return "Previous track."
+    }
+
+    // MARK: - Create Note (GATE 6 — killer demo Tesla→note)
+    //
+    // iOS Notes app has no public URL scheme that accepts body content, so
+    // we use a two-step UX:
+    //   1. Copy "Title\n\nBody" to the system clipboard.
+    //   2. Open Notes app via `mobilenotes://`.
+    // The spoken response tells the user to paste. This is best-effort but
+    // demoable; a power user can configure a Shortcuts → "Create Note"
+    // automation for one-tap.
+    func createNote(title: String, body: String) async -> String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody  = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let combined = trimmedBody.isEmpty
+            ? trimmedTitle
+            : "\(trimmedTitle)\n\n\(trimmedBody)"
+
+        await MainActor.run {
+            UIPasteboard.general.string = combined
+            GigiSmartOrchestrator.shared.showBanner("📝 Note copied — opening Notes...")
+            if let url = URL(string: "mobilenotes://") {
+                UIApplication.shared.open(url)
+            }
+        }
+        return trimmedTitle.isEmpty
+            ? "Note copied to clipboard. Opening Notes — paste with long-press."
+            : "Note '\(trimmedTitle)' copied to clipboard. Opening Notes — paste with long-press."
     }
 
     // MARK: - Email

@@ -319,8 +319,150 @@ final class GigiRequestRouter {
             collected = result.value
         }
 
+        // GATE 6 — 2-turn callback (Path 4 → Path 2) for killer demos like
+        // "Search Wikipedia and create a note about Tesla". After Path 4
+        // returns the research summary, detect a follow-up action verb in
+        // the original utterance + dispatch a native_tool with the summary.
+        if let callback = detectFollowUpAction(originalText: originalText) {
+            print("GIGI Router: 2-turn callback detected → \(callback.action) with summary len=\(collected.count)")
+            let secondaryDecision = makeSecondaryDecision(
+                action: callback.action,
+                title: callback.title ?? defaultTitle(for: originalText),
+                body: collected
+            )
+            let callbackResult = await dispatchNativeTool(
+                decision: secondaryDecision,
+                originalText: "callback: \(callback.action)",
+                history: history
+            )
+            // Speech: primary summary + secondary confirmation, joined.
+            switch callbackResult {
+            case .actionInvoked(let secondarySpeech, let tool):
+                let combined = "\(collected.trimmingCharacters(in: .whitespacesAndNewlines)) \(secondarySpeech)"
+                GigiConversationMemory.shared.addModelSpeech(combined)
+                return .actionInvoked(speech: combined, tool: "claude+\(tool)")
+            case .spoken(let secondarySpeech):
+                let combined = "\(collected.trimmingCharacters(in: .whitespacesAndNewlines)) \(secondarySpeech)"
+                GigiConversationMemory.shared.addModelSpeech(combined)
+                return .spoken(combined)
+            case .error:
+                // Fall through to primary-only result.
+                break
+            }
+        }
+
         GigiConversationMemory.shared.addModelSpeech(collected)
         return .actionInvoked(speech: collected, tool: "ask_claude")
+    }
+
+    // MARK: - GATE 6 — multi-step follow-up detection
+
+    private struct FollowUpAction {
+        let action: String     // canonical action name
+        let title: String?     // optional pre-extracted title
+    }
+
+    /// Detect "research + action" patterns in the user's original utterance.
+    /// Returns the secondary action to dispatch after Path 4 returns.
+    /// Conservative: only fires on explicit verb pairs.
+    private func detectFollowUpAction(originalText: String) -> FollowUpAction? {
+        let t = originalText.lowercased()
+
+        // Note patterns
+        let notePatterns = [
+            "create a note", "save a note", "make a note",
+            "save it to a note", "save this as a note",
+            "and note", "save to notes", "write a note"
+        ]
+        if notePatterns.contains(where: { t.contains($0) }) {
+            return FollowUpAction(action: "create_note", title: nil)
+        }
+
+        // Reminder patterns
+        let reminderPatterns = [
+            "and remind me", "set a reminder", "create a reminder",
+            "remind me to", "remind me about"
+        ]
+        if reminderPatterns.contains(where: { t.contains($0) }) {
+            return FollowUpAction(action: "set_reminder", title: nil)
+        }
+
+        // Email draft patterns
+        let emailPatterns = [
+            "draft an email", "send an email", "and email me",
+            "compose an email"
+        ]
+        if emailPatterns.contains(where: { t.contains($0) }) {
+            return FollowUpAction(action: "send_message", title: nil)
+        }
+
+        return nil
+    }
+
+    /// Build a synthetic `FoundationRouterDecision` for the secondary turn.
+    /// Bypasses Apple FM (no extra round-trip) — we already know the action
+    /// and we have the body from Path 4's response.
+    private func makeSecondaryDecision(action: String, title: String, body: String) -> FoundationRouterDecision {
+        let slots = makeSlots(title: title, body: body)
+        #if canImport(FoundationModels)
+        return FoundationRouterDecision(
+            path: "native_tool",
+            primaryAction: action,
+            confidence: 1.0,
+            complexityEstimate: 10,
+            requiredCapabilities: [],
+            reason: "GATE 6 multi-step callback",
+            slots: slots,
+            directSpeech: "",
+            delegatePrompt: ""
+        )
+        #else
+        var d = FoundationRouterDecision()
+        d.path = "native_tool"
+        d.primaryAction = action
+        d.confidence = 1.0
+        d.complexityEstimate = 10
+        d.requiredCapabilities = []
+        d.reason = "GATE 6 multi-step callback"
+        d.slots = slots
+        return d
+        #endif
+    }
+
+    private func makeSlots(title: String, body: String) -> ActionSlots {
+        #if canImport(FoundationModels)
+        return ActionSlots(
+            contact: "", body: body, destination: "", date: "", time: "",
+            taskText: title, duration: "", label: "", appName: "",
+            query: "", platform: ""
+        )
+        #else
+        var s = ActionSlots()
+        s.body = body
+        s.taskText = title
+        return s
+        #endif
+    }
+
+    /// Best-effort title extraction from the user's prompt when the router
+    /// did not pre-extract one. Picks the most informative noun-ish phrase.
+    private func defaultTitle(for originalText: String) -> String {
+        let t = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Try to extract "about X" pattern: "create a note about X"
+        if let r = t.range(of: #"about\s+([A-Za-z][A-Za-z\s']{2,40})"#, options: .regularExpression) {
+            let captured = String(t[r])
+                .replacingOccurrences(of: #"^about\s+"#, with: "", options: .regularExpression)
+            return captured.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
+        }
+        // Try "for X" pattern: "remind me for X"
+        if let r = t.range(of: #"for\s+([A-Za-z][A-Za-z\s']{2,40})"#, options: .regularExpression) {
+            let captured = String(t[r])
+                .replacingOccurrences(of: #"^for\s+"#, with: "", options: .regularExpression)
+            return captured.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
+        }
+        // Fallback: first 6 words of the prompt
+        let words = t.split(separator: " ").prefix(6).joined(separator: " ")
+        return words.isEmpty ? "GIGI note" : String(words).capitalized
     }
 
     // MARK: - Slot → params mapping

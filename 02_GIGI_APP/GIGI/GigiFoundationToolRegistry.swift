@@ -360,6 +360,31 @@ struct FMHomeKitOnTool: Tool {
     }
 }
 
+// MARK: - 16. CreateNoteTool (GATE 6 — killer demo Tesla→note)
+
+@available(iOS 26.0, *)
+struct FMCreateNoteTool: Tool {
+    let name = "create_note"
+    let description = "Save a note to the iOS Notes app. Use after research or summary tasks when the user asks to remember something. The note title + body are placed on the clipboard and the Notes app opens — user pastes with long-press."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Note title — short, descriptive (e.g. 'Nikola Tesla', 'Pasta recipe').")
+        var title: String
+
+        @Guide(description: "Note body content, up to 2-4 sentences. Plain text, no markdown.")
+        var body: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "create_note", params: [
+            "title": arguments.title,
+            "body": arguments.body
+        ])
+    }
+}
+
 // MARK: - 15. HomeKitOffTool
 
 @available(iOS 26.0, *)
@@ -388,9 +413,9 @@ struct FMHomeKitOffTool: Tool {
 @MainActor
 enum GigiFoundationToolRegistry {
 
-    /// Static collection of all 15 tools. Used by `GigiRequestRouter` to
-    /// pick the relevant tool (or pass them all to Apple FM when the
-    /// router decision is ambiguous).
+    /// Static collection of all 16 tools (15 native + create_note for the
+    /// GATE 6 killer demo). Used by `GigiRequestRouter` to pick the relevant
+    /// tool (or pass them all to Apple FM when the router decision is ambiguous).
     static var allTools: [any Tool] {
         [
             FMSetTimerTool(),
@@ -407,7 +432,8 @@ enum GigiFoundationToolRegistry {
             FMFindFreeSlotTool(),
             FMReadEmailTool(),
             FMHomeKitOnTool(),
-            FMHomeKitOffTool()
+            FMHomeKitOffTool(),
+            FMCreateNoteTool()
         ]
     }
 
@@ -422,7 +448,8 @@ enum GigiFoundationToolRegistry {
         "send_message", "make_call", "facetime",
         "navigate", "play_music", "open_app",
         "weather", "read_calendar", "find_free_slot", "read_email",
-        "homekit_on", "homekit_off"
+        "homekit_on", "homekit_off",
+        "create_note"
     ]
 }
 
