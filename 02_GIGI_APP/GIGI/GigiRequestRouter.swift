@@ -1,40 +1,341 @@
 import Foundation
 
-// MARK: - GigiRequestRouter (stub — Phase 2)
+// MARK: - GigiRequestRouter
 //
-// Replaces the 3-Gate flat in `GigiAgentEngine.process()` (Force Claude →
-// NLU fast-path → Groq planner/agent loop) with the upfront router from the
-// 5-path plan:
+// Phase 2 — the upfront 5-path router. Replaces the legacy 2-Gate flat
+// (NLU fast-path → harness Claude bridge) with the architecture from
+// `docs/plans/frolicking-stargazing-pancake.md` §3.
 //
-//   Gate 0: Mode operative (Settings → Minimal / Privacy Max / Apple
-//           Optimized / Full Power) — filters which paths are enabled.
-//   Gate 1: NLU rule-based fast-path (unchanged from current `deterministicFastPath`).
-//   Gate 2: Apple FM router → FoundationRouterDecision (§3.4)
-//           - native_tool       → Path 2 (iOS native Tool calling)
-//           - delegate_local    → Path 3 (Ollama harness)
-//           - delegate_cloud    → Path 4 (Claude Code subprocess + MCP)
-//           - ask_clarification → speak directly
-//           - reject            → graceful refusal
+// Flow:
+//   GigiAgentEngine.process(text:)
+//     ├─ #if DEBUG: Brain Path Override (auto / appleFM / ollama / claude)
+//     ├─ NLU fast-path (24 intents, on-device, <500ms)        — kept upstream
+//     └─ GigiRequestRouter.shared.route(text:history:)        ← this file
+//          ├─ Apple FM router via GigiFoundationSession.routeRequest()
+//          │    └─ FoundationRouterDecision { path, action, slots, ... }
+//          ├─ if Apple FM unavailable → GigiFallbackRouter (keyword-based)
+//          └─ dispatchByPath:
+//              ├─ native_tool       → dispatchNativeTool  (Apple FM Tools or bridge)
+//              ├─ delegate_local    → dispatchDelegateLocal (Path 3 Ollama, GATE 4)
+//              ├─ delegate_cloud    → dispatchDelegateCloud (Path 4 Claude Code, GATE 5)
+//              ├─ ask_clarification → speak directSpeech
+//              └─ reject            → speak directSpeech
 //
-// Cost-aware routing: complexity ≤40 + non-browser → Ollama, else Claude Code.
+// Mode-aware (GATE 7): when `gigi.user.mode` is set, the router disables
+// paths not available in the selected mode and falls back accordingly.
 //
-// Reference: docs/plans/frolicking-stargazing-pancake.md §3
-// ADR-0007 (TBD) — Hybrid 5-path router pattern
-// Blocker: Q2 decision (subset 15 Apple FM Tool list)
+// ADR-0007 — Hybrid 5-path router.
+
+// MARK: - RouteResult
+
+enum RouteResult {
+    case spoken(String)                          // ready to TTS
+    case actionInvoked(speech: String, tool: String)
+    case error(String)
+}
+
+extension RouteResult {
+    var asAgentResult: AgentResult {
+        switch self {
+        case .spoken(let text):
+            return AgentResult(speech: text, executedTools: [], isFollowUp: false,
+                               costEstimate: 0, requiresConfirm: nil, isError: false)
+        case .actionInvoked(let speech, let tool):
+            return AgentResult(speech: speech, executedTools: [tool], isFollowUp: false,
+                               costEstimate: 0, requiresConfirm: nil, isError: false)
+        case .error(let msg):
+            return AgentResult(speech: msg, executedTools: [], isFollowUp: false,
+                               costEstimate: 0, requiresConfirm: nil, isError: true)
+        }
+    }
+}
+
+// MARK: - GigiRequestRouter
 
 @MainActor
 final class GigiRequestRouter {
     static let shared = GigiRequestRouter()
 
+    private let bridge = GigiActionBridge.shared
+    private let harness = GigiHarnessClient.shared
+    private let fallback = GigiFallbackRouter.shared
+
     private init() {}
 
-    // TODO Phase 2: implement `route(text: String) async -> AgentResult`
-    // - Read Gate 0 mode from Keychain (`gigi.mode` key)
-    // - Call NLU Gate 1 (existing `GigiNLUEngine.shared.classify`)
-    // - On miss, call Apple FM Gate 2 with new `FoundationRouterDecision`
-    //   schema (see GigiFoundationContracts.swift placeholder)
-    // - Dispatch by decision.path with cost-aware logic
-    // - Mirror DEBUG `BrainPathOverride` picker for path testing
-    //
-    // Until implemented, GigiAgentEngine.process() remains the entry point.
+    // MARK: - Entry point
+
+    /// Routes a user utterance through the 5-path pipeline.
+    /// Always returns a `RouteResult` — never throws. Errors are surfaced
+    /// as `.error(message)` for the orchestrator to speak.
+    func route(text: String, history: String = "") async -> RouteResult {
+        // Mode gating (GATE 7) — read the selected operating mode and use
+        // it to disable paths upfront. `.auto` (no mode set) keeps all paths.
+        let mode = currentMode()
+
+        // 1. Decide which router to use: Apple FM if available + mode allows
+        //    Path 2; otherwise GigiFallbackRouter (rule-based keyword matching).
+        let decision: FoundationRouterDecision
+        if applefmAvailable && mode.allowsAppleFMRouter {
+            #if canImport(FoundationModels)
+            if #available(iOS 18.1, *) {
+                do {
+                    decision = try await GigiFoundationSession.shared.routeRequest(text: text, history: history)
+                } catch {
+                    print("GIGI Router: Apple FM failed (\(error.localizedDescription)) — falling back to keyword router.")
+                    decision = fallback.classifyRequest(text: text)
+                }
+            } else {
+                decision = fallback.classifyRequest(text: text)
+            }
+            #else
+            decision = fallback.classifyRequest(text: text)
+            #endif
+        } else {
+            decision = fallback.classifyRequest(text: text)
+        }
+
+        // 2. Apply mode-based path remapping (GATE 7).
+        let effectivePath = mode.remap(decision.path, capabilities: decision.requiredCapabilities)
+
+        // 3. Dispatch.
+        switch effectivePath {
+        case "native_tool":
+            return await dispatchNativeTool(decision: decision, originalText: text, history: history)
+        case "delegate_local":
+            return await dispatchDelegateLocal(decision: decision, originalText: text, history: history)
+        case "delegate_cloud":
+            return await dispatchDelegateCloud(decision: decision, originalText: text, history: history)
+        case "ask_clarification":
+            return .spoken(decision.directSpeech.isEmpty
+                ? "Could you say that another way?"
+                : decision.directSpeech)
+        case "reject":
+            return .spoken(decision.directSpeech.isEmpty
+                ? "I can't help with that one."
+                : decision.directSpeech)
+        case "mode_blocked_local":
+            return .spoken("Local AI is disabled in this mode. Switch to Local-First or Full Power mode to enable Ollama.")
+        case "mode_blocked_cloud":
+            return .spoken("Cloud mode is disabled in this mode. Switch to Apple Optimized or Full Power mode to enable Claude Code.")
+        default:
+            return .error("Unknown routing decision: \(effectivePath).")
+        }
+    }
+
+    // MARK: - Availability cache
+
+    private var applefmAvailable: Bool {
+        #if canImport(FoundationModels)
+        if #available(iOS 18.1, *) {
+            return GigiFoundationSession.shared.isAvailable
+        }
+        #endif
+        return false
+    }
+
+    // MARK: - Dispatch: native_tool (Path 2)
+
+    private func dispatchNativeTool(
+        decision: FoundationRouterDecision,
+        originalText: String,
+        history: String
+    ) async -> RouteResult {
+        let action = decision.primaryAction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !action.isEmpty else {
+            // Router gave us native_tool but no action — fall through to
+            // delegate_cloud as the safest recovery.
+            return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
+        }
+
+        let params = paramsFromSlots(decision.slots, action: action, originalText: originalText)
+        let intent = GigiIntent(label: action, confidence: max(0.9, decision.confidence), params: params)
+
+        print("GIGI Router → native_tool: action=\(action) params=\(params)")
+        let speech = await bridge.execute(intent)
+        let final = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? GigiFoundationAgent.localSpeech(for: intent)
+            : speech
+        GigiConversationMemory.shared.addModelSpeech(final)
+        return .actionInvoked(speech: final, tool: action)
+    }
+
+    // MARK: - Dispatch: delegate_local (Path 3 — Ollama)
+
+    private func dispatchDelegateLocal(
+        decision: FoundationRouterDecision,
+        originalText: String,
+        history: String
+    ) async -> RouteResult {
+        // Cost-aware safety net: if the router said delegate_local but the
+        // capabilities require a browser, bump up to cloud.
+        let caps = Set(decision.requiredCapabilities)
+        if !caps.isDisjoint(with: ["browser", "code", "vision", "web_search"]) {
+            print("GIGI Router: delegate_local upgraded to delegate_cloud (capabilities=\(decision.requiredCapabilities))")
+            return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
+        }
+
+        let prompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+
+        guard harness.isConfigured else {
+            return .error("Local AI needs a paired harness. Pair the harness from Settings to enable Ollama.")
+        }
+
+        print("GIGI Router → delegate_local: prompt=\(prompt.prefix(80))")
+        var fullText = ""
+        var sawError: String?
+        for await event in harness.runLocalLLM(prompt: prompt, history: history) {
+            switch event {
+            case .chunk(let text):
+                fullText += text
+            case .done(let latencyMs):
+                print("GIGI Router: delegate_local done in \(latencyMs)ms")
+            case .error(let msg):
+                sawError = msg
+            }
+        }
+
+        if let err = sawError, fullText.isEmpty {
+            // Ollama unreachable → soft fallback to delegate_cloud if mode allows.
+            let mode = currentMode()
+            if mode.allowsCloud, harness.isConfigured {
+                print("GIGI Router: Ollama unavailable (\(err)) — falling back to Claude Code.")
+                return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
+            }
+            return .error("Local AI failed: \(err)")
+        }
+
+        let speech = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+        GigiConversationMemory.shared.addModelSpeech(speech)
+        return .spoken(speech.isEmpty ? "I couldn't think that through. Try rephrasing." : speech)
+    }
+
+    // MARK: - Dispatch: delegate_cloud (Path 4 — Claude Code)
+
+    private func dispatchDelegateCloud(
+        decision: FoundationRouterDecision,
+        originalText: String,
+        history: String
+    ) async -> RouteResult {
+        let prompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+
+        guard harness.isConfigured else {
+            return .error("Cloud AI needs a paired harness. Pair it from Settings to enable Claude Code.")
+        }
+
+        // Phase 2 transitional: use the existing GigiClaudeBridge.run() path
+        // until GATE 5 wires GigiHarnessClient.runClaudeCode with MCP support.
+        // This keeps continuity — every delegate_cloud query still produces a
+        // response — while the new streaming endpoint is being built out.
+        print("GIGI Router → delegate_cloud: prompt=\(prompt.prefix(80)) caps=\(decision.requiredCapabilities)")
+
+        // Try the new streaming runClaudeCode first; fall back to the legacy
+        // bridge if the new endpoint is not yet deployed on the harness.
+        var collected = ""
+        var streamingFailed = false
+        let mcpServers: [String] = decision.requiredCapabilities.contains("browser") ? ["harness-browser"] : []
+
+        for await event in harness.runClaudeCode(prompt: prompt, mcpServers: mcpServers) {
+            switch event {
+            case .thought(let t):
+                print("GIGI ClaudeEvent thought: \(t.prefix(60))")
+            case .toolUse(let name, _):
+                print("GIGI ClaudeEvent tool_use: \(name)")
+            case .textResponse(let t):
+                collected += t
+            case .confirmRequired:
+                // Phase 2: confirm gating UI is in GATE 5 (ConfirmComputerUseSheet).
+                // For now, auto-cancel destructive actions until UI ships.
+                return .spoken("Action needs confirmation — confirmation UI lands in GATE 5.")
+            case .done(let latencyMs):
+                print("GIGI Router: delegate_cloud done in \(latencyMs)ms")
+            case .error(let msg):
+                print("GIGI Router: delegate_cloud streaming failed (\(msg)) — falling back to legacy bridge.")
+                streamingFailed = true
+            }
+        }
+
+        if streamingFailed || collected.isEmpty {
+            let result = await GigiClaudeBridge.shared.run(task: prompt, context: nil)
+            if let err = result.error {
+                return .error(err)
+            }
+            collected = result.value
+        }
+
+        GigiConversationMemory.shared.addModelSpeech(collected)
+        return .actionInvoked(speech: collected, tool: "ask_claude")
+    }
+
+    // MARK: - Slot → params mapping
+
+    private func paramsFromSlots(_ slots: ActionSlots, action: String, originalText: String) -> [String: String] {
+        var params: [String: String] = [:]
+        if !slots.contact.isEmpty     { params["contact"]     = slots.contact }
+        if !slots.body.isEmpty        { params["body"]        = slots.body }
+        if !slots.destination.isEmpty { params["destination"] = slots.destination }
+        if !slots.date.isEmpty        { params["date"]        = slots.date }
+        if !slots.time.isEmpty        { params["time"]        = slots.time }
+        if !slots.taskText.isEmpty {
+            params["text"]      = slots.taskText
+            params["title"]     = slots.taskText
+            params["taskText"]  = slots.taskText
+            params["accessory"] = slots.taskText
+        }
+        if !slots.duration.isEmpty {
+            params["text"]     = slots.duration
+            params["taskText"] = slots.duration
+            params["raw"]      = slots.duration
+        }
+        if !slots.label.isEmpty       { params["label"]       = slots.label }
+        if !slots.appName.isEmpty     { params["app"]         = slots.appName }
+        if !slots.query.isEmpty       { params["query"]       = slots.query }
+        if !slots.platform.isEmpty    { params["platform"]    = slots.platform }
+        if params["raw"] == nil       { params["raw"]         = originalText }
+        return params
+    }
+
+    // MARK: - Mode gating (GATE 7)
+
+    private func currentMode() -> GigiMode {
+        let raw = UserDefaults.standard.string(forKey: "gigi.user.mode") ?? GigiMode.fullPower.rawValue
+        return GigiMode(rawValue: raw) ?? .fullPower
+    }
 }
+
+// MARK: - Compatibility shim
+
+#if !canImport(FoundationModels)
+
+// On SDKs without FoundationModels, FoundationRouterDecision still needs to
+// exist as a plain struct so the rest of the router compiles. ActionSlots /
+// FoundationRouterDecision @Generable definitions in GigiFoundationContracts
+// are wrapped in `#if canImport(FoundationModels)` — provide a parallel
+// non-Generable mirror here so the router file builds either way.
+
+struct ActionSlots {
+    var contact: String = ""
+    var body: String = ""
+    var destination: String = ""
+    var date: String = ""
+    var time: String = ""
+    var taskText: String = ""
+    var duration: String = ""
+    var label: String = ""
+    var appName: String = ""
+    var query: String = ""
+    var platform: String = ""
+}
+
+struct FoundationRouterDecision {
+    var path: String = "delegate_cloud"
+    var primaryAction: String = ""
+    var confidence: Double = 0
+    var complexityEstimate: Int = 50
+    var requiredCapabilities: [String] = []
+    var reason: String = ""
+    var slots: ActionSlots = ActionSlots()
+    var directSpeech: String = ""
+    var delegatePrompt: String = ""
+}
+
+#endif

@@ -95,55 +95,36 @@ final class GigiAgentEngine {
         // === Gate 1: deterministic NLU fast-path ===
         // 24 intent whitelist on-device (timer, call, message, navigate, etc.).
         // Confidence ≥0.95 → direct dispatch via GigiActionDispatcher.
+        // Kept BEFORE the router to skip the Apple FM round-trip (~1-3s)
+        // for obvious intents — saves latency on "what time is it", etc.
         if let fastPath = await deterministicFastPath(for: text) {
             return fastPath
         }
 
-        // === Gate 2: delegate to Claude (harness) ===
+        // === Gate 2: 5-path router (GATE 2 lands here) ===
         //
-        // Groq was removed from the main flow on 2026-05-11 (this commit).
-        // Until GATE 2 of the 5-path plan introduces the Apple FM router upfront,
-        // every non-NLU query is routed to the harness Claude bridge — the same
-        // bridge that previously powered the Force Claude toggle (now hidden
-        // behind #if DEBUG).
+        // GigiRequestRouter.route() runs the Apple FM upfront router (or
+        // GigiFallbackRouter rule-based if Apple FM is unavailable / mode
+        // disables it), gets a FoundationRouterDecision, and dispatches to
+        // one of the 5 paths:
+        //   - native_tool        → GigiActionBridge (instant)
+        //   - delegate_local     → Ollama via harness SSE (Path 3, GATE 4)
+        //   - delegate_cloud     → Claude Code via harness WS (Path 4, GATE 5)
+        //                            (transitional: falls back to GigiClaudeBridge)
+        //   - ask_clarification  → speak directSpeech
+        //   - reject             → speak directSpeech
         //
-        // This collapses the old 3-Gate flat (Force Claude → NLU → Groq agentLoop)
-        // into a clean 2-gate (NLU → Claude). Behavior is equivalent to having
-        // Force Claude permanently ON.
-        //
-        // Required: harness paired. When not paired the user gets a friendly
-        // message asking to configure pairing from Settings.
+        // Mode gating (GATE 7) is applied inside the router based on
+        // UserDefaults("gigi.user.mode").
 
-        if !GigiHarnessClient.shared.isConfigured {
-            return AgentResult(
-                speech: "Pair the harness from Settings to enable the AI brain.",
-                executedTools: [],
-                isFollowUp: false,
-                costEstimate: 0,
-                requiresConfirm: nil,
-                isError: true
-            )
-        }
+        let history = mem.contents(pruningIfNeeded: true).suffix(6).map { c in
+            let role = c.role == "user" ? "User" : "Assistant"
+            let t = c.parts.compactMap { $0.text }.joined(separator: " ")
+            return "\(role): \(t)"
+        }.joined(separator: "\n")
 
-        let result = await GigiClaudeBridge.shared.run(task: text, context: nil)
-        if let err = result.error {
-            return AgentResult(
-                speech: err,
-                executedTools: [],
-                isFollowUp: false,
-                costEstimate: 0,
-                requiresConfirm: nil,
-                isError: true
-            )
-        }
-        return AgentResult(
-            speech: result.value,
-            executedTools: ["ask_claude"],
-            isFollowUp: false,
-            costEstimate: 0,
-            requiresConfirm: nil,
-            isError: false
-        )
+        let routeResult = await GigiRequestRouter.shared.route(text: text, history: history)
+        return routeResult.asAgentResult
     }
 
 
