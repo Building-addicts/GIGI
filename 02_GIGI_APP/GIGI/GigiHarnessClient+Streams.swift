@@ -34,6 +34,45 @@ enum ClaudeEvent {
 @MainActor
 extension GigiHarnessClient {
 
+    // MARK: - Telemetry (Live Monitor visibility for on-device actions)
+    //
+    // Bug #012 fix (2026-05-12): native_tool / ask_clarification / reject
+    // paths execute on-device and never reach the harness. The harness
+    // live monitor at /live.html consequently shows nothing when the user
+    // is exercising those paths. This fire-and-forget POST surfaces them.
+    //
+    // Calls are best-effort: any error is silently dropped so demo flow
+    // doesn't slow down or fail because telemetry isn't available.
+
+    /// Send a non-blocking telemetry event to the harness.
+    /// The harness logs it as `[ios-telemetry] type · path=... · action=...`
+    /// — visible in /live.html in real time.
+    func postTelemetry(type: String,
+                       path: String,
+                       primaryAction: String = "",
+                       userText: String = "",
+                       elapsedMs: Int? = nil) {
+        guard let cfg = Self.harnessConfigSnapshot() else { return }
+        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + "/api/ios/telemetry"
+        guard let url = URL(string: urlString) else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
+        req.setValue(cfg.deviceId, forHTTPHeaderField: "X-Device-Id")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 2.0
+        var payload: [String: Any] = [
+            "type": type,
+            "path": path,
+            "primaryAction": primaryAction,
+            "userText": userText.count > 80 ? String(userText.prefix(80)) : userText
+        ]
+        if let elapsedMs { payload["elapsedMs"] = elapsedMs }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        // Fire-and-forget — don't await, don't surface errors.
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
     // MARK: - Path 3 — Ollama SSE consumer
 
     /// Streams chunks from the harness Ollama bridge (Path 3).

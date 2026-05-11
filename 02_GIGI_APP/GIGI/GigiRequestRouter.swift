@@ -112,6 +112,17 @@ final class GigiRequestRouter {
             effectivePath = "delegate_local"
         }
 
+        // Bug #012 fix (2026-05-12) — telemetry to harness Live Monitor.
+        // For every router decision, fire-and-forget a telemetry event so the
+        // live monitor at localhost:7777/live.html shows what the iPhone is
+        // doing even when the path stays on-device. No-op when not paired.
+        harness.postTelemetry(
+            type: "router_decision",
+            path: effectivePath,
+            primaryAction: decision.primaryAction,
+            userText: text
+        )
+
         // 3. Dispatch.
         switch effectivePath {
         case "native_tool":

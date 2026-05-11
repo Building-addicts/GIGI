@@ -517,12 +517,38 @@ class GigiNLUEngine {
     }
 
     private func splitContactBody(_ text: String) -> (String, String) {
-        let bodySeparators = [" e digli ", " dicendo ", " con il messaggio ", " saying ", " that "]
+        // Bug #009 fix (2026-05-12): support BOTH common patterns
+        //   Pattern A: "to <contact> <verb> <body>"
+        //              e.g. "to Leo saying I'll be late"
+        //              → contact = before separator, body = after
+        //   Pattern B: "and <verb> <body> to <contact>"
+        //              e.g. "and say hi to Leo Corte"
+        //              → body = between separator and " to ", contact = after " to "
+        let bodySeparators = [
+            " e digli ", " dicendo ", " con il messaggio ",
+            " saying ", " that ", " and say ", " and tell ",
+            " telling ", " writing "
+        ]
         for sep in bodySeparators {
             if let range = text.lowercased().range(of: sep) {
-                let contact = String(text[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
-                let body    = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-                return (contact, body)
+                let before = String(text[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                let after  = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+
+                // Pattern B: body comes BEFORE " to <contact>".
+                // Detect by finding " to " (or " a "/Italian) inside the
+                // `after` portion. If found, body = pre-" to ", contact = post.
+                let bSeparators = [" to ", " a ", " al ", " alla "]
+                for bSep in bSeparators {
+                    if let toRange = after.lowercased().range(of: bSep) {
+                        let body    = String(after[..<toRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+                        let contact = String(after[toRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+                        if !body.isEmpty && !contact.isEmpty {
+                            return (contact, body)
+                        }
+                    }
+                }
+                // Pattern A: default — before is contact, after is body.
+                return (before, after)
             }
         }
         return (text, "")

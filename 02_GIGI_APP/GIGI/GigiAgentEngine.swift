@@ -117,11 +117,25 @@ final class GigiAgentEngine {
         // Mode gating (GATE 7) is applied inside the router based on
         // UserDefaults("gigi.user.mode").
 
-        let history = mem.contents(pruningIfNeeded: true).suffix(6).map { c in
+        // Bug #013 fix (2026-05-12) — history pollution limiter.
+        // Previously passed 6 turns of conversation to the router. With
+        // repetitive interactions ('Send a message to Leo Corte' three times
+        // in a row), Apple FM router started anchoring on the dominant
+        // pattern and proposing it for unrelated follow-up prompts
+        // ('Order a Kebab' → 'Send a message to Leo Corte.' from history
+        // generalization). Now: pass only 3 turns AND deduplicate
+        // consecutive identical messages to break the anchoring.
+        let recent = mem.contents(pruningIfNeeded: true).suffix(3).map { c in
             let role = c.role == "user" ? "User" : "Assistant"
             let t = c.parts.compactMap { $0.text }.joined(separator: " ")
             return "\(role): \(t)"
-        }.joined(separator: "\n")
+        }
+        // Deduplicate consecutive identical lines (no value to FM router).
+        var deduped: [String] = []
+        for line in recent {
+            if deduped.last != line { deduped.append(line) }
+        }
+        let history = deduped.joined(separator: "\n")
 
         let routeResult = await GigiRequestRouter.shared.route(text: text, history: history)
         return routeResult.asAgentResult

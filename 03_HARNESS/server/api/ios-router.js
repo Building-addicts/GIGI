@@ -115,6 +115,32 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/agent/confirm'       && m === 'POST') { await claudeAgent.handleConfirm(req, res, deps); return true; }
   if (p === '/api/ios/agent/claude/cancel' && m === 'POST') { await claudeAgent.handleCancel(req, res, deps); return true; }
 
+  // 2026-05-12 — telemetry endpoint (bug-012 visibility).
+  // iOS fires events for native_tool actions (which otherwise don't reach
+  // the harness) so the Live Monitor (/live.html) can show a complete
+  // picture of what GIGI is doing on-device. Payload is a fire-and-forget
+  // JSON event; we just log it and reply 204. No persistence.
+  if (p === '/api/ios/telemetry' && m === 'POST') {
+    try {
+      const raw = await readBody(req);
+      const ev = JSON.parse(raw || '{}');
+      const type = String(ev.type || 'event');
+      const path = String(ev.path || '');
+      const action = String(ev.primaryAction || ev.action || '');
+      const userText = String(ev.userText || '').slice(0, 80);
+      const elapsedMs = Number.isFinite(ev.elapsedMs) ? Math.round(ev.elapsedMs) : null;
+      const dev = earlyDeviceId ? earlyDeviceId.slice(0, 8) + '…' : '<no-device-id>';
+      const elapsed = elapsedMs != null ? ` · ${elapsedMs}ms` : '';
+      log(`[ios-telemetry] ${type} · path=${path}${action ? ' · action=' + action : ''}${userText ? ' · text="' + userText + '"' : ''}${elapsed} · device=${dev}`);
+      res.writeHead(204);
+      res.end();
+    } catch (e) {
+      res.writeHead(400);
+      res.end();
+    }
+    return true;
+  }
+
   // health
   if (p === '/api/ios/health' && m === 'GET') { json(res, 200, { ok: true, data: { pid: process.pid, uptime_s: Math.floor(process.uptime()) } }); return true; }
 
