@@ -19,7 +19,10 @@ proposed fix. Status tag in the header — update when fixed and add a
 
 ## 🔴 Open bugs (May 2026 wave)
 
-_(none — all 4 cleared 🎉)_
+| # | Severity | Title | File |
+|---|---|---|---|
+| 005 | P1 (TBC) | `Set a timer for two minutes` still failing — IPA installed check OR regression | [2026-05-12-005-timer-two-minutes-regression-or-not-installed.md](2026-05-12-005-timer-two-minutes-regression-or-not-installed.md) |
+| 006 | P1 | `Call X` shows double confirmation: GIGI bubble + iOS native dialog | [2026-05-12-006-call-double-confirmation-ux.md](2026-05-12-006-call-double-confirmation-ux.md) |
 
 ## ✅ Fixed bugs
 

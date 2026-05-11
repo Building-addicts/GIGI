@@ -345,7 +345,12 @@ class GigiActionBridge {
             UIApplication.shared.open(telURL)
             return true
         }
-        return opened ? "Tap Call to confirm — iOS requires your approval before dialing \(contact)." : "Couldn't start the call."
+        // Bug #006 fix (2026-05-12): iOS shows its OWN native confirmation
+        // alert for any tel:// open ("Call +39 X / Cancel"). GIGI's previous
+        // message "Tap Call to confirm — iOS requires your approval…" was
+        // redundant noise on top of the system alert (double UX). The system
+        // alert IS the confirmation; let it do its job.
+        return opened ? "Calling \(contact)." : "Couldn't start the call."
     }
 
     // MARK: - Messages
