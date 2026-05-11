@@ -289,7 +289,18 @@ final class GigiRequestRouter {
         // bridge if the new endpoint is not yet deployed on the harness.
         var collected = ""
         var streamingFailed = false
-        let mcpServers: [String] = decision.requiredCapabilities.contains("browser") ? ["harness-browser"] : []
+        // 2026-05-12 defensive fix: Apple FM occasionally classifies "search the
+        // web" / "look up X" / "cerca su internet" as delegate_cloud but forgets
+        // to set requiredCapabilities=[browser]. Without browser MCP, Claude
+        // Code spawns toolless and produces hollow text answers. Since any
+        // delegate_cloud is likely to need the web (otherwise FM would pick
+        // delegate_local), always attach harness-browser. Claude can ignore it
+        // when not needed — the cost is zero.
+        let needsBrowser = decision.requiredCapabilities.contains("browser")
+            || decision.requiredCapabilities.contains("web_search")
+            || decision.path == .delegate_cloud
+        let mcpServers: [String] = needsBrowser ? ["harness-browser"] : []
+        GigiDebugLogger.log("GIGI Router → delegate_cloud mcp=\(mcpServers) caps=\(decision.requiredCapabilities)")
 
         for await event in harness.runClaudeCode(prompt: prompt, mcpServers: mcpServers) {
             switch event {
