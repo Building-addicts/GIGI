@@ -464,10 +464,14 @@ class GigiActionBridge {
     private func parseTimerDuration(_ text: String) -> Int {
         let lower = text.lowercased()
         var total = 0
+        // 2026-05-12 fix: previous patterns matched only singular forms
+        // ("3 minute") because `[^a-z]|$` rejected the trailing "s" of plurals.
+        // Now `s?` makes the plural optional AND `\b` enforces a word boundary,
+        // so "3 minutes", "3 minute", "3 min" all parse correctly.
         let patterns: [(String, Int)] = [
-            ("(\\d+)\\s*(?:hour|ora|ore|hr|h)(?:[^a-z]|$)", 3600),
-            ("(\\d+)\\s*(?:minute|minuto|minuti|min|m)(?:[^a-z]|$)", 60),
-            ("(\\d+)\\s*(?:second|secondo|secondi|sec|s)(?:[^a-z]|$)", 1)
+            ("(\\d+)\\s*(?:hours?|ora|ore|hr|h)\\b", 3600),
+            ("(\\d+)\\s*(?:minutes?|minuto|minuti|min|m)\\b", 60),
+            ("(\\d+)\\s*(?:seconds?|secondo|secondi|sec|s)\\b", 1)
         ]
         for (pattern, mult) in patterns {
             if let match = lower.range(of: pattern, options: .regularExpression) {
