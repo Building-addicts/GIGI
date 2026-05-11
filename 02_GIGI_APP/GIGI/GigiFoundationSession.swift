@@ -136,12 +136,29 @@ final class GigiFoundationSession {
     // `GigiFoundationAgent.routerSystemPrompt` so the router instructions
     // don't pollute the legacy `session` used by `respond(text:history:)`.
 
-    private var routerSession: LanguageModelSession?
-
-    private func setupRouterSessionIfNeeded() {
-        guard routerSession == nil, isAvailable else { return }
-        routerSession = LanguageModelSession(instructions: GigiFoundationAgent.routerSystemPrompt)
-    }
+    // 2026-05-12 PRECISION FIX — stateless router session.
+    //
+    // Previously `routerSession` was a persistent singleton, lazily created
+    // once and reused across all `routeRequest()` calls. Apple's
+    // `LanguageModelSession` accumulates conversation transcript internally
+    // on every `.respond(to:)` invocation. The accumulated context biased
+    // the router's classification toward whatever path was chosen on prior
+    // turns:
+    //   turn 1: "Search Apple stock" → delegate_cloud
+    //   turn 2: "Test tools on iPhone" → also delegate_cloud (anchored)
+    //   turn 3: "How are you" → still delegate_cloud (feedback loop)
+    //
+    // The `history` parameter we pass via the prompt is sub-weighted because
+    // the model trusts its internal transcript more than text in the user
+    // message. Resetting GigiConversationMemory via the chat ↻ button does
+    // NOT clear the Apple FM internal transcript.
+    //
+    // Fix: spawn a fresh LanguageModelSession on every call. Each routing
+    // decision sees ONLY the operator instructions + the current utterance
+    // (plus history as text). Zero turn-to-turn bias.
+    //
+    // Cost: ~50–150ms session init per turn — invisible compared to the
+    // 3–10s Ollama/Claude path latency that follows.
 
     /// Routes a user utterance to one of the 5 paths.
     /// Throws on Apple FM errors — the caller is expected to fall back to
@@ -154,14 +171,8 @@ final class GigiFoundationSession {
                 userInfo: [NSLocalizedDescriptionKey: "Apple Foundation Models not available"]
             )
         }
-        setupRouterSessionIfNeeded()
-        guard let s = routerSession else {
-            throw NSError(
-                domain: "GigiFoundationSession",
-                code: -2,
-                userInfo: [NSLocalizedDescriptionKey: "Router session could not be initialized"]
-            )
-        }
+        // Stateless: new session every call to prevent transcript bias.
+        let s = LanguageModelSession(instructions: GigiFoundationAgent.routerSystemPrompt)
 
         let prompt: String
         if history.isEmpty {
@@ -193,7 +204,7 @@ final class GigiFoundationSession {
             if desc.contains("modelcatalog") || desc.contains("SensitiveContentAnalysis") {
                 permanentlyDisabled = true
                 isAvailable = false
-                routerSession = nil
+                // routerSession no longer stored — stateless after 2026-05-12 fix
             }
             throw error
         }
@@ -290,7 +301,9 @@ final class GigiFoundationSession {
 
     func resetContext() {
         setupSession()
-        routerSession = nil
+        // routerSession is now stateless (recreated on every routeRequest)
+        // so there's nothing persistent to clear here. Resetting the main
+        // `session` (Tool-calling Path 2) is still needed.
         GigiDebugLogger.log("GIGI Foundation: session reset.")
     }
 }
