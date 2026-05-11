@@ -134,6 +134,24 @@ final class GigiRequestRouter {
     }
 
     // MARK: - Dispatch: native_tool (Path 2)
+    //
+    // Two execution modes depending on capability + feature flag:
+    //
+    // (A) "Pure Apple FM Tool calling" — iOS 26+ and matching FMTool exists:
+    //     Pass the user text + the single matching tool to Apple FM via
+    //     `respondWithTools`. Apple FM does the slot extraction + invokes
+    //     `tool.call(arguments:)`, which internally dispatches to
+    //     GigiActionBridge.execute. Latency 1-2s but slot quality is best
+    //     (constrained decoding). Toggled by `gigi.feature.path2_apple_fm_tools`
+    //     UserDefaults (default true on iOS 26+).
+    //
+    // (B) "Slot-extracted bridge path" — iOS <26, no matching FMTool, or
+    //     feature flag off: take `decision.slots` already populated by the
+    //     router itself, map to GigiIntent params, dispatch directly via
+    //     GigiActionBridge.execute. Latency 80-200ms (no extra Apple FM
+    //     round-trip).
+    //
+    // Both paths converge to the same bridge + speech logic.
 
     private func dispatchNativeTool(
         decision: FoundationRouterDecision,
@@ -147,16 +165,55 @@ final class GigiRequestRouter {
             return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
         }
 
+        // (A) Pure Apple FM Tool calling path.
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *), appleFMToolsEnabled() {
+            if let tool = GigiFoundationToolRegistry.tool(for: action) {
+                let prompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+                do {
+                    let result = try await GigiFoundationSession.shared.respondWithTools(
+                        text: prompt,
+                        tools: [tool],
+                        history: history
+                    )
+                    let speech = result.directSpeech?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let final = speech.isEmpty
+                        ? GigiFoundationAgent.localSpeech(for: GigiIntent(label: action, confidence: 1.0, params: [:]))
+                        : speech
+                    print("GIGI Router → native_tool[FM]: action=\(action) latencyMs=\(result.latencyMs)")
+                    GigiConversationMemory.shared.addModelSpeech(final)
+                    return .actionInvoked(speech: final, tool: action)
+                } catch {
+                    print("GIGI Router: respondWithTools failed (\(error.localizedDescription)) — falling back to slot bridge.")
+                    // Fall through to (B).
+                }
+            }
+        }
+        #endif
+
+        // (B) Slot-extracted bridge path.
         let params = paramsFromSlots(decision.slots, action: action, originalText: originalText)
         let intent = GigiIntent(label: action, confidence: max(0.9, decision.confidence), params: params)
 
-        print("GIGI Router → native_tool: action=\(action) params=\(params)")
+        print("GIGI Router → native_tool[bridge]: action=\(action) params=\(params)")
         let speech = await bridge.execute(intent)
         let final = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? GigiFoundationAgent.localSpeech(for: intent)
             : speech
         GigiConversationMemory.shared.addModelSpeech(final)
         return .actionInvoked(speech: final, tool: action)
+    }
+
+    /// Read the runtime feature flag for the pure Apple FM Tool calling path.
+    /// Default `true` on iOS 26+ when not explicitly disabled. Setting to
+    /// false disables (A) and forces (B) bridge path for all native_tool
+    /// dispatches — useful for A/B testing accuracy + latency trade-off.
+    private func appleFMToolsEnabled() -> Bool {
+        let key = "gigi.feature.path2_apple_fm_tools"
+        if UserDefaults.standard.object(forKey: key) == nil {
+            return true   // default on
+        }
+        return UserDefaults.standard.bool(forKey: key)
     }
 
     // MARK: - Dispatch: delegate_local (Path 3 — Ollama)
