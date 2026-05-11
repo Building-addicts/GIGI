@@ -21,9 +21,7 @@ proposed fix. Status tag in the header — update when fixed and add a
 
 | # | Severity | Title | File |
 |---|---|---|---|
-| 005 | P1 (TBC) | `Set a timer for two minutes` still failing — IPA installed check OR regression | [2026-05-12-005-timer-two-minutes-regression-or-not-installed.md](2026-05-12-005-timer-two-minutes-regression-or-not-installed.md) |
 | 008 | P2 | `Hellllo` (typo greeting) misclassified as `send_message` — character-repetition not in router patterns | [2026-05-12-008-hellllo-misclassified-send-message.md](2026-05-12-008-hellllo-misclassified-send-message.md) |
-| 011 | P2 | `Order on JustEat` → dismissive reject instead of opening app/website (missing `web_order_food` native handler) | [2026-05-12-011-just-eat-reject-too-dismissive.md](2026-05-12-011-just-eat-reject-too-dismissive.md) |
 
 ## ✅ Fixed bugs
 
@@ -34,7 +32,12 @@ proposed fix. Status tag in the header — update when fixed and add a
 | ✅ [003](2026-05-12-003-ollama-via-claude-login-error.md) | **P0** | knowledge Q&A mis-routed → FM verb anchors + iOS downgrade + fail-soft to Ollama | `f1ef170` | next |
 | ✅ [004](2026-05-12-004-timer-spelled-numbers.md) | P1 | `timer for two minutes` → wordToNumber pre-pass (EN 0-99 + IT) | `d1c75e9` | next |
 | ✅ [006](2026-05-12-006-call-double-confirmation-ux.md) | P1 | `Call X` double confirm → bubble simplified to "Calling X." | `cfc8b8e` | next |
-| ✅ [010](2026-05-12-010-call-bypass-ios-popup-via-whatsapp.md) | P1 | `Call X` iOS popup bypass → smart route via WhatsApp when installed, tel:// fallback | TBD | next |
+| ✅ [010](2026-05-12-010-call-bypass-ios-popup-via-whatsapp.md) | P1 | `Call X` iOS popup bypass → smart route via WhatsApp when installed, tel:// fallback | `a7c58a2` | next |
+| ✅ [005](2026-05-12-005-timer-two-minutes-regression-or-not-installed.md) | P1 | `Set a timer for two minutes` (verified working after d1c75e9 install) | `d1c75e9` | next |
+| ✅ [011](2026-05-12-011-just-eat-reject-too-dismissive.md) | P2 | `Order on JustEat` → FMWebOrderFoodTool + bridge handler + country-aware schemes | `c8b1d1a` | next |
+| ✅ [014](2026-05-12-014-geo-context-missing-in-delegate-cloud.md) | **P1** | Geographic context missing → Londra default → prependUserContext header to delegate_cloud | `c8b1d1a` | next |
+| ✅ [015](2026-05-12-015-claude-response-too-verbose.md) | P2 | Verbose multi-option Claude responses → STRICT 2-sentence cap in operator manual | `c8b1d1a` | next |
+| ✅ [016](2026-05-12-016-browser-pool-failure-leaked-to-user.md) | P1 | "Browser pool is down" leaked to user → operator manual silent fallback rule | `c8b1d1a` | next |
 
 ## Workflow
 

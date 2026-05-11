@@ -1,6 +1,6 @@
 # Bug 011 — `Order something on JustEat` returns dismissive reject instead of opening the app
 
-- **Status**: open
+- **Status**: ✅ fixed
 - **Severity**: P2 (missed opportunity to be useful; surfaces architecture gap)
 - **Discovered**: 2026-05-12 — Armando re-test
 - **Area**: iOS · Apple FM router / GigiActionBridge · missing `web_order_food` native handler
@@ -137,4 +137,26 @@ Add: `justeat`, `deliveroo`, `ubereats`, `glovo`, `doordash` (whichever you targ
 
 ## Resolution
 
-_(empty)_
+- **Commit**: `c8b1d1a` (2026-05-12)
+- **IPA**: `GIGI-c8b1d1a.ipa`
+- **Files changed**: GigiFoundationToolRegistry.swift (+FMWebOrderFoodTool, +canonical action), GigiActionBridge.swift (+openFoodDeliveryApp), GigiFoundationAgent.swift (router prompt hint), GigiFoundationContracts.swift (@Guide allowed values), Info.plist (4 new URL schemes)
+
+### Implementation summary
+
+1. **FMWebOrderFoodTool** added to allTools registry as 17th tool with @Generable Arguments(service, query).
+2. **openFoodDeliveryApp(service, query)** bridge handler with 3-tier priority chain (native app → country-aware web → Google search fallback).
+3. **Locale.current.region** drives country routing (justeat.it for IT, just-eat.co.uk for GB, etc).
+4. **Info.plist** extended `LSApplicationQueriesSchemes` with justeat, deliveroo, glovo, talabat (doordash + ubereats already present).
+5. **Router prompt** updated with food-delivery hint: "Never route food-delivery intent to reject. Use web_order_food."
+6. **paramsFromSlots** maps `slots.appName` → `params["service"]` when action is web_order_food (fallback bridge path).
+
+### Test plan
+
+| Input | Expected |
+|---|---|
+| "Order on JustEat" (IT locale) | JustEat IT app opens, else justeat.it in Safari. NO reject. |
+| "Order on Deliveroo" | Deliveroo app / deliveroo.it (IT) |
+| "Order on JustEat" (GB locale) | just-eat.co.uk |
+| "Order food" (no service) | Google search "food delivery near me" |
+| "Order a kebab" (no service) | Google search "kebab" |
+| "I'm hungry" | Apple FM may route to web_order_food with empty service → web search |
