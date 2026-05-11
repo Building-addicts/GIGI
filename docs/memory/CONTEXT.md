@@ -1,6 +1,24 @@
 # Current Context
-**Initialized:** 2026-04-27
-**Focus:** Phase 1 (claude bridge integration) in corso — task P1.4 IN PROGRESS, P1.5+ in coda. Phase 4 (pairing) completa lato codice, in attesa test on-device.
+**Updated:** 2026-05-12
+**Focus:** Pre-demo settimana MVP. Path 3 Ollama SSE parsing finalmente
+fixato con parser byte-buffer manuale (commit `6a74842`, ADR-0013).
+Prossimo step: utente reinstalla IPA finale → conferma "Bonjour." → Phase
+C router 5-path tests + Phase D mode switch + Phase E killer demo Tesla.
+
+**Path SSE journey (2026-05-12)**:
+1. Sintomo: "Ollama returned no answer · chunks=0" su ogni call con Brain Path Override = Ollama.
+2. Tentativo 1 `7a3585a`: strip `\r` da ogni `rawLine` di `bytes.lines` — non basta.
+3. Tentativo 2 `c72d1a5`: flush su nuovo `event:` header — anche non testato perché build pre-c72d1a5 finita sul device.
+4. Tentativo 3 `6a74842` ✅ — abbandonato `bytes.lines` del tutto, parser byte-buffer
+   manuale alla mattt/EventSource. Token diagnostico `parser=manual-buffer-v1`
+   nei Captured logs per identificare al volo la build installata.
+
+Vedi `docs/adr/0013-sse-manual-byte-buffer-parser.md` per razionale completo
+e `docs/plans/sse-ollama-deep-fix-2026-05-12.md` per piano implementativo.
+
+**Lo storico Phase 1/2/3/4 (claude bridge, pairing, etc.)** è completato e
+mergiato. Settimana lancio MVP ora ruota su 5-path router + UI Modes + killer
+demo Tesla → nota.
 
 Per il piano dettagliato leggi `docs/TASK_PLAN.md`.
 Per le ultime attività leggi le ultime 5–10 entry di `docs/memory/ACTIVITY_LOG.md`.
