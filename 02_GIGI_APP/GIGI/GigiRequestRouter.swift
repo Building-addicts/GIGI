@@ -298,7 +298,7 @@ final class GigiRequestRouter {
         // when not needed — the cost is zero.
         let needsBrowser = decision.requiredCapabilities.contains("browser")
             || decision.requiredCapabilities.contains("web_search")
-            || decision.path == .delegate_cloud
+            || decision.path == "delegate_cloud"
         let mcpServers: [String] = needsBrowser ? ["harness-browser"] : []
         GigiDebugLogger.log("GIGI Router → delegate_cloud mcp=\(mcpServers) caps=\(decision.requiredCapabilities)")
 
