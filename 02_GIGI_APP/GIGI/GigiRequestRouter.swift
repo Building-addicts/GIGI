@@ -95,7 +95,22 @@ final class GigiRequestRouter {
         }
 
         // 2. Apply mode-based path remapping (GATE 7).
-        let effectivePath = mode.remap(decision.path, capabilities: decision.requiredCapabilities)
+        var effectivePath = mode.remap(decision.path, capabilities: decision.requiredCapabilities)
+
+        // 2.5 Bug #003 fix (2026-05-12) — defensive downgrade.
+        // Apple FM router sometimes mis-routes knowledge Q&A as
+        // delegate_cloud (e.g. "Explain Bayes theorem"). If path is
+        // delegate_cloud but the user's text contains NO web/code/image
+        // verb AND the router didn't claim any browser/code/vision
+        // capability, downgrade to delegate_local. Saves a useless
+        // Claude Code spawn (and a /login error if claude isn't logged in)
+        // for queries that the local Ollama model can answer.
+        if effectivePath == "delegate_cloud"
+            && !Self.hasWebOrCodeOrImageVerb(text)
+            && decision.requiredCapabilities.isEmpty {
+            GigiDebugLogger.log("GIGI Router: delegate_cloud DOWNGRADED to delegate_local — no web/code/image verb in prompt")
+            effectivePath = "delegate_local"
+        }
 
         // 3. Dispatch.
         switch effectivePath {
@@ -332,12 +347,26 @@ final class GigiRequestRouter {
 
         // Bug #002 fix (2026-05-12): refuse to concatenate Claude CLI error
         // strings into the response. The harness propagates "/login" stderr
-        // verbatim when claude.exe isn't authenticated; that leaks into
-        // `collected` as if it were a legit summary and would get glued to
-        // any follow-up action result. Surface a clean error instead.
+        // verbatim when claude.exe isn't authenticated.
+        // Bug #003 fix (2026-05-12): instead of returning a hard error,
+        // fail-soft by retrying the same prompt on Ollama (delegate_local).
+        // Most knowledge queries that wound up here mis-routed by Apple FM
+        // can be answered by the local model. The tester sees an answer
+        // instead of a cryptic "/login" message.
         if Self.looksLikeClaudeAuthError(collected) {
-            GigiDebugLogger.log("GIGI Router: Claude returned auth error — short-circuit, no follow-up chain.")
-            return .error("Claude Code on the PC needs to be logged in. Run `claude /login` on the harness host once.")
+            GigiDebugLogger.log("GIGI Router: Claude auth error — fail-soft retry on Ollama (delegate_local).")
+            // Construct a synthetic decision to reuse dispatchDelegateLocal
+            var fallbackDecision = decision
+            fallbackDecision.path = "delegate_local"
+            fallbackDecision.requiredCapabilities = []
+            if fallbackDecision.delegatePrompt.isEmpty {
+                fallbackDecision.delegatePrompt = originalText
+            }
+            return await dispatchDelegateLocal(
+                decision: fallbackDecision,
+                originalText: originalText,
+                history: history
+            )
         }
 
         // GATE 6 — 2-turn callback (Path 4 → Path 2) for killer demos like
@@ -381,6 +410,32 @@ final class GigiRequestRouter {
     private struct FollowUpAction {
         let action: String     // canonical action name
         let title: String?     // optional pre-extracted title
+    }
+
+    /// Bug #003 helper: detect web/code/image verbs in the user's text.
+    /// Used to defensively downgrade delegate_cloud → delegate_local when
+    /// Apple FM mis-routes a pure knowledge question to the cloud.
+    private static let webVerbs = [
+        "search ", "look up", "find online", "find the latest", "browse",
+        "fetch", "scrape", "get the latest", "what's the latest",
+        "what's the current", "what's today's", "what's this week's",
+        "check the web", "go to ", "navigate to ", "open ",
+        "current price", "today's news", "latest news"
+    ]
+    private static let codeVerbs = [
+        "write a script", "write a python", "write code", "implement ",
+        "fix this code", "fix the code", "debug ", "refactor "
+    ]
+    private static let imageVerbs = [
+        "read this image", "what's in the screenshot", "describe this image",
+        "what's in this photo", "analyze this picture"
+    ]
+
+    private static func hasWebOrCodeOrImageVerb(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return webVerbs.contains(where: { lower.contains($0) })
+            || codeVerbs.contains(where: { lower.contains($0) })
+            || imageVerbs.contains(where: { lower.contains($0) })
     }
 
     /// Bug #002 helper: detect Claude CLI authentication errors that the

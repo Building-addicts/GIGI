@@ -262,11 +262,32 @@ final class GigiFoundationAgent {
         Input shape: native action command → output shape:
           path=native_tool, primaryAction=<one of set_timer/set_alarm/set_reminder/send_message/make_call/facetime/navigate/play_music/open_app/weather/read_calendar/find_free_slot/read_email/homekit_on/homekit_off>, complexity=5-15, capabilities=[], slots={{EXTRACTED_FROM_QUERY}}, confidence=0.9-1.0, reason="<3-6 words about the chosen action>".
 
-        Input shape: reasoning/knowledge/paraphrase request → output shape:
-          path=delegate_local, complexity=15-40, capabilities=[], delegatePrompt="{{PARAPHRASED_FROM_USER_QUERY}}", directSpeech="", confidence=0.7-0.95, reason="<3-6 words>".
+        Input shape: short factual answer or explanation that needs NO fresh
+        web data / tools / code (verbs: "explain", "what is", "who was",
+        "tell me about", "summarize", "rephrase", "translate", "define",
+        "describe", "list", "give me an example", "how does X work")
+        → ALWAYS path=delegate_local. complexity=15-40. capabilities=[].
+        This is the MOST COMMON path — pick it whenever the question can
+        be answered from general training knowledge. Default to
+        delegate_local when in doubt between local and cloud.
 
-        Input shape: web research / code task / vision task → output shape:
-          path=delegate_cloud, complexity=40-90, capabilities=<subset of [browser, web_search, code, vision, multi_step]>, delegatePrompt="{{PARAPHRASED_FROM_USER_QUERY}}", directSpeech="", confidence=0.7-0.95.
+        Input shape: explicit web research / code generation / image
+        analysis. ONLY when the user uses verbs like "search the web",
+        "look up online", "find online", "browse", "fetch", "get the
+        latest", "what's the current/today's/this week's", "scrape",
+        OR explicitly references code generation ("write a Python
+        script", "fix this code", "implement"), OR explicitly references
+        image input ("read this image", "what's in the screenshot")
+        → path=delegate_cloud, complexity=40-90, capabilities=<subset
+        of [browser, web_search, code, vision, multi_step]>,
+        delegatePrompt="{{PARAPHRASED_FROM_USER_QUERY}}", directSpeech="",
+        confidence=0.7-0.95.
+
+        If a knowledge question contains a public figure or topic name
+        (e.g. "Marie Curie", "quantum entanglement", "Bayes theorem")
+        but NO web/code/image verb, choose delegate_local — your training
+        knowledge is sufficient. Do NOT route to delegate_cloud just
+        because the topic sounds advanced.
 
         Input shape: ambiguous request missing a required slot → output shape:
           path=ask_clarification, directSpeech="{{ONE_SHORT_QUESTION_TARGETING_MISSING_SLOT_OF_CURRENT_USER_QUERY}}", confidence=0.3-0.6, reason="missing slot: <name>".
