@@ -621,40 +621,8 @@ struct SettingsView: View {
                 }
             }
 
-            // 2026-05-12 batch 7 — Captured logs viewer (gigi_crash_logs UserDefaults)
-            DisclosureGroup("📋 Captured GIGI logs (last 200)") {
-                let logs = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
-                if logs.isEmpty {
-                    Text("(no captured logs yet — pronounce a query to populate)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                } else {
-                    ScrollView {
-                        Text(logs.suffix(200).joined(separator: "\n"))
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .padding(6)
-                    }
-                    .frame(maxHeight: 280)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(6)
-                    HStack(spacing: 12) {
-                        Button("Copy all") {
-                            UIPasteboard.general.string = logs.joined(separator: "\n")
-                        }
-                        .font(.caption)
-                        Button("Clear") {
-                            UserDefaults.standard.removeObject(forKey: "gigi_crash_logs")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        Spacer()
-                        Text("\(logs.count) entries").font(.caption2).foregroundColor(.secondary)
-                    }
-                }
-            }
+            // 2026-05-12 batch 7+9 — Captured logs viewer with live reload
+            CapturedLogsView()
 
             // Phase 2 — Last router decision viewer (debug overlay)
             DisclosureGroup("Last router decision (JSON)") {
