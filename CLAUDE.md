@@ -37,6 +37,7 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | **Kickoff message Leo+Fede** | `docs/KICKOFF_LEO_FEDE.md` (per Armando, da copiare in chat) |
 | **Template issue (header 🎯/🔧/✨)** | `.github/ISSUE_TEMPLATE/{feature,sub-issue,parent-epic,bug}.md` |
 | **Task plan Phase 2-4 (8 GATE)** | `docs/taskplans_new_gigi/INDEX.md` |
+| **🐛 Bug ledger beta tester** | `docs/DEBUG/README.md` (index) + un file `.md` per bug |
 
 ## Layout monorepo
 
@@ -109,6 +110,13 @@ Niente memorie per-agente: l'utente è solo, agenti paralleli rari, `ACTIVITY_LO
 ## Regole operative
 
 - **Bug** → chiama subito **debugger**. Root cause prima del fix. Se rivela un'assunzione sbagliata, aggiorna `DECISIONS.md`.
+- **🐛 Bug ledger workflow (`docs/DEBUG/`)** — quando un bug beta tester è risolto:
+  1. **NON cancellare** il file `docs/DEBUG/YYYY-MM-DD-NNN-*.md` — resta come storia
+  2. Cambia `**Status**: open` → `**Status**: ✅ fixed` nell'header del file
+  3. Compila la sezione **`## Resolution`** in fondo al file con: commit hash, IPA che lo include, descrizione del fix applicato (3-5 righe), file modificati
+  4. In `docs/DEBUG/README.md` nella tabella "Open bugs": muovi la riga dalla sezione "Open bugs" a una nuova sezione "✅ Fixed bugs" (oppure flagga con emoji ✅ all'inizio della riga)
+  5. Commit message: `fix(bug-NNN): <short title> (closes docs/DEBUG/YYYY-MM-DD-NNN)`
+  6. Questo workflow è **obbligatorio** anche per il fix più piccolo — i tester devono poter vedere quali bug sono stati chiusi e quando.
 - **Loop / task ricorrente** → **NON** `ScheduleWakeup`. Crea watcher in `03_HARNESS/server/watchers.json` (chiedi sempre frequenza polling). Dettagli in `03_HARNESS/CLAUDE.md` §"Regola: loop → watcher".
 - **iOS build verify** → ogni task che modifica `.swift` DEVE essere seguito da xcodebuild filtrato per errori prima di dichiararsi completo. Workflow di build (host, comandi) personale → `CLAUDE.local.md` di ciascun dev.
 - **Mai dichiarare "fix iOS testato"** senza nuovo IPA installato sul device fisico. Simulatore non copre audio/VAD.

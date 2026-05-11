@@ -31,9 +31,15 @@ struct DashboardView: View {
                     headerRow
                         .padding(.top, 56)
 
-                    // First-config banner
-                    if !harnessConfigured {
-                        firstConfigBanner
+                    // First-config banner (Bug #001 fix 2026-05-12)
+                    // Previously shown when !harnessConfigured — but the
+                    // MainTabView already shows a global "Connect GIGI to
+                    // your PC" purple banner in that case. The Groq banner
+                    // is now shown ONLY after pairing, only if no Groq key
+                    // is set, and only if the user hasn't dismissed it.
+                    // Groq is optional (Apple FM + Ollama cover most paths).
+                    if harnessConfigured && groqKeyMissing && !optionalBrainBannerDismissed {
+                        optionalBrainBanner
                     }
 
                     // ── Setup status cards ─────────────────────────
@@ -115,35 +121,61 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - First-config banner
+    // MARK: - Optional cloud-brain banner (Bug #001 fix)
+    //
+    // Replaces the prior "Groq key required" banner which:
+    //   (1) Showed before pairing — duplicating MainTabView's purple "Connect
+    //       GIGI to PC" card, creating onboarding clutter.
+    //   (2) Used "required" wording — Groq is optional after the 5-path
+    //       router (Apple FM + Ollama cover most paths without any cloud key).
+    //   (3) Couldn't be dismissed — testers who skip cloud reasoning saw it
+    //       indefinitely.
+    //
+    // New behavior: shown only AFTER pairing, only if Groq key is missing,
+    // only if user hasn't dismissed. Softer copy + info icon + dismiss "x".
 
-    private var firstConfigBanner: some View {
+    private var groqKeyMissing: Bool {
+        GigiConfig.groqAPIKey.isEmpty
+    }
+
+    @AppStorage("gigi.dashboard.optionalBrainBannerDismissed")
+    private var optionalBrainBannerDismissed: Bool = false
+
+    private var optionalBrainBanner: some View {
         HStack(spacing: 12) {
-            Image(systemName: "key.fill")
+            Image(systemName: "sparkles")
                 .font(.system(size: 18))
-                .foregroundColor(.orange)
+                .foregroundColor(.blue)
                 .frame(width: 36, height: 36)
-                .background(Color.orange.opacity(0.15))
+                .background(Color.blue.opacity(0.12))
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Groq key required")
+                Text("Optional: cloud AI brain")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
-                Text("Go to Settings → AI Brain to add your free API key.")
+                Text("Add a free Groq API key in Settings → AI Brain for advanced cloud reasoning. Apple Intelligence and local Ollama already cover most tasks.")
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.55))
+                    .lineLimit(3)
             }
 
             Spacer()
 
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12))
-                .foregroundColor(.white.opacity(0.3))
+            Button {
+                optionalBrainBannerDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.45))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
         }
         .padding(14)
-        .background(Color.orange.opacity(0.08))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.25), lineWidth: 1))
+        .background(Color.blue.opacity(0.06))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.blue.opacity(0.20), lineWidth: 1))
         .cornerRadius(14)
     }
 
