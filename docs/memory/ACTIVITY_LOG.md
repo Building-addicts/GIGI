@@ -302,3 +302,4 @@
 - `2026-05-11T17:08:01+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session ) _(modified: 03_HARNESS/server/package-lock.json)_
 - `2026-05-11T17:08:24+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session ) _(modified: 03_HARNESS/server/package-lock.json)_
 - `2026-05-11T17:09:21+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session ) _(modified: 03_HARNESS/server/package-lock.json)_
+- `2026-05-11T17:20:52+0200` · local · session ended on `armando-rework` (last commit: fix(ios): reinforce FM router prompt rules + migrate 22 caption strings IT→EN) _(modified: 03_HARNESS/server/package-lock.json)_
