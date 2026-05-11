@@ -289,3 +289,4 @@
 - `2026-05-11T16:24:05+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session ) _(modified: 03_HARNESS/server/package-lock.json,docs/plans/sse-ollama-deep-fix-2026-05-12.md)_
 - `2026-05-11T16:37:26+0200` · local · session ended on `armando-rework` (last commit: fix(ios): replace bytes.lines with manual byte-buffer SSE parser (Phase B)) _(modified: 03_HARNESS/server/package-lock.json,docs/plans/sse-ollama-deep-fix-2026-05-12.md)_
 - `2026-05-11T16:40:09+0200` · local · session ended on `armando-rework` (last commit: docs: ADR-0013 SSE parser + Phase B plan + demo test script) _(modified: 03_HARNESS/server/package-lock.json)_
+- `2026-05-11T16:49:31+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: docs: ADR-0013 SSE p) _(modified: 03_HARNESS/server/package-lock.json)_
