@@ -42,15 +42,15 @@ L'obiettivo finale: GIGI v0.1.0 OSS-ready, demo "Tesla → nota" in <90s, zero A
 
 | # | Title | Effort | Status | Depends on | Brief outcome |
 |---|---|---|---|---|---|
-| **0** | Build verify post-cleanup | ~45 min | Ready | nessuno | Baseline `armando-rework` compila + IPA installa + 3 tab + Brain Path Override visibile |
-| **1** | Spike A — Apple FM iOS 26.4 regression | 1 g | Pending | GATE 0 | 50 query test set su iPhone, decisione Q11 (pin 26.3 / accept 26.4 / feature flag), ADR-0011 chiusa |
-| **2** | Router Apple FM upfront | 3-5 g | Pending | GATE 1 + Q11 | `FoundationRouterDecision @Generable` + `GigiRequestRouter` first gate in pipeline; dispatch a 5 path con stub Path 3/4 e Groq fallback |
-| **3** | Path 2 — Apple FM Tool calling (15 tool) | 4-6 g | Pending | GATE 2 + Q2 | 15 `Tool` struct con bridge a `GigiActionDispatcher`, `GigiFallbackRouter` rule-based, ADR-0008 chiusa |
-| **4** | Path 3 — Ollama harness | 4-5 g | Pending | GATE 3 + Spike B | `ollama-client.js` + `ios-local-llm.js` SSE + `runLocalLLM` Swift + Brain section tier selector, ADR-0010 chiusa |
-| **5** | Path 4 — Claude Code subprocess + MCP | 5-7 g | Pending | GATE 4 + Spike C | `runClaudeCode` + MCP `harness-browser` + `ConfirmComputerUseSheet`, `ios-computer-use.js` deprecato, `@anthropic-ai/sdk` rimosso |
-| **6** | Killer demo Tesla → nota | 2-3 g | Pending | GATE 5 | 2-turn callback Path 4 → Path 2; 5 demo varianti testati; latency ≤90s |
-| **7** | Modes UI + setup wizard | 3-4 g | Pending | GATE 6 | `ModesSelectionView` con 4 mode (Minimal / Local-First / Apple Optimized / Full Power); `setup-oss-demo.sh`; auto-detect mode al boot |
-| **8** | Hardening + OSS release v0.1.0 | 5-7 g | Pending | GATE 7 | 10 AC piano §8 verified; README; demo video 3-min; license audit; tag `v0.1.0` |
+| **0** | Build verify post-cleanup | ~45 min | ✅ DONE (2026-05-11) | nessuno | Baseline `armando-rework` compila (SHA `519f235`), IPA installa, 3 tab, Brain Path Override visibile |
+| **1** | Spike A — Apple FM iOS 26.4 regression | 1 g | 📋 SCAFFOLD READY (2026-05-12) | GATE 0 | 50 query test set + results template scritti (`docs/research/spike-a-*.md`); manca esecuzione su device + chiusura ADR-0011 |
+| **2** | Router Apple FM upfront | 3-5 g | ✅ IMPLEMENTED (2026-05-12) | GATE 1 + Q11 | `FoundationRouterDecision @Generable` + `routerSystemPrompt` + `GigiRequestRouter` 5-path + AgentEngine wired; ADR-0007 Accepted |
+| **3** | Path 2 — Apple FM Tool calling (15 tool) | 4-6 g | ✅ IMPLEMENTED (2026-05-12) | GATE 2 + Q2 | 15 `FM*Tool` struct + `respondWithTools` round-trip via `dispatchNativeTool` (feature flag default-on) + `GigiFallbackRouter` keyword; ADR-0008 Accepted |
+| **4** | Path 3 — Ollama harness | 4-5 g | ✅ IMPLEMENTED (Spike B pending, 2026-05-12) | GATE 3 + Spike B | `ollama-client.js` full + `ios-local-llm.js` SSE + `runLocalLLM` Swift + Settings ollamaSection (tier picker + status); ADR-0010 Accepted |
+| **5** | Path 4 — Claude Code subprocess + MCP | 5-7 g | 🟡 SCAFFOLD (2026-05-12) | GATE 4 + Spike C | `runClaudeCode` SSE consumer + endpoint scaffold + `ConfirmComputerUseSheet` UI + `unset ANTHROPIC_API_KEY` in `start-harness.sh`; legacy `GigiClaudeBridge.run` fallback active. Manca: real subprocess spawn in `ios-claude-agent.js` |
+| **6** | Killer demo Tesla → nota | 2-3 g | ⏸️ Pending (device) | GATE 5 | 2-turn callback Path 4 → Path 2; 5 demo varianti testati; latency ≤90s |
+| **7** | Modes UI + setup wizard | 3-4 g | ✅ IMPLEMENTED (2026-05-12) | GATE 6 | `GigiMode` enum + `GigiModeDetector` + `ModesSelectionView` (4 cards) + Settings modesSection + `setup-oss-demo.sh` 10-step idempotent |
+| **8** | Hardening + OSS release v0.1.0 | 5-7 g | ⏸️ Pending | GATE 7 | 10 AC piano §8 verified; README; demo video 3-min; license audit; tag `v0.1.0` |
 
 **Totale effort stimato: 28-39 giorni lavorativi**, in linea con il piano §10 (5.5-6.5 settimane / 27-32 giorni). Il range superiore include buffer per Spike B/C + rework iterativo.
 
@@ -216,4 +216,5 @@ Questa sezione è **critica**: senza di lei un task plan vecchio è inutile (non
 
 ## Changelog INDEX
 
+- **2026-05-12** — GATE 2-3-4-5(scaffold)-7 implemented overnight by Claude Opus 4.7. ADR-0007/0008/0009/0010 → Accepted. Build SUCCEEDED. IPA dropped to Windows. Spike A scaffold ready. See `docs/HANDOFF_2026-05-12.md`.
 - **2026-05-11** — versione iniziale creata, 8 GATE + INDEX
