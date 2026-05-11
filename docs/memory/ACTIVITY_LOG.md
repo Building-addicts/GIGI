@@ -344,3 +344,4 @@
 - `2026-05-12T00:16:52+0200` · local · session ended on `armando-rework` (last commit: feat: bug-009 NLU + bug-012 telemetry + bug-013 history pruning + bug-011 doc)
 - `2026-05-12T00:18:09+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: feat: bug-009 NLU + )
 - `2026-05-12T00:49:15+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
+- `2026-05-12T01:06:42+0200` · local · session ended on `armando-rework` (last commit: docs(debug): mark bug-011/014/015/016 ✅ fixed (commit c8b1d1a) — 11 bugs cle)
