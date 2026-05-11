@@ -1,0 +1,31 @@
+{
+  "_comment": "Ollama configuration template — Phase 2 stub. Copy to config.json (gitignored). Reference: plan §3.2 + §7.Q1.",
+
+  "ollama": {
+    "host": "127.0.0.1",
+    "port": 11434,
+    "bind": "localhost-only",
+    "_bind_comment": "Set to 'lan' to expose Ollama to LAN (multi-device). Default localhost-only for privacy.",
+
+    "tier": "default",
+    "_tier_chosen_2026_05_12": "qwen3:14b is now installed and respects the system prompt (concise voice assistant). qwen3:4b too small — ignored 'don't think out loud' instruction.",
+    "_tier_comment": "Auto-selects model based on detected RAM: lite (4-8GB), standard (8-16GB), default (16-32GB), pro (32GB+). Override with explicit 'model' below.",
+
+    "model": null,
+    "_model_comment": "When set, takes precedence over tier. Examples: qwen3:14b, qwen3:8b, qwen3.6:27b. AVOID qwen3.5:* family (Ollama Issue #14493).",
+
+    "tier_models": {
+      "lite":     "qwen3:4b",
+      "standard": "qwen3:8b",
+      "default":  "qwen3:14b",
+      "pro":      "qwen3.6:27b"
+    },
+
+    "think_mode": "auto",
+    "_think_mode_comment": "auto | always | never. 'auto' enables Qwen 3 hybrid thinking only for complexityEstimate > 30 (cost-aware).",
+
+    "timeout_first_byte_ms": 30000,
+    "timeout_total_ms": 300000,
+    "retry_on_network_error": 1
+  }
+}

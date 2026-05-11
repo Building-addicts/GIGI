@@ -88,8 +88,10 @@ export class OllamaClient {
    * @param {boolean} [opts.think]
    * @returns {AsyncIterable<string>}
    */
-  async *generate({ model, prompt, signal, think = false }) {
-    const body = JSON.stringify({ model, prompt, stream: true, think });
+  async *generate({ model, prompt, signal, think = false, system }) {
+    const payload = { model, prompt, stream: true, think };
+    if (system) payload.system = system;
+    const body = JSON.stringify(payload);
     const url = `${this.baseURL}/api/generate`;
 
     const ctrl = new AbortController();

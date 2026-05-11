@@ -119,6 +119,17 @@ export async function handleGenerate(req, res, deps) {
   const model = selectModel(requestedModel);
   const runId = body.sessionId || makeRunId();
 
+  // 2026-05-12 fix: Qwen 3 thinking mode would emit chains like
+  // "Hmm, the user is asking..." before the final answer — the iOS
+  // client would accumulate those tokens, hit timeout, and end up with
+  // an empty fullText showing "I couldn't think that through". Force
+  // a concise voice-assistant system prompt unless the caller overrides.
+  const system = body.system || (
+    "You are GIGI, a concise voice assistant. Answer the user directly in 1-3 short sentences. " +
+    "Do NOT think out loud. Do NOT preface with 'Hmm', 'Let me think', 'The user is asking', " +
+    "or any reasoning monologue. Skip filler phrases. Output the answer only, in natural spoken English."
+  );
+
   // Start SSE response.
   sseInit(res);
 
@@ -139,7 +150,7 @@ export async function handleGenerate(req, res, deps) {
   });
 
   try {
-    for await (const chunk of client.generate({ model, prompt, signal: controller.signal, think })) {
+    for await (const chunk of client.generate({ model, prompt, signal: controller.signal, think, system })) {
       chunks++;
       sseSend(res, 'chunk', { text: chunk });
     }
