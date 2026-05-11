@@ -77,18 +77,27 @@ extension GigiHarnessClient {
                 do {
                     let (bytes, response) = try await URLSession.shared.bytes(for: req)
                     if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                        GigiDebugLogger.log("GIGI runLocalLLM HTTP \(http.statusCode)")
                         continuation.yield(.error("HTTP \(http.statusCode) from local-llm endpoint"))
                         continuation.finish()
                         return
                     }
+                    GigiDebugLogger.log("GIGI runLocalLLM connected to \(url.absoluteString)")
                     var currentEvent = ""
                     var currentData = ""
+                    var rawLineCount = 0
+                    var chunksEmitted = 0
                     for try await line in bytes.lines {
+                        rawLineCount += 1
+                        if rawLineCount <= 6 {
+                            GigiDebugLogger.log("GIGI runLocalLLM line[\(rawLineCount)]: '\(line.prefix(120))'")
+                        }
                         if line.isEmpty {
                             // Dispatch one SSE event
                             let event = currentEvent.isEmpty ? "chunk" : currentEvent
                             if !currentData.isEmpty {
                                 Self.dispatchSSE(event: event, data: currentData, started: started, continuation: continuation)
+                                if event == "chunk" { chunksEmitted += 1 }
                             }
                             currentEvent = ""
                             currentData = ""
@@ -100,6 +109,7 @@ extension GigiHarnessClient {
                         }
                         // ignore comment lines (start with ":") and other fields
                     }
+                    GigiDebugLogger.log("GIGI runLocalLLM stream ended · raw lines=\(rawLineCount) chunks emitted=\(chunksEmitted) lastEvent='\(currentEvent)' bufLen=\(currentData.count)")
                     // Flush any remaining event at stream end.
                     if !currentData.isEmpty {
                         Self.dispatchSSE(event: currentEvent.isEmpty ? "chunk" : currentEvent,
@@ -108,6 +118,7 @@ extension GigiHarnessClient {
                     continuation.yield(.done(latencyMs: Int(Date().timeIntervalSince(started) * 1000)))
                     continuation.finish()
                 } catch {
+                    GigiDebugLogger.log("GIGI runLocalLLM EXCEPTION: \(error.localizedDescription)")
                     continuation.yield(.error(error.localizedDescription))
                     continuation.finish()
                 }
