@@ -76,9 +76,25 @@ export async function handleRequest(req, res, deps) {
       } catch { return null; }
     };
 
-    // Tunnel: read last_url from config + ping it (best-effort, with timeout).
-    const tunnelMode = cfg.tunnel?.mode || 'manual';
-    const tunnelUrl = cfg.tunnel?.quick?.last_url || cfg.tunnel?.named?.hostname || null;
+    // Tunnel: source-of-truth is the file written by cloudflared-manager
+    // (`~/.gigi/tunnel-current-url.txt`). The cloudflared subprocess writes
+    // the current URL there on every URL detection — surviving hot-reloads
+    // of this route file (which would otherwise hand us a fresh empty
+    // singleton via dynamic import) and panel restarts.
+    let tunnelMode = cfg.tunnel?.mode || 'manual';
+    let tunnelUrl = null;
+    try {
+      const urlFile = path.join(process.env.HOME || process.env.USERPROFILE || '', '.gigi', 'tunnel-current-url.txt');
+      if (fs.existsSync(urlFile)) {
+        const txt = fs.readFileSync(urlFile, 'utf8').trim();
+        if (txt.startsWith('http')) tunnelUrl = txt;
+      }
+    } catch {}
+    // Fallback to config-cached URL when the file doesn't exist yet.
+    if (!tunnelUrl) {
+      tunnelUrl = cfg.tunnel?.quick?.last_url || cfg.tunnel?.named?.hostname || null;
+    }
+
     let tunnelReachable = false;
     if (tunnelUrl) {
       try {
