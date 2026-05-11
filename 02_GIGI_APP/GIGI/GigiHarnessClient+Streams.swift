@@ -450,7 +450,13 @@ extension GigiHarnessClient {
         do {
             let (data, response) = try await URLSession.shared.data(for: req)
             if let http = response as? HTTPURLResponse, http.statusCode >= 400 { return nil }
-            return try? JSONDecoder().decode(LocalLLMStatus.self, from: data)
+            // 2026-05-12 fix: server response is wrapped in {"ok":true,"data":{...}}.
+            // Previous code tried to decode LocalLLMStatus from the top-level,
+            // which failed silently → ollamaStatus stayed nil → Settings showed
+            // "No data — tap refresh" while the install-status badge (which
+            // properly unwraps Envelope) showed "Ollama ready". Now unified.
+            struct Envelope: Decodable { let ok: Bool; let data: LocalLLMStatus? }
+            return (try? JSONDecoder().decode(Envelope.self, from: data))?.data
         } catch {
             return nil
         }
