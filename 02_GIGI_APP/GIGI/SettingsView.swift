@@ -37,6 +37,12 @@ struct SettingsView: View {
     @State private var pairedDeviceName: String? = nil
     @State private var forceClaude: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
     @State private var autoFallback: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
+
+    // Phase 2 GATE 4 — Ollama (Path 3) status snapshot. Refreshed on appear
+    // and on explicit "Re-check" tap. Driven by GigiHarnessClient.localLLMStatus.
+    @State private var ollamaStatus: GigiHarnessClient.LocalLLMStatus? = nil
+    @State private var ollamaTier: String = UserDefaults.standard.string(forKey: "gigi.ollama.tier") ?? "default"
+    @State private var ollamaProbing: Bool = false
     #if DEBUG
     // D1 — Brain Path Override picker (DEBUG only). Lets you force a specific
     // routing path during testing instead of relying on automatic gate decisions.
@@ -63,6 +69,7 @@ struct SettingsView: View {
                 voiceSection
                 privacySection
                 modesSection
+                ollamaSection
                 debugSection
                 aboutSection
             }
@@ -591,6 +598,39 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
+
+            // Phase 2 — Apple FM Tool calling feature flag
+            Toggle(isOn: Binding(
+                get: { UserDefaults.standard.object(forKey: "gigi.feature.path2_apple_fm_tools") == nil
+                       || UserDefaults.standard.bool(forKey: "gigi.feature.path2_apple_fm_tools") },
+                set: { UserDefaults.standard.set($0, forKey: "gigi.feature.path2_apple_fm_tools") }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Use Apple FM Tool calling (Path 2)")
+                    Text("When ON, native_tool dispatch runs through respondWithTools (1-2s, best slot quality). When OFF, slots from the router are mapped directly to bridge.execute (80-200ms).")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Phase 2 — Last router decision viewer (debug overlay)
+            DisclosureGroup("Last router decision (JSON)") {
+                let json = UserDefaults.standard.string(forKey: "gigi.debug.lastRouterDecision") ?? "(no decision yet — issue a query first)"
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text(json)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                        .padding(8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(6)
+                }
+                Button("Clear cached decision") {
+                    UserDefaults.standard.removeObject(forKey: "gigi.debug.lastRouterDecision")
+                }
+                .font(.caption)
+                .foregroundColor(.orange)
+            }
             #endif
         } header: {
             Text("🔧 Debug")
@@ -628,6 +668,92 @@ struct SettingsView: View {
         let raw = UserDefaults.standard.string(forKey: "gigi.user.mode") ?? GigiMode.fullPower.rawValue
         let mode = GigiMode(rawValue: raw) ?? .fullPower
         return "Active: \(mode.displayName)"
+    }
+
+    // MARK: - Ollama section (Phase 2 — GATE 4)
+
+    private var ollamaSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                Image(systemName: ollamaStatusIcon)
+                    .foregroundColor(ollamaStatusColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ollama (Path 3)")
+                        .font(.body)
+                    Text(ollamaStatusText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if ollamaProbing {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button {
+                        Task { await refreshOllamaStatus() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Picker("Tier", selection: $ollamaTier) {
+                Text("Lite (4-8GB · qwen3:4b)").tag("lite")
+                Text("Standard (8-16GB · qwen3:8b)").tag("standard")
+                Text("Default (16-32GB · qwen3:14b)").tag("default")
+                Text("Pro (32GB+ · qwen3.6:27b)").tag("pro")
+            }
+            .onChange(of: ollamaTier) { _, new in
+                UserDefaults.standard.set(new, forKey: "gigi.ollama.tier")
+            }
+
+            if let s = ollamaStatus, let models = s.models, !models.isEmpty {
+                DisclosureGroup("Installed models (\(models.count))") {
+                    ForEach(models, id: \.self) { m in
+                        HStack {
+                            Image(systemName: "doc.fill")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                            Text(m).font(.caption.monospaced())
+                        }
+                    }
+                }
+                .font(.caption)
+            }
+        } header: {
+            Text("🦙 Ollama")
+        } footer: {
+            Text("Path 3 runs reasoning locally on the harness via Ollama (no cloud, no API). Pick a tier that fits your harness RAM. Recommended: \(ollamaStatus?.currentTier ?? "default").")
+        }
+        .task { await refreshOllamaStatus() }
+    }
+
+    private var ollamaStatusIcon: String {
+        if let s = ollamaStatus { return s.reachable ? "checkmark.circle.fill" : "exclamationmark.triangle.fill" }
+        return "circle.dotted"
+    }
+    private var ollamaStatusColor: Color {
+        if let s = ollamaStatus { return s.reachable ? .green : .orange }
+        return .secondary
+    }
+    private var ollamaStatusText: String {
+        guard let s = ollamaStatus else { return "Probing..." }
+        if !s.reachable { return "Unreachable. Start `ollama serve` on the harness." }
+        let count = s.models?.count ?? 0
+        return "Reachable · \(count) model\(count == 1 ? "" : "s") installed"
+    }
+
+    @MainActor
+    private func refreshOllamaStatus() async {
+        ollamaProbing = true
+        defer { ollamaProbing = false }
+        guard GigiHarnessClient.shared.isConfigured else {
+            ollamaStatus = nil
+            return
+        }
+        let s = await GigiHarnessClient.shared.localLLMStatus()
+        ollamaStatus = s
     }
 
     // MARK: - About section
@@ -754,13 +880,13 @@ enum BrainPathOverride: String, CaseIterable {
     var helpText: String {
         switch self {
         case .auto:
-            return "Normal flow: NLU fast-path → Groq planner / agent loop."
+            return "Normal flow: NLU fast-path → GigiRequestRouter 5-path (Apple FM router → native_tool / delegate_local / delegate_cloud / ask_clarification / reject)."
         case .appleFM:
-            return "Path 2 (5-path plan): direct Apple Foundation Models call. Requires iOS 18.1+ with Apple Intelligence."
+            return "Force Apple FM Tool calling (Path 2). Bypasses the router and dispatches directly via GigiFoundationAgent. Requires iOS 18.1+ with Apple Intelligence."
         case .ollama:
-            return "Path 3 (5-path plan): STUB — surfaces a 'not configured' message until harness Ollama lands."
+            return "Force Ollama Path 3. Streams response from the harness Ollama bridge. Requires `ollama serve` on the harness host + Qwen 3 model pulled."
         case .claude:
-            return "Path 4 (5-path plan): forces Claude Code subprocess via harness (same effect as Brain Mode → Force Claude)."
+            return "Force Claude Code Path 4. Spawns Claude Code subprocess on the harness via GigiClaudeBridge.run (legacy fallback active until GATE 5 finalization)."
         }
     }
 }
