@@ -87,10 +87,22 @@ extension GigiHarnessClient {
                     var currentData = ""
                     var rawLineCount = 0
                     var chunksEmitted = 0
-                    for try await line in bytes.lines {
+                    for try await rawLine in bytes.lines {
+                        // CRITICAL FIX 2026-05-12: Cloudflare Tunnel forwards
+                        // SSE events with CRLF line endings (\r\n). Swift's
+                        // AsyncLineSequence splits on \n only, leaving the
+                        // trailing \r on each line. That breaks two things:
+                        //   1. line.isEmpty never trips on the blank event
+                        //      separator (it contains "\r")  → dispatch never
+                        //      fires → chunks=0 → "I couldn't think that
+                        //      through" / "Ollama returned no answer".
+                        //   2. data prefix becomes 'data: {...}\r' and the
+                        //      trailing \r corrupts JSON parse.
+                        // Strip the trailing \r before any check.
+                        let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
                         rawLineCount += 1
                         if rawLineCount <= 6 {
-                            GigiDebugLogger.log("GIGI runLocalLLM line[\(rawLineCount)]: '\(line.prefix(120))'")
+                            GigiDebugLogger.log("GIGI runLocalLLM line[\(rawLineCount)] len=\(line.count): '\(line.prefix(120))'")
                         }
                         if line.isEmpty {
                             // Dispatch one SSE event
@@ -202,7 +214,9 @@ extension GigiHarnessClient {
                     }
                     var currentEvent = ""
                     var currentData = ""
-                    for try await line in bytes.lines {
+                    for try await rawLine in bytes.lines {
+                        // Same CRLF fix as runLocalLLM — Cloudflare emits \r\n.
+                        let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
                         if line.isEmpty {
                             if !currentData.isEmpty {
                                 Self.dispatchClaudeSSE(
