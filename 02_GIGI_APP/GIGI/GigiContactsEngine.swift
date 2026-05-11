@@ -37,7 +37,7 @@ final class GigiContactsEngine {
     func resolve(_ query: String) async -> (phone: String, name: String)? {
         await ensureCache()
         let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        print("GIGI Contacts.resolve: query='\(query)' normalized='\(q)' cacheSize=\(cache.count)")
+        GigiDebugLogger.log("GIGI Contacts.resolve: query='\(query)' normalized='\(q)' cacheSize=\(cache.count)")
 
         // 1. Check long-term memory first (fastest, most reliable)
         if let memorized = await GigiMemory.shared.recallResolving(q) {
@@ -89,7 +89,7 @@ final class GigiContactsEngine {
         guard !cacheLoaded else { return }
         let s = store
         let authStatus = CNContactStore.authorizationStatus(for: .contacts)
-        print("GIGI Contacts.ensureCache: starting · auth=\(authStatus.rawValue) [0=notDetermined 1=restricted 2=denied 3=authorized 4=limited]")
+        GigiDebugLogger.log("GIGI Contacts.ensureCache: starting · auth=\(authStatus.rawValue) [0=notDetermined 1=restricted 2=denied 3=authorized 4=limited]")
 
         let contacts: [CNContact] = await Task.detached(priority: .userInitiated) {
             // Omit CNContactNoteKey — iOS 18+ requires separate authorization; causes CNError 102 Unauthorized Keys.
@@ -111,16 +111,22 @@ final class GigiContactsEngine {
                 enumerateError = error
             }
             if let err = enumerateError {
-                print("GIGI Contacts.ensureCache ERROR enumerate: \(err.localizedDescription)")
+                Self.bgLog("GIGI Contacts.ensureCache ERROR enumerate: \(err.localizedDescription)")
             }
-            print("GIGI Contacts.ensureCache loaded \(result.count) contacts with phone numbers")
+            Self.bgLog("GIGI Contacts.ensureCache loaded \(result.count) contacts with phone numbers")
             return result
         }.value
         cache = contacts
         cacheLoaded = true
         // Sample first 5 names for quick visual debug
         let preview = contacts.prefix(5).map { "\($0.givenName) \($0.familyName)" }.joined(separator: " | ")
-        print("GIGI Contacts cache sample: \(preview)")
+        GigiDebugLogger.log("GIGI Contacts cache sample: \(preview)")
+    }
+
+    // Background-safe logger (Task.detached can't call MainActor-only types).
+    nonisolated private static func bgLog(_ msg: String) {
+        // GigiDebugLogger is class-level (no actor) so safe to call from any context.
+        GigiDebugLogger.log(msg)
     }
 
     func invalidateCache() {

@@ -1,7 +1,12 @@
 import Foundation
+import os.log
 
 class GigiDebugLogger {
     static let sessionId = UUID().uuidString.prefix(8).description
+
+    // os_log subsystem — visible in 3uTools Realtime Log + Console.app on Mac.
+    // Filter on `subsystem:io.gigi.app` to isolate GIGI lines from system noise.
+    static let osLogger = OSLog(subsystem: "io.gigi.app", category: "gigi")
 
     /// HARDCODED debug ingest endpoint for STEP 1 crash investigation.
     /// Step 1 verified — disabled to silence Local Network -1009 floods that
@@ -13,6 +18,8 @@ class GigiDebugLogger {
         let file = (location as NSString).lastPathComponent
         let entry = "\(file):\(line) \(function) — \(msg)"
         print("DEBUG LOG: \(entry)")
+        // Also emit via os_log so it appears in iOS syslog (3uTools, Console.app)
+        os_log("%{public}@", log: osLogger, type: .info, entry)
 
         // Save to UserDefaults for crash recovery
         var logs = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
