@@ -322,3 +322,4 @@
 - `2026-05-11T18:55:13+0200` · local · session ended on `armando-rework` (last commit: feat(harness+panel): live monitor + capillary logging + Claude sandbox CWD)
 - `2026-05-11T19:14:41+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: feat(harness+panel):) _(modified: 02_GIGI_APP/GIGI/GigiRequestRouter.swift)_
 - `2026-05-11T19:19:25+0200` · local · session ended on `armando-rework` (last commit: feat(harness): auto-wipe Claude sandbox (A+B) + manual reset button) _(modified: 02_GIGI_APP/GIGI/GigiRequestRouter.swift)_
+- `2026-05-11T19:25:49+0200` · local · session ended on `armando-rework` (last commit: fix(ios): decision.path is String — compare with literal not enum case)
