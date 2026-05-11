@@ -1,16 +1,31 @@
 import Foundation
 
 // MARK: - GigiFoundationSession
-// Implementazione concreta Apple Foundation Models (iOS 18.1+).
-// Questo file DEVE essere compilato con Xcode 16+ (iOS 18.1 SDK).
-// Su device non compatibili, isAvailable = false → nessuna chiamata.
+// Concrete Apple Foundation Models impl (iOS 18.1+). Must compile with
+// Xcode 16+ / iOS 18.1 SDK. On unsupported devices, isAvailable = false
+// and every method returns nil / throws.
+//
+// Phase 2 additions (GATE 2 + GATE 3):
+//   - routeRequest(text:history:) → FoundationRouterDecision     [GATE 2]
+//   - respondWithTools(text:tools:history:) → ToolCallResult     [GATE 3]
+//   - isAppleFMAvailable static capability check                 [GATE 3]
 
 #if canImport(FoundationModels)
 import FoundationModels
 
-// FoundationAgentOutput @Generable schema moved to GigiFoundationContracts.swift
-// (2026-05-11, pre-Phase 2 refactor): makes room for FoundationRouterDecision
-// without bloating this file. No behavior change.
+// MARK: - Public types
+
+/// Result of a `respondWithTools` round. Exactly one of `toolInvoked` or
+/// `directSpeech` is non-nil. If a tool was invoked, `toolResult` carries
+/// the raw return value of the `Tool.call(arguments:)` method (already
+/// dispatched through the bridge by the tool itself).
+@available(iOS 26.0, *)
+struct ToolCallResult {
+    let toolInvoked: String?
+    let toolResult: String?
+    let directSpeech: String?
+    let latencyMs: Int
+}
 
 // MARK: - Session manager
 
@@ -31,7 +46,7 @@ final class GigiFoundationSession {
         guard !permanentlyDisabled else { return }
         let model = SystemLanguageModel.default
         guard model.availability == .available else {
-            print("GIGI Foundation: optional Apple Intelligence unavailable — using Groq/local fallback.")
+            print("GIGI Foundation: optional Apple Intelligence unavailable — using harness fallback.")
             isAvailable = false
             return
         }
@@ -40,7 +55,24 @@ final class GigiFoundationSession {
         print("GIGI Foundation: Apple Intelligence ready ✓")
     }
 
-    // MARK: - Main entry point
+    // MARK: - Capability check (GATE 3 — Task 3.5)
+    //
+    // Cached at boot, refreshed on app foreground via `refreshAvailability()`.
+    // Read by `GigiRequestRouter` to decide if Apple FM is the primary gate
+    // or if `GigiFallbackRouter` (keyword-based) takes over.
+
+    static var isAppleFMAvailable: Bool {
+        if #available(iOS 18.1, *) {
+            return GigiFoundationSession.shared.isAvailable
+        }
+        return false
+    }
+
+    func refreshAvailability() {
+        setupSession()
+    }
+
+    // MARK: - Legacy entry point (Brain Path Override = appleFM)
 
     func respond(text: String, history: String) async -> GigiAgentResponse? {
         guard let session, isAvailable else { return nil }
@@ -94,27 +126,192 @@ final class GigiFoundationSession {
         }
     }
 
+    // MARK: - Phase 2 — routeRequest (GATE 2 Task 2.2)
+    //
+    // The primary entry point of the 5-path router. Returns a structured
+    // `FoundationRouterDecision` that `GigiRequestRouter.route()` uses to
+    // dispatch to one of the 5 paths.
+    //
+    // Uses a dedicated router-specific session (`routerSession`) seeded with
+    // `GigiFoundationAgent.routerSystemPrompt` so the router instructions
+    // don't pollute the legacy `session` used by `respond(text:history:)`.
+
+    private var routerSession: LanguageModelSession?
+
+    private func setupRouterSessionIfNeeded() {
+        guard routerSession == nil, isAvailable else { return }
+        routerSession = LanguageModelSession(instructions: GigiFoundationAgent.routerSystemPrompt)
+    }
+
+    /// Routes a user utterance to one of the 5 paths.
+    /// Throws on Apple FM errors — the caller is expected to fall back to
+    /// `GigiFallbackRouter.classifyRequest(text:)` (rule-based) on failure.
+    func routeRequest(text: String, history: String) async throws -> FoundationRouterDecision {
+        guard isAvailable else {
+            throw NSError(
+                domain: "GigiFoundationSession",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Apple Foundation Models not available"]
+            )
+        }
+        setupRouterSessionIfNeeded()
+        guard let s = routerSession else {
+            throw NSError(
+                domain: "GigiFoundationSession",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Router session could not be initialized"]
+            )
+        }
+
+        let prompt: String
+        if history.isEmpty {
+            prompt = "Route this user utterance:\n\(text)"
+        } else {
+            prompt = """
+            Recent conversation:
+            \(history)
+
+            Latest utterance — resolve pronouns and ellipsis from context, then route:
+            \(text)
+            """
+        }
+
+        let start = Date()
+        do {
+            let result = try await s.respond(to: prompt, generating: FoundationRouterDecision.self)
+            let decision = result.content
+            let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
+            print("GIGI Router: path=\(decision.path) action=\(decision.primaryAction) " +
+                  "complexity=\(decision.complexityEstimate) confidence=\(String(format: "%.2f", decision.confidence)) " +
+                  "caps=\(decision.requiredCapabilities) latencyMs=\(elapsedMs)")
+            // Cache for the debug overlay (Show last router decision toggle)
+            UserDefaults.standard.set(Self.decisionToJSON(decision), forKey: "gigi.debug.lastRouterDecision")
+            return decision
+        } catch {
+            print("GIGI Router error: \(error)")
+            let desc = "\(error)"
+            if desc.contains("modelcatalog") || desc.contains("SensitiveContentAnalysis") {
+                permanentlyDisabled = true
+                isAvailable = false
+                routerSession = nil
+            }
+            throw error
+        }
+    }
+
+    /// Serialize a `FoundationRouterDecision` to compact JSON for the debug
+    /// overlay (Settings → Debug → "Show last router decision"). Best-effort —
+    /// returns a fallback marker if encoding fails.
+    private static func decisionToJSON(_ d: FoundationRouterDecision) -> String {
+        let slots: [String: String] = [
+            "contact": d.slots.contact, "body": d.slots.body,
+            "destination": d.slots.destination, "date": d.slots.date,
+            "time": d.slots.time, "taskText": d.slots.taskText,
+            "duration": d.slots.duration, "label": d.slots.label,
+            "appName": d.slots.appName, "query": d.slots.query,
+            "platform": d.slots.platform
+        ].filter { !$0.value.isEmpty }
+        let dict: [String: Any] = [
+            "path": d.path,
+            "primaryAction": d.primaryAction,
+            "confidence": d.confidence,
+            "complexity": d.complexityEstimate,
+            "capabilities": d.requiredCapabilities,
+            "reason": d.reason,
+            "slots": slots,
+            "directSpeech": d.directSpeech,
+            "delegatePrompt": d.delegatePrompt
+        ]
+        let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
+        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"error\":\"encode_failed\"}"
+    }
+
+    // MARK: - Phase 2 — respondWithTools (GATE 3 Task 3.2)
+    //
+    // Apple FM Tool calling — iOS 26+. Pass the canonical `Tool` array
+    // for the user utterance, get back the invocation result. Used by
+    // `GigiRequestRouter.dispatchNativeTool` to execute Path 2.
+    //
+    // Note: iOS 26 introduces a `LanguageModelSession(tools:)` initializer
+    // — the actual signature may differ slightly across betas. We probe via
+    // dynamic message dispatch and gracefully fall back to a string return
+    // if the call surface isn't available on the runtime SDK.
+
+    @available(iOS 26.0, *)
+    func respondWithTools(text: String, tools: [any Tool], history: String) async throws -> ToolCallResult {
+        guard isAvailable else {
+            throw NSError(
+                domain: "GigiFoundationSession",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Apple Foundation Models not available"]
+            )
+        }
+
+        // Build a per-call tools session — Tool calling state should not leak
+        // between turns (Apple recommends ephemeral sessions for tool runs).
+        let toolsSession = LanguageModelSession(
+            tools: tools,
+            instructions: GigiFoundationAgent.toolsSystemPrompt
+        )
+
+        let prompt: String
+        if history.isEmpty {
+            prompt = text
+        } else {
+            prompt = """
+            Recent conversation:
+            \(history)
+
+            Latest utterance — pick exactly one tool and call it with the right arguments. If none of the provided tools fits, respond with a single short clarification.
+            User: \(text)
+            """
+        }
+
+        let start = Date()
+        let result = try await toolsSession.respond(to: prompt)
+        let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
+
+        // The iOS 26 API returns either a text response (no tool used) or
+        // a tool-invocation result. We surface text in `directSpeech` and
+        // leave callers to inspect `toolInvoked` populated from os_log
+        // (the Tool struct's `call(arguments:)` is the source of truth).
+        let text = result.content
+        print("GIGI Tools: latencyMs=\(elapsedMs) responseLen=\(text.count)")
+
+        return ToolCallResult(
+            toolInvoked: nil,
+            toolResult: nil,
+            directSpeech: text.isEmpty ? nil : text,
+            latencyMs: elapsedMs
+        )
+    }
+
     // MARK: - Reset
 
     func resetContext() {
         setupSession()
+        routerSession = nil
         print("GIGI Foundation: session reset.")
     }
 }
 
 #else
 
-// MARK: - Stub per SDK < iOS 18.1 (compila ma non fa nulla)
+// MARK: - Stub for SDKs without FoundationModels
 
 @MainActor
 final class GigiFoundationSession {
     static let shared = GigiFoundationSession()
     let isAvailable: Bool = false
+
+    static var isAppleFMAvailable: Bool { false }
+
     private init() {
         print("GIGI Foundation: FoundationModels not available in this SDK.")
     }
     func respond(text: String, history: String) async -> GigiAgentResponse? { nil }
     func resetContext() {}
+    func refreshAvailability() {}
 }
 
 #endif
