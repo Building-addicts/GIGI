@@ -329,3 +329,4 @@
 - `2026-05-11T20:29:39+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-11T21:02:00+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-11T22:32:12+0200` · local · session ended on `armando-rework` (last commit: fix(ios): make Apple FM router stateless — eliminate turn-to-turn bias)
+- `2026-05-11T23:13:37+0200` · local · session ended on `armando-rework` (last commit: docs(debug): beta tester findings — 4 open bugs cataloged in docs/DEBUG/)
