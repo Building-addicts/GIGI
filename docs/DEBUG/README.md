@@ -22,6 +22,7 @@ proposed fix. Status tag in the header — update when fixed and add a
 | # | Severity | Title | File |
 |---|---|---|---|
 | 005 | P1 (TBC) | `Set a timer for two minutes` still failing — IPA installed check OR regression | [2026-05-12-005-timer-two-minutes-regression-or-not-installed.md](2026-05-12-005-timer-two-minutes-regression-or-not-installed.md) |
+| 008 | P2 | `Hellllo` (typo greeting) misclassified as `send_message` — character-repetition not in router patterns | [2026-05-12-008-hellllo-misclassified-send-message.md](2026-05-12-008-hellllo-misclassified-send-message.md) |
 
 ## ✅ Fixed bugs
 
