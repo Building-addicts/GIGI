@@ -284,3 +284,4 @@
 - `2026-05-11T15:55:23+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: debug(ios): runLocal) _(modified: 03_HARNESS/server/package-lock.json)_
 - `2026-05-11T16:10:25+0200` · local · session ended on `armando-rework` (last commit: fix(ios): SSE consumer strips trailing \r (CRLF) — root cause of empty Ollama ) _(modified: 03_HARNESS/server/package-lock.json)_
 - `2026-05-11T16:12:34+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(ios): SSE consum) _(modified: 03_HARNESS/server/package-lock.json)_
+- `2026-05-11T16:17:03+0200` · local · session ended on `armando-rework` (last commit: fix(ios): SSE parser flushes on new event: header (bytes.lines swallows empties)) _(modified: 03_HARNESS/server/package-lock.json)_
