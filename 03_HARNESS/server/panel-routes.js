@@ -38,6 +38,84 @@ export async function handleRequest(req, res, deps) {
       last_error: st.last_error
     });
   }
+
+  // 2026-05-12 batch 5 — tail bridge.log for the unified live-log card.
+  if (p === '/api/log/tail') {
+    const lines = parseInt(url.searchParams.get('lines') || '80', 10);
+    try {
+      const buf = fs.readFileSync(LOG_FILE, 'utf8');
+      const allLines = buf.split('\n');
+      const tail = allLines.slice(Math.max(0, allLines.length - lines - 1)).join('\n');
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(tail);
+    } catch (e) {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('(no log yet — ' + e.message + ')');
+    }
+    return true;
+  }
+
+  // 2026-05-12 batch 5 — unified stack status (tunnel + ollama + claude + ios).
+  // Loopback-only (the panel itself is bound to localhost), so we can proxy
+  // bearer-authed bridge endpoints without exposing the secret to the browser.
+  if (p === '/api/panel/stack-status') {
+    const cfg = loadConfig();
+    const bridge = getBridge();
+    const secret = cfg.ios?.shared_secret;
+    const bridgePort = cfg.server?.port || 7779;
+    const baseLocal = `http://127.0.0.1:${bridgePort}`;
+
+    const fetchJson = async (path) => {
+      try {
+        const r = await fetch(`${baseLocal}${path}`, {
+          headers: { Authorization: `Bearer ${secret}` },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!r.ok) return null;
+        return await r.json();
+      } catch { return null; }
+    };
+
+    // Tunnel: read last_url from config + ping it (best-effort, with timeout).
+    const tunnelMode = cfg.tunnel?.mode || 'manual';
+    const tunnelUrl = cfg.tunnel?.quick?.last_url || cfg.tunnel?.named?.hostname || null;
+    let tunnelReachable = false;
+    if (tunnelUrl) {
+      try {
+        const r = await fetch(`${tunnelUrl}/api/ios/health`, {
+          headers: { Authorization: `Bearer ${secret}` },
+          signal: AbortSignal.timeout(3000),
+        });
+        tunnelReachable = r.ok;
+      } catch {}
+    }
+
+    // Ollama via install-status endpoint
+    const ollamaEnv = await fetchJson('/api/ios/local-llm/install-status');
+
+    // Claude Code via claude-status endpoint
+    const claudeEnv = await fetchJson('/api/ios/agent/claude-status');
+
+    // iOS pair status — we don't have a direct probe, but session-manager
+    // exposes "last_active_at" per device. Pull sessions from the bridge.
+    // For now we report bridge running as proxy for "ready to pair".
+    const iosState = {
+      bridgeReady: !!bridge,
+      bearerSet: !!secret && secret !== 'GENERA_UN_BEARER_SECRET_RANDOM_32_CHAR',
+    };
+
+    return sendJson(res, 200, {
+      tunnel: {
+        mode: tunnelMode,
+        url: tunnelUrl,
+        reachable: tunnelReachable,
+        startedAt: cfg.tunnel?.quick?.last_started || null,
+      },
+      ollama: ollamaEnv?.ok ? ollamaEnv.data : null,
+      claudeCode: claudeEnv?.ok ? claudeEnv.data : null,
+      ios: iosState,
+    });
+  }
   if (p === '/api/config' && req.method === 'GET') {
     return sendJson(res, 200, loadConfig());
   }

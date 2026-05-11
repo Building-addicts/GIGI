@@ -557,6 +557,126 @@ async function refreshWorkerLogs() {
 $('#btn-workers-refresh')?.addEventListener('click', refreshWorkers);
 $('#btn-wlog-refresh')?.addEventListener('click', refreshWorkerLogs);
 
+// ────────────────────────────────────────────────────────────────────
+// 2026-05-12 batch 5 — 5-path stack status cards (Tunnel/Ollama/Claude/iOS)
+// ────────────────────────────────────────────────────────────────────
+
+async function refreshStackStatus() {
+  try {
+    const s = await api('/api/panel/stack-status');
+
+    // Tunnel
+    const t = s.tunnel || {};
+    if (t.url) {
+      $('#card-tunnel-state').textContent = t.reachable ? '✓ Online' : '⚠ Unreachable';
+      $('#card-tunnel-state').className = t.reachable ? 'stat ok' : 'stat err';
+      $('#card-tunnel-url').textContent = t.url;
+    } else {
+      $('#card-tunnel-state').textContent = '○ Off';
+      $('#card-tunnel-state').className = 'stat';
+      $('#card-tunnel-url').textContent = `mode: ${t.mode || 'manual'} · open /setup to start`;
+    }
+
+    // Ollama
+    const o = s.ollama;
+    if (o) {
+      const ready = o.nextAction === 'ready';
+      $('#card-ollama-state').textContent = ready ? '✓ Ready' : (o.cliInstalled ? '⚠ ' + o.nextAction : '○ Not installed');
+      $('#card-ollama-state').className = ready ? 'stat ok' : 'stat err';
+      const compCount = (o.installedCompatibleModels || []).length;
+      const totalCount = (o.installedModels || []).length;
+      $('#card-ollama-detail').textContent = `${compCount}/${totalCount} compatible · ${o.version || 'v?'} · ${o.hostPlatform}`;
+    } else {
+      $('#card-ollama-state').textContent = '— probing';
+      $('#card-ollama-detail').textContent = 'bridge not reachable';
+    }
+
+    // Claude Code
+    const c = s.claudeCode;
+    if (c) {
+      $('#card-claude-state').textContent = c.available ? '✓ Wired' : '○ Off';
+      $('#card-claude-state').className = c.available ? 'stat ok' : 'stat';
+      $('#card-claude-detail').textContent = `${c.status || 'unknown'} · ${c.inFlightCount || 0} in-flight runs`;
+    } else {
+      $('#card-claude-state').textContent = '— probing';
+      $('#card-claude-detail').textContent = 'bridge not reachable';
+    }
+
+    // iOS device
+    const ios = s.ios || {};
+    if (ios.bridgeReady && ios.bearerSet) {
+      $('#card-ios-state').textContent = '✓ Ready';
+      $('#card-ios-state').className = 'stat ok';
+      $('#card-ios-detail').textContent = 'bearer set, bridge up — scan QR or manual pair';
+    } else {
+      $('#card-ios-state').textContent = '⚠ Not ready';
+      $('#card-ios-state').className = 'stat err';
+      $('#card-ios-detail').textContent = !ios.bridgeReady ? 'bridge down' : 'set shared_secret in config';
+    }
+  } catch (e) {
+    // panel offline?
+    $('#card-tunnel-state').textContent = '— offline';
+  }
+}
+
+// ── Stack actions ───────────────────────────────────────────────────
+
+$('#btn-tunnel-restart')?.addEventListener('click', async () => {
+  try {
+    await api('/api/setup/quick/stop', { method: 'POST' });
+    await new Promise(r => setTimeout(r, 800));
+    await api('/api/setup/quick/start', { method: 'POST' });
+    setTimeout(refreshStackStatus, 3000);
+  } catch (e) { alert('Restart tunnel failed: ' + e.message); }
+});
+
+$('#btn-tunnel-copy')?.addEventListener('click', () => {
+  const url = $('#card-tunnel-url').textContent;
+  if (url && url.startsWith('http')) {
+    navigator.clipboard?.writeText(url);
+  }
+});
+
+$('#btn-ollama-refresh')?.addEventListener('click', refreshStackStatus);
+$('#btn-claude-refresh')?.addEventListener('click', refreshStackStatus);
+$('#btn-ios-refresh')?.addEventListener('click', refreshStackStatus);
+
+$('#btn-ollama-install')?.addEventListener('click', () => {
+  if (!confirm('Run winget install Ollama.Ollama? (Windows) or brew install ollama (Mac). Progress streams to the Live Log card below.')) return;
+  const livelog = $('#card-livelog');
+  livelog.textContent = 'Triggering install via bridge endpoint... (stream shown below)\n';
+  // Open SSE for install
+  fetch('/api/panel/proxy/install-ollama', { method: 'POST' }).catch(() => {
+    livelog.textContent += '(proxy endpoint not yet implemented — open ssh terminal and run winget install Ollama.Ollama)\n';
+  });
+});
+
+// ── Live log tail (poll bridge.log every 2s + diff) ────────────────
+
+let livelogPaused = false;
+let lastLogSize = 0;
+
+async function refreshLivelog() {
+  if (livelogPaused) return;
+  try {
+    const r = await fetch('/api/log/tail?lines=80');
+    const text = await r.text();
+    const box = $('#card-livelog');
+    if (text && text !== box.textContent) {
+      box.textContent = text;
+      box.scrollTop = box.scrollHeight;
+    }
+  } catch {}
+}
+
+$('#btn-livelog-clear')?.addEventListener('click', () => {
+  $('#card-livelog').textContent = '';
+});
+$('#btn-livelog-pause')?.addEventListener('click', () => {
+  livelogPaused = !livelogPaused;
+  $('#btn-livelog-pause').textContent = livelogPaused ? 'Resume' : 'Pause';
+});
+
 loadConfig();
 refreshStatus();
 refreshAutostart();
@@ -566,6 +686,8 @@ refreshWorkerLogs();
 refreshBrowsersGrid();
 refreshLeases();
 refreshSessions();
+refreshStackStatus();
+refreshLivelog();
 setInterval(refreshStatus, 3000);
 setInterval(refreshBrowser, 5000);
 setInterval(refreshWorkers, 5000);
@@ -573,3 +695,5 @@ setInterval(refreshBrowsersGrid, 8000);
 setInterval(refreshLeases, 3000);
 setInterval(refreshSessions, 10000);
 setInterval(refreshThumbs, 5000);
+setInterval(refreshStackStatus, 5000);
+setInterval(refreshLivelog, 2000);

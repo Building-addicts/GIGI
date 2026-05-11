@@ -54,6 +54,58 @@
           <div class="sub" id="card-last-err">—</div>
         </div>
       </div>
+
+      <!-- ====================================================== -->
+      <!-- Phase 2 stack status (2026-05-12 batch 5)              -->
+      <!-- Tunnel · Ollama · Claude Code · iOS device pair status -->
+      <!-- ====================================================== -->
+      <h2 style="margin:24px 0 12px;font-size:16px;color:#9a9ab0;font-weight:600;letter-spacing:0.02em;">5-PATH STACK</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>☁️ Cloudflare Tunnel</h3>
+          <div class="stat" id="card-tunnel-state">—</div>
+          <div class="sub" id="card-tunnel-url">probing...</div>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <button class="btn" id="btn-tunnel-restart" title="Re-spawn cloudflared">Restart</button>
+            <button class="btn" id="btn-tunnel-copy" title="Copy public URL">Copy URL</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>🦙 Ollama (Path 3)</h3>
+          <div class="stat" id="card-ollama-state">—</div>
+          <div class="sub" id="card-ollama-detail">probing...</div>
+          <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn" id="btn-ollama-refresh">Refresh</button>
+            <button class="btn" id="btn-ollama-install" title="winget/brew install">Install</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>🤖 Claude Code (Path 4)</h3>
+          <div class="stat" id="card-claude-state">—</div>
+          <div class="sub" id="card-claude-detail">probing...</div>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <button class="btn" id="btn-claude-refresh">Refresh</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>📱 iOS device</h3>
+          <div class="stat" id="card-ios-state">—</div>
+          <div class="sub" id="card-ios-detail">no device paired yet</div>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <button class="btn" id="btn-ios-refresh">Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>📜 Live log unificato (bridge + cloudflared)</h3>
+        <div class="sub" style="margin-bottom:8px">Streaming dell'ultimo log. Le righe arrivano in tempo reale via WebSocket.</div>
+        <div id="card-livelog" style="font:11.5px/1.4 'SF Mono', Consolas, monospace; background:#0a0a14; color:#d2d2de; padding:10px; border-radius:6px; max-height:240px; overflow:auto; white-space:pre-wrap;">…tailing bridge.log…</div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button class="btn" id="btn-livelog-clear">Clear</button>
+          <button class="btn" id="btn-livelog-pause">Pause</button>
+        </div>
+      </div>
       <div class="card" style="margin-top:16px">
         <h3>Browser persistente (Chrome con profilo)</h3>
         <div class="row" style="justify-content:space-between;align-items:center">
