@@ -228,10 +228,19 @@ final class GigiFoundationAgent {
         - Single ambiguous slot → ask_clarification, directSpeech is the question, 1 sentence.
         - Illegal/harmful/nonsense → reject, directSpeech is the refusal, 1 sentence.
 
-        DIRECT SPEECH FIELD:
-        - native_tool, delegate_local, delegate_cloud → directSpeech is EMPTY.
-        - ask_clarification → directSpeech is ONE direct question. Example: "When would you like the timer to go off?"
-        - reject → directSpeech is ONE polite refusal. Example: "I can't help with that."
+        DIRECT SPEECH FIELD — STRICT RULES:
+        - path=native_tool      → directSpeech MUST be "" (empty string).
+        - path=delegate_local   → directSpeech MUST be "" (empty string).
+        - path=delegate_cloud   → directSpeech MUST be "" (empty string).
+        - path=ask_clarification → directSpeech is ONE question targeting the missing slot of the CURRENT user query. Length: 1 sentence, ≤ 18 words.
+        - path=reject           → directSpeech is ONE polite refusal addressing the CURRENT user query. Length: 1 sentence, ≤ 18 words.
+        - NEVER copy the example directSpeech strings below verbatim. The
+          words must come from the current user input, not the few-shot.
+
+        REASON FIELD:
+        - One short phrase (≤ 6 words) describing why YOU chose this path
+          for the CURRENT user query. Examples like "simple reasoning task"
+          are templates — feel free to use them only if they actually apply.
 
         DELEGATE PROMPT FIELD:
         - native_tool, ask_clarification, reject → delegatePrompt is EMPTY.

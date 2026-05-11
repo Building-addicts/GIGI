@@ -365,38 +365,39 @@ class GigiSmartOrchestrator: ObservableObject {
         return yes.contains { lower.contains($0) }
     }
 
-    // MARK: - Tool caption (tool name → Italian UI string)
+    // MARK: - Tool caption (tool name → English UI string)
+    // 2026-05-12: migrated from Italian (worldwide demo per CLAUDE.md rule).
 
     private func toolCaption(_ name: String) -> String {
         switch name {
-        case "make_call":             return "Sto chiamando"
+        case "make_call":             return "Calling"
         case "send_message",
-             "send_whatsapp":         return "Sto inviando il messaggio"
-        case "web_whatsapp":          return "Connessione a WhatsApp Web"
-        case "navigate":              return "Apro Maps"
-        case "play_music":            return "Cerco la musica"
-        case "set_reminder":          return "Imposto il promemoria"
-        case "create_event":          return "Aggiungo all'agenda"
-        case "set_alarm":             return "Imposto la sveglia"
-        case "set_timer":             return "Avvio il timer"
-        case "weather":               return "Controllo il meteo"
+             "send_whatsapp":         return "Sending message"
+        case "web_whatsapp":          return "Connecting to WhatsApp Web"
+        case "navigate":              return "Opening Maps"
+        case "play_music":            return "Looking up music"
+        case "set_reminder":          return "Setting reminder"
+        case "create_event":          return "Adding to calendar"
+        case "set_alarm":             return "Setting alarm"
+        case "set_timer":             return "Starting timer"
+        case "weather":               return "Checking the weather"
         case "search_web",
-             "web_search_and_read":   return "Sto cercando online"
-        case "find_free_slot":        return "Guardo i tuoi impegni"
+             "web_search_and_read":   return "Searching the web"
+        case "find_free_slot":        return "Checking your calendar"
         case "read_calendar",
-             "read_week_calendar":    return "Leggo il calendario"
-        case "web_book_restaurant":   return "Controllo disponibilità su TheFork"
-        case "web_order_food":        return "Apro Deliveroo"
-        case "computer_use":          return "Lavoro nel browser remoto"
+             "read_week_calendar":    return "Reading calendar"
+        case "web_book_restaurant":   return "Checking restaurant availability"
+        case "web_order_food":        return "Opening food delivery"
+        case "computer_use":          return "Working in remote browser"
         case "homekit_on",
-             "homekit_off":           return "Controllo la luce"
-        case "homekit_scene":         return "Attivo la scena"
-        case "homekit_temp":          return "Regolo il termostato"
+             "homekit_off":           return "Controlling the light"
+        case "homekit_scene":         return "Activating the scene"
+        case "homekit_temp":          return "Adjusting the thermostat"
         case "homekit_lock",
-             "homekit_unlock":        return "Agisco sulla serratura"
-        case "remember":              return "Salvo in memoria"
-        case "recall":                return "Cerco in memoria"
-        default:                      return "Sto lavorando"
+             "homekit_unlock":        return "Operating the lock"
+        case "remember":              return "Saving to memory"
+        case "recall":                return "Looking up memory"
+        default:                      return "Working on it"
         }
     }
 
