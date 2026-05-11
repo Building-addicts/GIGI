@@ -160,13 +160,18 @@ final class GigiModeDetector: ObservableObject {
         guard GigiHarnessClient.shared.isConfigured else {
             return ProbeResult(available: false, notes: "Harness not paired")
         }
-        // GATE 5 will expose `/api/ios/agent/claude-status`. For now we use
-        // generic health as a proxy.
-        let healthy = await GigiHarnessClient.shared.pingHealth()
-        return ProbeResult(
-            available: healthy,
-            notes: healthy ? "Harness reachable (Claude Code via subscription)" : "Harness unreachable"
-        )
+        // GATE 5 wired (2026-05-12): probe the dedicated claude-status endpoint
+        // which reports whether the subprocess + MCP wiring is ready, not just
+        // whether the harness HTTP server is up.
+        if await GigiHarnessClient.shared.claudeCodeStatus() {
+            return ProbeResult(available: true, notes: "Claude Code subscription ready")
+        }
+        // Fallback: harness alive but `/claude-status` unreachable (older
+        // harness build) — treat as best-effort available via legacy bridge.
+        if await GigiHarnessClient.shared.pingHealth() {
+            return ProbeResult(available: true, notes: "Harness reachable (legacy bridge)")
+        }
+        return ProbeResult(available: false, notes: "Harness unreachable")
     }
 }
 

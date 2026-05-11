@@ -262,7 +262,7 @@ extension GigiHarnessClient {
     /// Cancel an in-flight Claude Code run by id.
     func cancelClaudeCode(runId: String) async {
         guard let cfg = Self.harnessConfigSnapshot() else { return }
-        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + "/api/ios/agent/cancel"
+        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + "/api/ios/agent/claude/cancel"
         guard let url = URL(string: urlString) else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -271,6 +271,27 @@ extension GigiHarnessClient {
         let body: [String: Any] = ["deviceId": cfg.deviceId, "runId": runId]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         _ = try? await URLSession.shared.data(for: req)
+    }
+
+    /// Probe the Claude Code path readiness. Returns true when the harness
+    /// reports `available: true` on `/api/ios/agent/claude-status`. Used by
+    /// `GigiModeDetector.probeClaudeCode`.
+    func claudeCodeStatus() async -> Bool {
+        guard let cfg = Self.harnessConfigSnapshot() else { return false }
+        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + "/api/ios/agent/claude-status"
+        guard let url = URL(string: urlString) else { return false }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            if let http = response as? HTTPURLResponse, http.statusCode >= 400 { return false }
+            struct Envelope: Decodable { let ok: Bool; let data: Payload? }
+            struct Payload: Decodable { let available: Bool }
+            let env = try? JSONDecoder().decode(Envelope.self, from: data)
+            return env?.data?.available == true
+        } catch {
+            return false
+        }
     }
 
     /// Confirm or deny a `confirm_required` checkpoint.
