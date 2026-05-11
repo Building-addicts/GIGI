@@ -248,3 +248,4 @@
 - `2026-05-04T20:01:49Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #54: "[Sub #14 · 2/3] Wire `GigiTaskExtractor` to `PresenceSessionController` (periodic trigger)"
 - `2026-05-04T20:05:49Z` · pr-synchronize · 🔄 @fc200490-sketch ha aggiornato PR #141 _(branch: `feat/issue-55-task-list-view` · totale +2960/-105)_
 - `2026-05-04T20:07:28Z` · issue-closed · ✅ @fc200490-sketch ha chiuso issue #55: "[Sub #14 · 3/3] `TalkingSessionTaskListView` — UI laterale live con i task estratti"
+- `2026-05-11T03:35:14+0200` · local · session ended on `armando-rework` (last commit: docs: HANDOFF_2026-05-12.md — overnight Phase 2-4 scaffold pickup)
