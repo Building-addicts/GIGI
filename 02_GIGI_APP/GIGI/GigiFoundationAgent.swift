@@ -235,9 +235,17 @@ final class GigiFoundationAgent {
 
         DELEGATE PROMPT FIELD:
         - native_tool, ask_clarification, reject → delegatePrompt is EMPTY.
-        - delegate_local, delegate_cloud → delegatePrompt is a clean rephrasing of the user intent, suitable for an LLM downstream. Strip filler. Keep crisp.
+        - delegate_local, delegate_cloud → delegatePrompt is a clean rephrasing
+          of THE CURRENT user query — never one of the example phrasings below.
+          Examples are ILLUSTRATIVE ONLY. You MUST substitute the real query.
+        - If you cannot derive a delegatePrompt from the current user input,
+          set path=ask_clarification instead. Never fall back to an example phrasing.
 
-        FEW-SHOT EXAMPLES:
+        DIRECT SPEECH FIELD (same rule): copy the structure/length of the
+        examples but the WORDS must come from the current user query and the
+        slot you are asking about. Never echo the example sentences verbatim.
+
+        FEW-SHOT EXAMPLES (structural only — never copy the strings literally):
         User: "Set a timer for 10 minutes"
         → path=native_tool, primaryAction=set_timer, complexity=10, capabilities=[], slots.duration="10 minutes", confidence=0.95, reason="simple native timer".
 
@@ -245,22 +253,28 @@ final class GigiFoundationAgent {
         → path=native_tool, primaryAction=send_message, slots.contact=Sara, slots.platform=whatsapp, slots.body="I'll be 15 minutes late", complexity=12, capabilities=[].
 
         User: "Explain Bayes theorem in three sentences"
-        → path=delegate_local, complexity=28, capabilities=[], delegatePrompt="Explain Bayes theorem in three sentences.", confidence=0.9, reason="short reasoning task".
+        → path=delegate_local, complexity=28, capabilities=[], delegatePrompt="<paraphrase of the SAME user query — here it would be: Explain Bayes theorem in three sentences>", confidence=0.9, reason="short reasoning task".
 
         User: "Rephrase 'I'm running late' more professionally"
-        → path=delegate_local, complexity=20, capabilities=[], delegatePrompt="Rephrase 'I'm running late' more professionally.".
+        → path=delegate_local, complexity=20, capabilities=[], delegatePrompt="<paraphrase of the SAME user query — here it would be: Rephrase 'I'm running late' more professionally>".
 
         User: "Search Wikipedia for Nikola Tesla and tell me his most important invention"
-        → path=delegate_cloud, complexity=65, capabilities=[browser, web_search], delegatePrompt="Open Wikipedia, find Nikola Tesla's page, return the most-cited invention with a one-sentence summary.".
+        → path=delegate_cloud, complexity=65, capabilities=[browser, web_search], delegatePrompt="<paraphrase of the SAME user query — here it would be: Open Wikipedia, find Nikola Tesla's page, return the most-cited invention>".
 
         User: "Write a Python script that sorts a list of integers"
-        → path=delegate_cloud, complexity=45, capabilities=[code], delegatePrompt="Write a Python script that sorts a list of integers.".
+        → path=delegate_cloud, complexity=45, capabilities=[code], delegatePrompt="<paraphrase of the SAME user query — here it would be: Write a Python script that sorts a list of integers>".
 
         User: "Maybe set something for later"
-        → path=ask_clarification, directSpeech="Sure — what would you like me to set, and for when?", confidence=0.4.
+        → path=ask_clarification, directSpeech="<one short question targeting the missing slot of the SAME user query — here: Sure — what would you like me to set, and for when?>", confidence=0.4.
 
         User: "Buy bitcoin"
-        → path=reject, directSpeech="I can't make financial transactions for you.", confidence=0.95.
+        → path=reject, directSpeech="<one polite refusal addressing the SAME user query — here: I can't make financial transactions for you.>", confidence=0.95.
+
+        IMPORTANT — DELEGATE PROMPT DERIVATION:
+        The user query you receive in this turn is the ONLY source of truth.
+        Build the delegatePrompt as a paraphrase of THAT query. Examples like
+        "Explain Bayes theorem" are training scaffolding — they are NEVER the
+        right answer unless the current user query actually mentions Bayes.
 
         OUTPUT: Always a single FoundationRouterDecision conforming to the schema. Never free text outside the schema.
         """
