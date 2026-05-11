@@ -82,7 +82,7 @@ final class GigiAgentEngine {
         case .appleFM:
             return await processAppleFMOverride(text: text)
         case .ollama:
-            return ollamaStubResult()
+            return await processOllamaOverride(text: text)
         case .claude:
             // Treat as if Force Claude were on — handled by the existing gate below.
             return await processForceClaude(text: text, autoFallbackOnError: false)
@@ -261,15 +261,62 @@ final class GigiAgentEngine {
         )
     }
 
-    /// Path 3 (Ollama) stub — surfaces "not configured" until the harness wires it up.
+    /// Path 3 (Ollama) — forces the request through GigiHarnessClient.runLocalLLM
+    /// bypassing the router. Mirrors GigiRequestRouter.dispatchDelegateLocal
+    /// minus the cost-aware fallback logic (the override is explicit so we
+    /// honor it strictly).
+    /// 2026-05-12 fix: was returning a hardcoded "Path 3 Ollama is not
+    /// configured yet" stub from the GATE 4 scaffold; GATE 4.9 left this
+    /// helper unmigrated. Replaced with real consumer.
+    private func processOllamaOverride(text: String) async -> AgentResult {
+        guard GigiHarnessClient.shared.isConfigured else {
+            return AgentResult(
+                speech: "Brain path Ollama requires a paired harness. Pair it from Settings.",
+                executedTools: [], isFollowUp: false, costEstimate: 0,
+                requiresConfirm: nil, isError: true
+            )
+        }
+        let history = GigiConversationMemory.shared
+            .contents(pruningIfNeeded: true).suffix(6).map { c in
+                let role = c.role == "user" ? "User" : "Assistant"
+                let t = c.parts.compactMap { $0.text }.joined(separator: " ")
+                return "\(role): \(t)"
+            }.joined(separator: "\n")
+
+        var fullText = ""
+        var sawError: String?
+        for await event in GigiHarnessClient.shared.runLocalLLM(prompt: text, history: history) {
+            switch event {
+            case .chunk(let s):
+                fullText += s
+            case .done(let latencyMs):
+                GigiDebugLogger.log("GIGI Override Ollama: done in \(latencyMs)ms · chunks=\(fullText.count) chars")
+            case .error(let msg):
+                sawError = msg
+                GigiDebugLogger.log("GIGI Override Ollama: error \(msg)")
+            }
+        }
+        let speech = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if speech.isEmpty {
+            return AgentResult(
+                speech: sawError.map { "Ollama failed: \($0)" } ?? "Ollama returned no answer. Try again or switch to Auto.",
+                executedTools: [], isFollowUp: false, costEstimate: 0,
+                requiresConfirm: nil, isError: true
+            )
+        }
+        GigiConversationMemory.shared.addModelSpeech(speech)
+        return AgentResult(
+            speech: speech, executedTools: ["ollama"], isFollowUp: false,
+            costEstimate: 0, requiresConfirm: nil, isError: false
+        )
+    }
+
+    /// Legacy alias — kept for any caller that still references the stub.
     private func ollamaStubResult() -> AgentResult {
         AgentResult(
-            speech: "Path 3 Ollama is not configured yet. Set up the harness Ollama bridge to enable this path. See docs/plans/frolicking-stargazing-pancake.md §3.",
-            executedTools: [],
-            isFollowUp: false,
-            costEstimate: 0,
-            requiresConfirm: nil,
-            isError: true
+            speech: "Path 3 Ollama override now uses the harness — call processOllamaOverride(text:) instead.",
+            executedTools: [], isFollowUp: false, costEstimate: 0,
+            requiresConfirm: nil, isError: true
         )
     }
 
