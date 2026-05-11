@@ -44,10 +44,9 @@ struct OnboardingView: View {
     @State private var profileZip = ""
     @State private var isSavingProfile = false
 
-    // 6 steps (2026-05-11): profile step removed from onboarding flow (D6).
-    // ProfileEditSheet still available — entry point is Dashboard → "Your Profile"
-    // setup card. Friction zero at first run.
-    private let totalSteps = 6
+    // 5 steps (2026-05-11 update): apiKeyStep removed too — Groq backend gone.
+    // Sequence: welcome → permissions → harness pair → hardware trigger → done.
+    private let totalSteps = 5
 
     var body: some View {
         ZStack {
@@ -72,12 +71,11 @@ struct OnboardingView: View {
                     switch step {
                     case 0: welcomeStep
                     case 1: permissionsStep
-                    case 2: apiKeyStep
-                    case 3: harnessStep
-                    // case profileStep removed (D6) — profile is now an opt-in
-                    // entry from Dashboard → "Your Profile" setup card.
-                    case 4: hardwareTriggerStep
-                    case 5: doneStep
+                    // case apiKeyStep removed (2026-05-11): Groq removed, brain is harness Claude.
+                    case 2: harnessStep
+                    // case profileStep removed (D6): opt-in from Dashboard.
+                    case 3: hardwareTriggerStep
+                    case 4: doneStep
                     default: EmptyView()
                     }
                 }
@@ -673,10 +671,7 @@ struct OnboardingView: View {
     }
 
     private func loadExistingKey() {
-        let existing = GigiConfig.groqAPIKey
-        if !existing.isEmpty, existing != "$(GROQ_API_KEY)" {
-            apiKey = existing
-        }
+        // Groq API key load removed (2026-05-11): apiKeyStep gone, Groq removed.
         if let u = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) { harnessURL = u }
         if let s = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) { harnessSecret = s }
     }

@@ -4,13 +4,13 @@
 > **Effort stimato**: ~45 min (di cui ~30 di build SSH MacInCloud)
 > **Bloccanti pre-gate**: nessuno (è il primo GATE in assoluto)
 > **Sblocca**: GATE 1, GATE 2, GATE 3, GATE 4, GATE 5, GATE 6, GATE 7, GATE 8 (è il prerequisito di tutti)
-> **Funzione consegnata (1 frase)**: confermare che la codebase post-cleanup (commits `2f504a9` + `bdc393a`, 46 file modificati, ~1262 righe `_legacy` disconnesse, stub Phase 2 creati) compila ed esegue sul device fisico senza regressioni rispetto al flow corrente (3-Gate flat: Force Claude → NLU fast-path → Groq agentLoop).
+> **Funzione consegnata (1 frase)**: confermare che la codebase post-cleanup (commits `2f504a9` + `bdc393a` + `<groq-removal-SHA>`, ~46 file modificati, ~1500 righe `_legacy` disconnesse + agentLoop Groq rimosso) compila ed esegue sul device fisico senza regressioni rispetto al nuovo flow corrente (2-Gate flat: NLU fast-path → harness Claude bridge).
 
 ---
 
 ## 1. Obiettivo
 
-Dopo i 2 commit di cleanup pre-Phase 2 (zombie kill + UI trim + stub creation) la build SSH MacInCloud non è ancora stata verificata. Questo GATE è il **checkpoint di partenza**: vogliamo essere sicuri che (a) il target Xcode compili senza errori, (b) l'IPA si installi sul telefono di Armando, (c) le 3 tab principali siano visibili, (d) le funzionalità non toccate dal cleanup (NLU fast-path "set timer", Groq agentLoop, Settings → Debug picker) continuino a funzionare, (e) il Brain Path Override picker introdotto da `bdc393a` sia visibile in Settings → Debug.
+Dopo i 3 commit di cleanup pre-Phase 2 (zombie kill + UI trim + stub creation + **Groq removal**) la build SSH MacInCloud non è ancora stata verificata. Questo GATE è il **checkpoint di partenza**: vogliamo essere sicuri che (a) il target Xcode compili senza errori, (b) l'IPA si installi sul telefono di Armando, (c) le 3 tab principali siano visibili, (d) le funzionalità non toccate dal cleanup (NLU fast-path "set timer", harness Claude per query non-NLU, Settings → Debug picker) continuino a funzionare, (e) il Brain Path Override picker introdotto da `bdc393a` sia visibile in Settings → Debug, (f) Groq non sia più chiamato da nessun path runtime.
 
 Se il GATE chiude verde, possiamo iniziare GATE 1 (Spike A) con confidence che la baseline è solida.
 
@@ -81,15 +81,16 @@ Se chiude rosso (build failed o regressioni runtime), va aperta una sub-issue P0
     1. App lancia senza crash (no splash screen freeze)
     2. **3 tab visibili** (Chat / Dashboard / Settings) — NON 4
     3. Dashboard mostra 1 dot di stato (NON 3 pill sovrapposte)
-    4. Onboarding (se primo launch) ha **6 step**, NON 7 (welcome → permissions → API key → harness pair → hardware trigger → done)
+    4. Onboarding (se primo launch) ha **5 step**, NON 7 (welcome → permissions → harness pair → hardware trigger → done — apiKeyStep e profileStep rimossi)
     5. Settings → cercare sezione "Debug" → deve contenere **Brain Path Override picker** con 4 opzioni: `auto` / `appleFM` / `ollama` / `claude`
 
 - **Task 0.5 — Sanity runtime test (3 query)** (10 min)
   - Lasciare `Brain Path Override` su `auto`
   - Test 1: pronunciare "What time is it" → deve rispondere ora corrente in <500ms (NLU fast-path hit, `GigiNLUEngine`)
   - Test 2: pronunciare "Set a timer for 5 minutes" → deve schedulare notifica iOS, rispondere "Timer set" / equivalente, in <500ms (NLU fast-path hit)
-  - Test 3: pronunciare "Tell me a joke" → deve cadere su Groq agentLoop (path corrente legacy), latency 2-8s, response testuale
-  - Riferimento: `GigiAgentEngine.process(text:)` flow §"3-Gate flat"
+  - Test 3: pronunciare "Tell me a joke" → deve cadere sul harness Claude bridge (NLU fast-path miss → `GigiClaudeBridge.shared.run()`), latency 5-20s, response testuale
+    - **Pre-condizione**: harness paired (Settings → Harness section deve mostrare "Configured/OK"). Senza pairing, la query ritornerà l'errore "Pair the harness from Settings to enable the AI brain."
+  - Riferimento: `GigiAgentEngine.process(text:)` flow §"2-Gate post-Groq removal"
 
 - **Task 0.6 — Cleanup folder Xcode warnings (opzionale)** (5 min)
   - Se la build mostra warning `@Published` unused properties in `GigiAudioManager` (dormant wake state) — documentati ma non bloccanti, vedi piano §3.12 "Probabili candidati di errore minore"
@@ -109,8 +110,9 @@ Se chiude rosso (build failed o regressioni runtime), va aperta una sub-issue P0
 - **AC8** — In Settings → Debug section c'è il picker "Brain Path Override" con 4 valori selezionabili: `auto`, `appleFM`, `ollama`, `claude`
 - **AC9** — Query "what time is it" classificata da `GigiNLUEngine` come fast-path (verifica in console Xcode: log `nlu_fast_path` o `intent=ask_time`)
 - **AC10** — Query "set timer 5 minutes" schedula effettivamente una notifica iOS (verifica nel Lock Screen che la notifica timer appaia dopo 5 min, o controlla Notifications Pending in iOS Settings)
-- **AC11** — Query generica non NLU ("tell me a joke") raggiunge Groq agentLoop e risponde con testo (latency >1s, NO immediate fast-path)
-- **AC12** — Cartella `_legacy/` esiste in `02_GIGI_APP/GIGI/_legacy/` e contiene 3 file `.swift` + README, ma **NON è compilata** nel target (verifica: nessun simbolo `GigiWakeWordEngine` / `GigiDayPlanReasoner` / `GigiBrainPipeline` linkato nel binario)
+- **AC11** — Query generica non NLU ("tell me a joke") raggiunge il harness Claude bridge (`GigiClaudeBridge.shared.run`) e risponde con testo (latency 5-20s, NO immediate fast-path, NO chiamata Groq — Groq è stato rimosso pre-GATE 0). Se harness NON paired: risposta "Pair the harness from Settings to enable the AI brain."
+- **AC12** — Cartella `_legacy/` esiste in `02_GIGI_APP/GIGI/_legacy/` e contiene 4 file `.swift` + README (WakeWordEngine, DayPlanReasoner, BrainPipeline, PlannerEngine), ma **NON è compilata** nel target (verifica: nessun simbolo legacy linkato nel binario)
+- **AC13** — `GigiCloudService.swift` è ridotto a thin shell (~185 righe vs ~496 pre-cleanup) e contiene solo stub `noop` (extractTasksRaw → "[]", askRaw → throws featureUnavailable, summarizeNews → prefix passthrough, testKey → fixed string). NESSUN HTTP call a `api.groq.com`.
 
 ---
 

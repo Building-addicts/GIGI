@@ -5,7 +5,7 @@ import SwiftUI
 // All configuration in one place: API keys, wake word, privacy, debug.
 
 enum SettingsField: Hashable {
-    case groqKey, harnessURL, harnessSecret
+    case harnessURL, harnessSecret
 }
 
 private enum SettingsSheet: String, Identifiable {
@@ -18,11 +18,9 @@ private enum SettingsSheet: String, Identifiable {
 }
 
 struct SettingsView: View {
-    @State private var groqKey = ""
+    // Groq-related @State removed (2026-05-11): groqKey, showKey,
+    // connectionStatus, isTestingConnection. Groq backend gone.
     @State private var showQRScanner = false
-    @State private var showKey = false
-    @State private var connectionStatus: String = "—"
-    @State private var isTestingConnection = false
     @ObservedObject private var audioManager = GigiAudioManager.shared
     @ObservedObject private var presence = PresenceSessionController.shared
     @State private var ttsRate: Double = 0.52
@@ -88,72 +86,59 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Brain section
+    // MARK: - Brain section (no-Groq, 2026-05-11)
+    //
+    // Groq backend removed from the main flow. The AI brain is now the harness
+    // Claude bridge for any non-NLU query. Apple FM router upfront comes in
+    // GATE 2 of the 5-path plan. Local NLU fast-path covers 24 instant intents.
 
     private var brainSection: some View {
         Section {
-            // Inline key editor
-            HStack {
-                if showKey {
-                    TextField("gsk_...", text: $groqKey)
-                        .font(.system(.body, design: .monospaced))
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .focused($focusedField, equals: .groqKey)
-                        .onSubmit { saveGroqKey() }
-                } else {
-                    SecureField("Groq API Key", text: $groqKey)
-                        .font(.system(.body, design: .monospaced))
-                        .submitLabel(.done)
-                        .focused($focusedField, equals: .groqKey)
-                        .onSubmit { saveGroqKey() }
-                }
-                Button(action: { showKey.toggle() }) {
-                    Image(systemName: showKey ? "eye.slash" : "eye")
+            HStack(spacing: 12) {
+                Image(systemName: "brain.head.profile")
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Harness Claude (primary)")
+                        .font(.body.weight(.medium))
+                    Text(GigiHarnessClient.shared.isConfigured
+                         ? "Paired — handling non-NLU turns"
+                         : "Not paired — pair from Harness section below")
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                Button(action: saveGroqKey) {
-                    Text("Save")
-                        .foregroundColor(.purple)
-                        .fontWeight(.semibold)
-                }
-                .disabled(groqKey.isEmpty)
             }
-
-            HStack {
-                Text("Connection")
-                Spacer()
-                if isTestingConnection {
-                    ProgressView().scaleEffect(0.8)
-                } else {
-                    Text(connectionStatus)
-                        .foregroundColor(connectionStatus.contains("✓") ? .green : .secondary)
-                        .font(.subheadline)
+            HStack(spacing: 12) {
+                Image(systemName: "applelogo")
+                    .foregroundColor(.purple.opacity(0.7))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Apple Intelligence (Phase 2)")
+                        .font(.body.weight(.medium))
+                    Text(GigiFoundationAgent.isSupported
+                         ? "Available — router upfront in GATE 2"
+                         : "Not available on this device")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
-
-            Button("Test Connection") {
-                Task { await testConnection() }
-            }
-            .foregroundColor(.purple)
-
         } header: {
-            Text("🧠 AI Brain (Groq)")
+            Text("🧠 AI Brain")
         } footer: {
-            Text("Free key at console.groq.com — stored securely in your Keychain.")
+            Text("Groq backend removed on 2026-05-11. The 5-path plan introduces Apple FM router + Ollama harness + Claude Code subprocess across GATE 2-5. Until then, every non-NLU query is routed to the harness Claude bridge.")
                 .font(.caption)
         }
     }
 
-    // MARK: - Brain Mode section (Phase 2 — Force Claude toggle)
+    // MARK: - Brain Mode section (no-Groq, DEBUG only)
 
+    @ViewBuilder
     private var brainModeSection: some View {
+        #if DEBUG
         Section {
             Toggle(isOn: $forceClaude) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Force Claude")
                         .font(.body.weight(.medium))
-                    Text("Route every turn through Claude on your PC, bypassing Groq.")
+                    Text("Already the default after Groq removal — kept as a DEBUG toggle for parity with the legacy code path.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -162,27 +147,13 @@ struct SettingsView: View {
             .onChange(of: forceClaude) { _, new in
                 GigiKeychain.saveBool(new, forKey: GigiKeychain.Key.forceClaude)
             }
-
-            Toggle(isOn: $autoFallback) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto Fallback to Groq")
-                        .font(.body.weight(.medium))
-                    Text("If the harness is unreachable, silently use Groq instead of failing.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .tint(.purple)
-            .disabled(!forceClaude)
-            .onChange(of: autoFallback) { _, new in
-                GigiKeychain.saveBool(new, forKey: GigiKeychain.Key.autoFallback)
-            }
         } header: {
-            Text("🧠 Brain Mode")
+            Text("🧠 Brain Mode (DEBUG)")
         } footer: {
-            Text("Force Claude is slower but smarter — Claude has web search, computer-use, and full reasoning. Default off uses Groq for fast turns and escalates to Claude only when needed.")
+            Text("Force Claude toggle is a vestigial flag — the main flow now always routes non-NLU queries to harness Claude. Removed entirely when GATE 2 lands the Apple FM router.")
                 .font(.caption)
         }
+        #endif
     }
 
     // MARK: - Harness section (backend GIGI)
@@ -644,7 +615,7 @@ struct SettingsView: View {
             HStack {
                 Text("Brain")
                 Spacer()
-                Text(GigiFoundationAgent.isSupported ? "Groq + Apple Intelligence" : "Groq llama-3.3-70b")
+                Text(GigiFoundationAgent.isSupported ? "Harness Claude + Apple Intelligence (Phase 2 ready)" : "Harness Claude")
                     .foregroundColor(.secondary)
                     .font(.subheadline)
             }
@@ -660,8 +631,7 @@ struct SettingsView: View {
         let all = await GigiMemory.shared.mostUsed(limit: 1000)
         memoryCount = all.count
         accessoryList = await GigiHomeKit.shared.accessoryNames()
-        let existing = GigiConfig.groqAPIKey
-        if !existing.isEmpty { groqKey = existing }
+        // groqKey load removed (2026-05-11): Groq backend removed from main flow.
         harnessURL = GigiKeychain.load(forKey: GigiKeychain.Key.harnessBaseURL) ?? ""
         harnessSecret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? ""
         let pairingState = GigiHarnessClient.shared.pairingState
@@ -714,27 +684,8 @@ struct SettingsView: View {
         }
     }
 
-    private func saveGroqKey() {
-        let trimmed = groqKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        GigiConfig.setGroqAPIKey(trimmed)
-        connectionStatus = "Key saved"
-    }
-
-    private func testConnection() async {
-        isTestingConnection = true
-        let key = GigiConfig.groqAPIKey
-        guard !key.isEmpty else {
-            connectionStatus = "✗ No API key"
-            isTestingConnection = false
-            return
-        }
-        let prefix = String(key.prefix(8)) + "..."
-        connectionStatus = "Testing \(prefix)"
-        let result = await GigiCloudService.shared.testKey(key)
-        connectionStatus = result
-        isTestingConnection = false
-    }
+    // saveGroqKey() + testConnection() removed (2026-05-11): Groq backend
+    // removed from main flow. AI brain is now harness Claude (no API key needed).
 }
 
 

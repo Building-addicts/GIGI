@@ -1,11 +1,36 @@
 # Task plans Phase 2-4 — 8 GATE modulari per ribilanciamento GIGI
 
 > **Cartella**: `docs/taskplans_new_gigi/`
-> **Generata**: 2026-05-11
+> **Generata**: 2026-05-11 — aggiornata post Groq removal
 > **Branch**: `armando-rework`
 > **Piano master di riferimento**: `C:/Users/arman/.claude/plans/frolicking-stargazing-pancake.md` (~1080 righe, user-private)
 > **Documento PM friendly**: `docs/HOW_GIGI_WILL_WORK.md` (italiano, 14 sezioni)
-> **Ultimo commit cleanup**: `bdc393a` — pre-Phase 2 prep + stubs (2026-05-11)
+> **Ultimo commit cleanup**: `<groq-removal-SHA>` — Groq backend rimosso dal main flow (2026-05-11)
+>
+> ## ⚠️ Update Groq removal (2026-05-11)
+>
+> Groq cloud (llama-3.3-70b agent loop + llama-3.1-8b planner) è stato **rimosso dal main flow** prima di GATE 0. Razionale: il free tier saturava velocemente e bloccava i test E2E. Il main flow corrente è:
+>
+> ```
+> GigiAgentEngine.process()
+>   ├── Gate 1 — NLU rule-based fast-path (24 intent on-device)
+>   └── Gate 2 — Harness Claude bridge (per tutto il resto)
+> ```
+>
+> Cosa è stato rimosso fisicamente:
+> - `GigiPlannerEngine.swift` → `_legacy/`
+> - `GigiAgentEngine.agentLoop` + `orchestratedExecution` + `executeParallel` + `executeToolCall` + `buildMemoryBlock` + `safetyLock` + `pastUserUtterances` (~457 righe)
+> - `GigiCloudService.swift` ridotto a thin shell (185 righe vs 496) con stub noop per `extractTasksRaw`, `askRaw`, `summarizeNews`, `testKey`
+> - Dashboard "GIGI Brain (Groq)" card + Settings sezione Groq key + Onboarding apiKeyStep (step 2)
+> - `GigiWebAgent+Vision` Groq vision call → throws "Web vision unavailable" finché GATE 5 MCP harness-browser
+> - `GigiBrainDiagnostics` updated per non riferire Groq
+>
+> Cosa resta come stub `noop` (i caller funzionano ma feature-degradate):
+> - `GigiTaskExtractor.extract` ritorna empty array — task extraction live torna in GATE 3 via Apple FM Tool
+> - `GigiFallbackEngine.askRaw` throws `featureUnavailable` — Q&A fallback via harness Claude
+> - `GigiActionBridge.summarizeNews` ritorna prefix(200) raw — news summarization torna in GATE 3
+>
+> Le sezioni GATE che ancora menzionano "Groq" sono storiche (contesto) — nessun task implementativo deve chiamare Groq. Se ne trovi una che lo fa: bug, apri sub-issue.
 
 Questa cartella contiene **8 task plan modulari**, uno per ogni GATE del piano di ribilanciamento architetturale GIGI verso 5-path (Apple FM router + Path 1 NLU + Path 2 Apple FM Tools + Path 3 Ollama harness + Path 4 Claude Code subprocess + Path 5 Reject). Ogni GATE è autonomo: ha pre-condizioni esplicite, task implementativi granulari, AC verificabili binari, test E2E numerati pronunciabili sull'iPhone, **test post-creazione ripetibili anche fra mesi**, rollback plan, file table modificati/creati, ADR collegati, e suggested Conventional Commits.
 

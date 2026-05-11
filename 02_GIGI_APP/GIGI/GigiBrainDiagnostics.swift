@@ -81,32 +81,28 @@ final class GigiBrainDiagnostics: ObservableObject {
     // MARK: - Legacy log shim
     //
     // Pre-existing call sites (`GIGIApp.swift`, `SettingsView.swift`) print a
-    // one-shot "Brain Status" banner at app launch. Kept intact to avoid
-    // ripple-edit; new state lives on `harnessStatus` and is observable.
+    // one-shot "Brain Status" banner at app launch. Updated 2026-05-11 to
+    // reflect Groq removal — brain status now reports harness + Apple FM.
 
     static func log() {
-        let apiKey = GigiConfig.groqAPIKey
-        let keyStatus: String
-        if apiKey.isEmpty {
-            keyStatus = "❌ MISSING — add your Groq key in Settings"
-        } else {
-            let preview = String(apiKey.prefix(8)) + "..."
-            keyStatus = "✓ set (\(preview), \(apiKey.count) chars)"
-        }
+        let harnessConfigured = GigiHarnessClient.shared.isConfigured
+        let harnessStatus = harnessConfigured ? "✓ paired" : "❌ not paired (Settings → Harness)"
 
         var foundationStatus = "not available"
         if #available(iOS 18.1, *) {
             foundationStatus = GigiFoundationAgent.isSupported
-                ? "✓ Apple Intelligence ready"
-                : "optional off — Groq/local fallback active"
+                ? "✓ Apple Intelligence ready (router stub)"
+                : "optional off — fast-path NLU + harness fallback"
         }
 
         print("""
         ┌─ GIGI Brain Status ────────────────────────────────────
-        │  Groq API key   : \(keyStatus)
-        │  Model          : llama-3.3-70b-versatile
+        │  Harness        : \(harnessStatus)
         │  Foundation AI  : \(foundationStatus)
-        │  Fallback NLU   : ✓ always available (offline)
+        │  Fast-path NLU  : ✓ always available (offline)
+        │  Note           : Groq removed 2026-05-11. Main flow is
+        │                   NLU fast-path → harness Claude. 5-path
+        │                   plan: Apple FM router → Ollama / Claude.
         └────────────────────────────────────────────────────────
         """)
     }

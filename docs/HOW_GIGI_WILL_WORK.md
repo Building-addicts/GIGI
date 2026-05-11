@@ -8,6 +8,16 @@
 
 ---
 
+## ⚠️ Aggiornamento 2026-05-11 — Groq rimosso
+
+Prima di entrare nella vision, una nota su dove siamo OGGI: **Groq cloud è stato rimosso dal main flow**. Era il cervello principale (llama-3.3-70b agent loop + llama-3.1-8b planner) ma il free tier saturava velocemente e bloccava i test E2E.
+
+Oggi GIGI ha un **flow a 2 gate** semplicissimo:
+1. NLU rule-based fast-path on-device (24 intent: timer, call, message, navigate, weather…)
+2. Per tutto il resto → harness Claude bridge
+
+I 5 path veri (Apple FM router + Apple FM Tool + Ollama + Claude Code + Reject) arrivano gradualmente nei GATE 2-5. Vedi `docs/taskplans_new_gigi/INDEX.md` per la roadmap.
+
 ## 1. Cos'è GIGI in una frase
 
 GIGI è un assistente vocale per iPhone che si comporta come un Siri più intelligente: gli parli in inglese, lui capisce cosa vuoi e o lo fa direttamente (chiamare, mandare un messaggio, navigare, accendere le luci) oppure delega a un cervello più potente quando il task è complesso (cercare sul web, scrivere un'email, ragionare). Il tutto **senza pagare API ogni volta che lo usi** — gira on-device per il routing, sul tuo PC di casa per il reasoning offline, e sulla subscription Claude Code che hai già per i task pesanti.

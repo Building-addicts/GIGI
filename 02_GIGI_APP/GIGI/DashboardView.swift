@@ -11,7 +11,9 @@ struct DashboardView: View {
     // Wake word UserDefaults key removed (2026-05-11) — engine in _legacy/ (ADR-0003),
     // no UI row depends on it anymore. PresenceSessionController still reads the
     // key for "always available" persistence — it owns the storage now.
-    @State private var groqReady = false
+    // groqReady removed (2026-05-11): Groq backend removed from main flow.
+    // Brain readiness is now harnessConfigured (computed below).
+    private var harnessConfigured: Bool { GigiHarnessClient.shared.isConfigured }
     @State private var whatsappLinked = false
     @State private var profileScore: Int = 0   // 0-4 fields filled
     @State private var memoryCount = 0
@@ -30,7 +32,7 @@ struct DashboardView: View {
                         .padding(.top, 56)
 
                     // First-config banner
-                    if !groqReady {
+                    if !harnessConfigured {
                         firstConfigBanner
                     }
 
@@ -40,15 +42,14 @@ struct DashboardView: View {
                     setupCard(
                         icon: "brain.filled.head.profile",
                         iconColor: .purple,
-                        title: "GIGI Brain (Groq)",
-                        subtitle: groqReady ? "Connected — llama-3.3-70b" : "API key required",
-                        status: groqReady ? .ok : .required,
-                        action: nil  // managed in Settings
+                        title: "GIGI Brain",
+                        subtitle: harnessConfigured ? "Harness Claude paired" : "Pair harness to enable AI brain",
+                        status: harnessConfigured ? .ok : .required,
+                        action: nil  // managed in Settings → Harness section
                     )
 
-                    // WhatsApp Web card removed (2026-05-11): consolidated to a
-                    // single entry point in Settings → WhatsApp section. The
-                    // capability row below still reflects link status.
+                    // WhatsApp Web card removed (2026-05-11): consolidated to
+                    // Settings → WhatsApp section.
 
                     setupCard(
                         icon: "person.crop.circle.fill",
@@ -69,8 +70,8 @@ struct DashboardView: View {
                     capabilityRow("Navigation & Maps",  icon: "map.fill",              color: .blue,   active: true)
                     capabilityRow("HomeKit",            icon: "house.fill",             color: .orange, active: homeKitCount > 0,
                                   detail: homeKitCount > 0 ? "\(homeKitCount) accessories" : "No HomeKit home found")
-                    capabilityRow("Web Automation",     icon: "safari.fill",            color: .cyan,   active: groqReady,
-                                  detail: groqReady ? "Vision loop active" : "Needs Groq key")
+                    capabilityRow("Web Automation",     icon: "safari.fill",            color: .cyan,   active: harnessConfigured,
+                                  detail: harnessConfigured ? "Claude + MCP harness-browser" : "Needs harness paired")
                     capabilityRow("Long-term Memory",   icon: "brain",                  color: .purple, active: memoryCount > 0,
                                   detail: "\(memoryCount) memories saved")
                     // Wake Word row removed — engine disconnected in _legacy/ (ADR-0003).
@@ -109,7 +110,7 @@ struct DashboardView: View {
             // Full status info lives in Settings → Brain section.
             // HarnessOfflineBanner (MainTabView) covers harness offline state.
             Circle()
-                .fill(groqReady ? Color.green : Color.red)
+                .fill(harnessConfigured ? Color.green : Color.red)
                 .frame(width: 10, height: 10)
         }
     }
@@ -230,14 +231,8 @@ struct DashboardView: View {
     // MARK: - Load status
 
     private func loadStatus() async {
-        let key = GigiConfig.groqAPIKey
-        if !key.isEmpty {
-            // Real API ping (reuses existing GigiCloudService.testKey which sends a minimal request)
-            let result = await GigiCloudService.shared.testKey(key)
-            groqReady = result.contains("✓")
-        } else {
-            groqReady = false
-        }
+        // Groq readiness check removed (2026-05-11): brain readiness now reads
+        // harness pairing state directly via `harnessConfigured` computed prop.
 
         // WhatsApp: check UserDefaults flag + silently verify session if webview loaded
         let udLinked = UserDefaults.standard.bool(forKey: "gigi.whatsapp.linked")

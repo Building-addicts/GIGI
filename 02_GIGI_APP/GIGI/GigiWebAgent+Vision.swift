@@ -197,6 +197,11 @@ extension GigiWebAgent {
         domJSON: String,
         profileContext: String
     ) async throws -> VisionAction {
+        // Groq Vision API removed (2026-05-11). Web vision will be replaced by
+        // Claude Code MCP harness-browser screenshot reading in GATE 5 (Path 4).
+        // Until then this method throws — web vision flow is paused.
+        throw GigiWebAgentError.jsError("Web vision temporarily unavailable: migrating to Claude Code MCP in GATE 5.")
+        /*
         guard let jpeg = screenshot.jpegData(compressionQuality: 0.45) else {
             throw GigiWebAgentError.jsError("JPEG encoding failed")
         }
@@ -237,6 +242,7 @@ extension GigiWebAgent {
         }
 
         return try parseVisionResponse(data: data)
+        */
     }
 
     private func buildVisionSystemPrompt(domJSON: String, profileContext: String) -> String {
