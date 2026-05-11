@@ -9,11 +9,10 @@
     "panel": "node panel.js",
     "start:all": "bash start-all.sh"
   },
-  "_phase2_todos": [
-    "@anthropic-ai/sdk ^0.90.0 — tagged 2026-05-11: imported ONLY by api/ios-computer-use.js (Anthropic SDK loop with computer_20241022 tool). To be removed in Phase 3 (ADR-0007 TBD) when computer-use migrates to Claude Code CLI subprocess + MCP harness-browser. Removal also closes the silent API-billing risk (Issue claude-code#45572) — bootstrap script must unset ANTHROPIC_API_KEY at setup."
+  "_phase2_done": [
+    "@anthropic-ai/sdk removed 2026-05-12 (GATE 5): the only importer was api/ios-computer-use.js, which moved to examples/ios-computer-use-anthropic-sdk.js.legacy. Path 4 now uses the Claude Code CLI subprocess via claude-runner.js → ios-claude-agent.js → /api/ios/agent/claude. This eliminates per-turn API billing and uses the user's Claude Code subscription. Setup wizard + start-harness.sh unset ANTHROPIC_API_KEY to avoid silent API billing (Issue claude-code#45572)."
   ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
     "bonjour-service": "^1.3.0",
     "playwright-core": "^1.59.1",
     "puppeteer-core": "^24.41.0",

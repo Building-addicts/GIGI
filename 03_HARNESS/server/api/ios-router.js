@@ -2,8 +2,10 @@
 // Auth Bearer applicato qui; se fallisce, chiude la risposta senza delegare.
 import { checkBearer, checkDevice } from './ios-auth.js';
 import * as agent from './ios-agent.js';
-import * as computerUse from './ios-computer-use.js';
 import * as memory from './ios-memory.js';
+// Phase 2 GATE 5 (2026-05-12): ios-computer-use.js (Anthropic SDK loop)
+// deprecated → see server/examples/ios-computer-use-anthropic-sdk.js.legacy.
+// Replaced by Path 4 via ios-claude-agent.js (Claude Code subprocess + MCP).
 import * as push from './ios-push-register.js';
 import { handlePushTest } from './ios-push-test.js';
 import { handleStatus, recordRequest } from './ios-status.js';
@@ -73,10 +75,15 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/memory/all' && m === 'GET')    { await memory.handleAll(req, res, deps); return true; }
   if (p.startsWith('/api/ios/memory/') && m === 'DELETE') { await memory.handleDelete(req, res, deps); return true; }
 
-  // computer-use
-  if (p === '/api/ios/computer-use' && m === 'POST') { await computerUse.handleStart(req, res, deps); return true; }
-  if (/^\/api\/ios\/computer-use\/[^/]+\/confirm$/.test(p) && m === 'POST') { await computerUse.handleConfirm(req, res, deps); return true; }
-  if (/^\/api\/ios\/computer-use\/[^/]+$/.test(p) && m === 'GET') { await computerUse.handleStatus(req, res, deps); return true; }
+  // computer-use (DEPRECATED — see server/examples/ios-computer-use-anthropic-sdk.js.legacy)
+  // Phase 2 GATE 5 (2026-05-12): the old /api/ios/computer-use/* routes are
+  // gone. Path 4 lives under /api/ios/agent/claude (mounted below). Legacy
+  // clients receive a structured 410 Gone with migration hint.
+  if (p.startsWith('/api/ios/computer-use')) {
+    json(res, 410, { ok: false, error: { code: 'COMPUTER_USE_DEPRECATED',
+      message: 'Use POST /api/ios/agent/claude with mcpServers:["harness-browser"] instead (GATE 5 — Path 4 Claude Code subprocess + MCP).' } });
+    return true;
+  }
 
   // push
   if (p === '/api/ios/push/register' && m === 'POST')   { await push.handleRegister(req, res, deps); return true; }
@@ -88,12 +95,11 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/local-llm/status'   && m === 'GET')  { await localLLM.handleStatus(req, res, deps); return true; }
   if (p === '/api/ios/local-llm/cancel'   && m === 'POST') { await localLLM.handleCancel(req, res, deps); return true; }
 
-  // Phase 2 — Path 4 Claude Code subprocess + MCP (GATE 5, scaffold)
-  if (p === '/api/ios/agent/claude'   && m === 'POST') { await claudeAgent.handleClaude(req, res, deps); return true; }
-  if (p === '/api/ios/agent/confirm'  && m === 'POST') { await claudeAgent.handleConfirm(req, res, deps); return true; }
-  if (p === '/api/ios/agent/cancel'   && m === 'POST' && req.headers['x-cancel-target'] === 'claude') {
-    await claudeAgent.handleCancel(req, res, deps); return true;
-  }
+  // Phase 2 — Path 4 Claude Code subprocess + MCP (GATE 5)
+  if (p === '/api/ios/agent/claude'        && m === 'POST') { await claudeAgent.handleClaude(req, res, deps); return true; }
+  if (p === '/api/ios/agent/claude-status' && m === 'GET')  { await claudeAgent.handleStatus(req, res, deps); return true; }
+  if (p === '/api/ios/agent/confirm'       && m === 'POST') { await claudeAgent.handleConfirm(req, res, deps); return true; }
+  if (p === '/api/ios/agent/claude/cancel' && m === 'POST') { await claudeAgent.handleCancel(req, res, deps); return true; }
 
   // health
   if (p === '/api/ios/health' && m === 'GET') { json(res, 200, { ok: true, data: { pid: process.pid, uptime_s: Math.floor(process.uptime()) } }); return true; }

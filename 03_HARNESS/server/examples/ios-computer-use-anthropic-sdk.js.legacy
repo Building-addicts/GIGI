@@ -1,3 +1,20 @@
+// DEPRECATED 2026-05-12 — moved from server/api/ios-computer-use.js to
+// server/examples/ios-computer-use-anthropic-sdk.js.legacy as part of
+// GATE 5 (Path 4 Claude Code subprocess + MCP harness-browser).
+//
+// This file uses the Anthropic SDK directly with the `computer_20241022`
+// tool. It billed the user's ANTHROPIC_API_KEY per turn ($0.20-2 each)
+// and is the primary reason GATE 5 exists: replace per-turn API billing
+// with the Claude Code subscription via subprocess + MCP.
+//
+// Kept here for historical reference. NOT loaded by the harness. To restore
+// (rollback GATE 5), move back to server/api/, re-add import in ios-router.js,
+// re-add @anthropic-ai/sdk to package.json dependencies.
+//
+// New entry point: server/api/ios-claude-agent.js → POST /api/ios/agent/claude
+// (SSE, subscription-billed, MCP-aware).
+//
+// ---------------- original header ----------------
 // Computer-use: loop Anthropic Claude con tool computer_20241022.
 // iOS POST /api/ios/computer-use { deviceId, task } → enqueue job, risposta 202.
 // Loop background:
