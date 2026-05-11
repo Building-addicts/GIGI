@@ -82,50 +82,54 @@ extension GigiHarnessClient {
                         continuation.finish()
                         return
                     }
-                    GigiDebugLogger.log("GIGI runLocalLLM connected to \(url.absoluteString)")
-                    var currentEvent = ""
-                    var currentData = ""
-                    var rawLineCount = 0
+                    // Manual byte-buffer SSE parser (parser=manual-buffer-v1).
+                    // Replaces Apple's URLSession.bytes.lines (AsyncLineSequence) because
+                    // that API does NOT yield empty lines on CRLF-terminated streams from
+                    // Cloudflare Tunnel — verified by 3 reinstalls all showing
+                    // chunks emitted=0 with N event:/data: lines and zero empty separators.
+                    // mattt/EventSource and Swift Forums SOAR-0010 confirm bytes.lines
+                    // is not SSE-spec-compliant; the community uses manual byte parsing.
+                    GigiDebugLogger.log("GIGI runLocalLLM connected · parser=manual-buffer-v1 to \(url.absoluteString)")
+                    var buffer: [UInt8] = []
+                    var totalBytes = 0
                     var chunksEmitted = 0
+                    var eventsProcessed = 0
 
-                    // SSE event dispatch helper — flushes the pending (event,data) pair.
-                    let flush: () -> Void = {
-                        guard !currentData.isEmpty else { return }
-                        let evt = currentEvent.isEmpty ? "chunk" : currentEvent
-                        Self.dispatchSSE(event: evt, data: currentData, started: started, continuation: continuation)
-                        if evt == "chunk" { chunksEmitted += 1 }
-                        currentEvent = ""
-                        currentData = ""
+                    let dispatchEvent: ([UInt8]) -> Void = { eventBytes in
+                        guard let evt = Self.parseSSEEvent(eventBytes) else { return }
+                        eventsProcessed += 1
+                        if eventsProcessed <= 10 {
+                            GigiDebugLogger.log("GIGI runLocalLLM event[\(eventsProcessed)] name='\(evt.event)' dataLen=\(evt.data.count)")
+                        }
+                        Self.dispatchSSE(event: evt.event, data: evt.data, started: started, continuation: continuation)
+                        if evt.event == "chunk" { chunksEmitted += 1 }
                     }
 
-                    for try await rawLine in bytes.lines {
-                        // Strip CRLF residue (Cloudflare Tunnel sends \r\n; bytes.lines splits on \n only).
-                        let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
-                        rawLineCount += 1
-                        if rawLineCount <= 10 {
-                            GigiDebugLogger.log("GIGI runLocalLLM line[\(rawLineCount)] len=\(line.count): '\(line.prefix(120))'")
+                    for try await byte in bytes {
+                        buffer.append(byte)
+                        totalBytes += 1
+                        // Detect SSE event boundary at buffer tail (LF×2 or CRLF×2).
+                        let n = buffer.count
+                        var boundaryLen = 0
+                        if n >= 2 && buffer[n-2] == 0x0A && buffer[n-1] == 0x0A {
+                            boundaryLen = 2
+                        } else if n >= 4
+                            && buffer[n-4] == 0x0D && buffer[n-3] == 0x0A
+                            && buffer[n-2] == 0x0D && buffer[n-1] == 0x0A {
+                            boundaryLen = 4
                         }
-                        if line.isEmpty {
-                            // Standard SSE separator — dispatch pending event.
-                            flush()
-                        } else if line.hasPrefix("event:") {
-                            // CRITICAL FIX 2026-05-12: Swift's `bytes.lines` (AsyncLineSequence)
-                            // does NOT yield empty lines for CRLF-terminated SSE streams from
-                            // Cloudflare Tunnel — verified by user-side log showing 6 raw lines
-                            // (3×event:, 3×data:) with zero empties.
-                            // Workaround: a new `event:` line implies the previous event is
-                            // complete. Flush the pending buffer BEFORE starting the new one.
-                            flush()
-                            currentEvent = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-                        } else if line.hasPrefix("data:") {
-                            let chunk = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                            currentData += chunk
+                        if boundaryLen > 0 {
+                            let eventBytes = Array(buffer[0..<(n - boundaryLen)])
+                            buffer.removeAll(keepingCapacity: true)
+                            dispatchEvent(eventBytes)
                         }
-                        // ignore comment lines (start with ":") and other fields
                     }
-                    // Flush any remaining event at stream end.
-                    flush()
-                    GigiDebugLogger.log("GIGI runLocalLLM stream ended · raw lines=\(rawLineCount) chunks emitted=\(chunksEmitted)")
+                    // Flush trailing event (no terminating boundary at EOF).
+                    if !buffer.isEmpty {
+                        dispatchEvent(Array(buffer))
+                        buffer.removeAll()
+                    }
+                    GigiDebugLogger.log("GIGI runLocalLLM stream ended · parser=manual-buffer-v1 · bytes=\(totalBytes) events=\(eventsProcessed) chunks emitted=\(chunksEmitted)")
                     continuation.yield(.done(latencyMs: Int(Date().timeIntervalSince(started) * 1000)))
                     continuation.finish()
                 } catch {
@@ -135,6 +139,27 @@ extension GigiHarnessClient {
                 }
             }
         }
+    }
+
+    /// Parse a single SSE event from raw bytes. Spec-compliant: handles LF, CRLF,
+    /// multi-line `data:` accumulation, last `event:` header wins, ignores comments.
+    /// Returns nil if the chunk is empty or contains no recognizable fields.
+    fileprivate static func parseSSEEvent(_ bytes: [UInt8]) -> (event: String, data: String)? {
+        guard !bytes.isEmpty, let text = String(bytes: bytes, encoding: .utf8) else { return nil }
+        var eventName = ""
+        var dataAccum = ""
+        for rawLineSub in text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" }) {
+            var line = String(rawLineSub)
+            if line.hasSuffix("\r") { line = String(line.dropLast()) }
+            if line.isEmpty || line.hasPrefix(":") { continue }
+            if line.hasPrefix("event:") {
+                eventName = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("data:") {
+                dataAccum += String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        if eventName.isEmpty && dataAccum.isEmpty { return nil }
+        return (eventName.isEmpty ? "chunk" : eventName, dataAccum)
     }
 
     private static func dispatchSSE(
@@ -211,33 +236,37 @@ extension GigiHarnessClient {
                         continuation.finish()
                         return
                     }
-                    var currentEvent = ""
-                    var currentData = ""
-                    let flush: () -> Void = {
-                        guard !currentData.isEmpty else { return }
+                    // Same manual byte-buffer SSE parser as runLocalLLM.
+                    var buffer: [UInt8] = []
+                    let dispatchEvent: ([UInt8]) -> Void = { eventBytes in
+                        guard let evt = Self.parseSSEEvent(eventBytes) else { return }
                         Self.dispatchClaudeSSE(
-                            event: currentEvent.isEmpty ? "unknown" : currentEvent,
-                            data: currentData,
+                            event: evt.event.isEmpty ? "unknown" : evt.event,
+                            data: evt.data,
                             started: started,
                             continuation: continuation
                         )
-                        currentEvent = ""
-                        currentData = ""
                     }
-                    for try await rawLine in bytes.lines {
-                        let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
-                        if line.isEmpty {
-                            flush()
-                        } else if line.hasPrefix("event:") {
-                            // bytes.lines may swallow empty separators on CRLF streams.
-                            // A new event: header implies the previous event is done.
-                            flush()
-                            currentEvent = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-                        } else if line.hasPrefix("data:") {
-                            currentData += String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                    for try await byte in bytes {
+                        buffer.append(byte)
+                        let n = buffer.count
+                        var boundaryLen = 0
+                        if n >= 2 && buffer[n-2] == 0x0A && buffer[n-1] == 0x0A {
+                            boundaryLen = 2
+                        } else if n >= 4
+                            && buffer[n-4] == 0x0D && buffer[n-3] == 0x0A
+                            && buffer[n-2] == 0x0D && buffer[n-1] == 0x0A {
+                            boundaryLen = 4
+                        }
+                        if boundaryLen > 0 {
+                            let eventBytes = Array(buffer[0..<(n - boundaryLen)])
+                            buffer.removeAll(keepingCapacity: true)
+                            dispatchEvent(eventBytes)
                         }
                     }
-                    flush()
+                    if !buffer.isEmpty {
+                        dispatchEvent(Array(buffer))
+                    }
                     continuation.yield(.done(latencyMs: Int(Date().timeIntervalSince(started) * 1000)))
                     continuation.finish()
                 } catch {
