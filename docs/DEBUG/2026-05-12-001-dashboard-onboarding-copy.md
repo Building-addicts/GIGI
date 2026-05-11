@@ -1,6 +1,6 @@
 # Bug 001 — Dashboard onboarding cards copy unclear
 
-- **Status**: open
+- **Status**: ✅ fixed
 - **Severity**: P2 (cosmetic, but first impression for testers)
 - **Discovered**: 2026-05-12 — beta tester wave (Armando's friends)
 - **Area**: iOS · DashboardView · onboarding empty-state
@@ -67,4 +67,25 @@ Try a command." Less noisy.
 
 ## Resolution
 
-_(empty — to be filled when fixed)_
+- **Commit**: `b4d922c` (2026-05-12)
+- **IPA**: TBD — included in next build after `28bd428`
+- **Files changed**: `02_GIGI_APP/GIGI/DashboardView.swift` (lines 34-41 condition + 118-170 banner)
+
+### What was changed
+
+1. **Visibility condition inverted + tightened**: was `if !harnessConfigured { firstConfigBanner }` (showed during pairing onboarding, duplicating the global pairing card). Now `if harnessConfigured && groqKeyMissing && !optionalBrainBannerDismissed` — appears only after pairing, only if no Groq key, only if user hasn't dismissed.
+
+2. **Copy softened**: title "Groq key required" → "Optional: cloud AI brain". Subtitle now explicitly says *"Apple Intelligence and local Ollama already cover most tasks"* — makes clear it's not a blocker.
+
+3. **Visual tone changed**: orange key.fill icon (alarming) → blue sparkles icon (suggestion). Background tint orange → blue. The banner no longer reads as a warning.
+
+4. **Dismissible**: added `xmark` button top-right wired to `@AppStorage("gigi.dashboard.optionalBrainBannerDismissed")`. One click = banner gone forever (per device).
+
+5. **groqKeyMissing helper**: new computed property `GigiConfig.groqAPIKey.isEmpty` driving the condition.
+
+### Test plan after IPA install
+
+- Fresh install on un-paired iPhone → DashboardView shows ONLY the MainTabView purple pairing banner. The orange/blue Groq banner is NOT visible. ✓
+- After pairing + no Groq key set → blue "Optional: cloud AI brain" banner appears with dismiss x. ✓
+- Tap x → banner disappears, stays dismissed across app restarts. ✓
+- After Groq key is set in Settings → banner doesn't appear again even on reset. ✓
