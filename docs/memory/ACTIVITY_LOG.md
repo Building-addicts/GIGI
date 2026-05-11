@@ -331,3 +331,4 @@
 - `2026-05-11T22:32:12+0200` · local · session ended on `armando-rework` (last commit: fix(ios): make Apple FM router stateless — eliminate turn-to-turn bias)
 - `2026-05-11T23:13:37+0200` · local · session ended on `armando-rework` (last commit: docs(debug): beta tester findings — 4 open bugs cataloged in docs/DEBUG/)
 - `2026-05-11T23:41:14+0200` · local · session ended on `armando-rework` (last commit: docs(debug): mark bug-004 ✅ fixed (commit d1c75e9) — all 4 May 2026 wave bug)
+- `2026-05-11T23:46:52+0200` · local · session ended on `armando-rework` (last commit: docs(debug): mark bug-006 ✅ fixed (commit cfc8b8e) — moved 'Call X' double-c)
