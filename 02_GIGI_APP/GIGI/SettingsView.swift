@@ -624,24 +624,8 @@ struct SettingsView: View {
             // 2026-05-12 batch 7+9 — Captured logs viewer with live reload
             CapturedLogsView()
 
-            // Phase 2 — Last router decision viewer (debug overlay)
-            DisclosureGroup("Last router decision (JSON)") {
-                let json = UserDefaults.standard.string(forKey: "gigi.debug.lastRouterDecision") ?? "(no decision yet — issue a query first)"
-                ScrollView(.horizontal, showsIndicators: false) {
-                    Text(json)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .textSelection(.enabled)
-                        .padding(8)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(6)
-                }
-                Button("Clear cached decision") {
-                    UserDefaults.standard.removeObject(forKey: "gigi.debug.lastRouterDecision")
-                }
-                .font(.caption)
-                .foregroundColor(.orange)
-            }
+            // Phase 2 — Last router decision viewer (debug overlay, auto-reload)
+            LastRouterDecisionView()
             #endif
         } header: {
             Text("🔧 Debug")

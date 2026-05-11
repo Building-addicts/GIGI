@@ -54,10 +54,15 @@ class GigiDebugLogger {
     }
 
     static func flushCrashLogs() async {
+        // 2026-05-12 fix: was clearing the UserDefaults log buffer at every
+        // app launch (intentional for crash recovery — flush + wipe), but
+        // this also wiped the in-app Captured Logs viewer that the user
+        // relies on to debug live behavior. Now we preserve the buffer
+        // and copy it to disk for archival without removeObject.
         let logs = UserDefaults.standard.stringArray(forKey: "gigi_crash_logs") ?? []
         guard !logs.isEmpty else { return }
 
-        print("--- PREVIOUS CRASH LOGS ---")
+        print("--- PREVIOUS CRASH LOGS (preserved in viewer) ---")
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fileURL = docs.appendingPathComponent("gigi_crash_logs.txt")
         try? logs.joined(separator: "\n").write(to: fileURL, atomically: true, encoding: .utf8)
@@ -67,8 +72,9 @@ class GigiDebugLogger {
             sendRemote(message: log, location: "CRASH_RECOVERY", recovery: true)
         }
         print("---------------------------")
-        UserDefaults.standard.removeObject(forKey: "gigi_crash_logs")
-        UserDefaults.standard.synchronize()
+        // Intentionally do NOT remove gigi_crash_logs — the viewer needs it.
+        // Use the "Clear" button in Settings → 🔧 Debug → Captured logs to
+        // manually wipe when needed.
     }
 
     private static func sendRemote(message: String, location: String, recovery: Bool) {
