@@ -330,6 +330,16 @@ final class GigiRequestRouter {
             collected = result.value
         }
 
+        // Bug #002 fix (2026-05-12): refuse to concatenate Claude CLI error
+        // strings into the response. The harness propagates "/login" stderr
+        // verbatim when claude.exe isn't authenticated; that leaks into
+        // `collected` as if it were a legit summary and would get glued to
+        // any follow-up action result. Surface a clean error instead.
+        if Self.looksLikeClaudeAuthError(collected) {
+            GigiDebugLogger.log("GIGI Router: Claude returned auth error — short-circuit, no follow-up chain.")
+            return .error("Claude Code on the PC needs to be logged in. Run `claude /login` on the harness host once.")
+        }
+
         // GATE 6 — 2-turn callback (Path 4 → Path 2) for killer demos like
         // "Search Wikipedia and create a note about Tesla". After Path 4
         // returns the research summary, detect a follow-up action verb in
@@ -373,11 +383,43 @@ final class GigiRequestRouter {
         let title: String?     // optional pre-extracted title
     }
 
+    /// Bug #002 helper: detect Claude CLI authentication errors that the
+    /// harness propagates verbatim from claude.exe stderr. These look like
+    /// legitimate text in the SSE stream but are actually setup failures
+    /// the user can't recover from inside the iPhone app.
+    private static func looksLikeClaudeAuthError(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("not logged in")
+            || lower.contains("please run /login")
+            || lower.contains("claude /login")
+            || lower.hasPrefix("error: not authenticated")
+            || lower.hasPrefix("authentication required")
+    }
+
     /// Detect "research + action" patterns in the user's original utterance.
     /// Returns the secondary action to dispatch after Path 4 returns.
-    /// Conservative: only fires on explicit verb pairs.
+    ///
+    /// Bug #002 fix (2026-05-12): requires a research verb to COEXIST with
+    /// the action verb. Previously "create a note titled test with body
+    /// hello world" matched the action verb alone — GATE 6 fired even
+    /// though there was no Path 4 research to chain. Combined with router
+    /// mis-classification to delegate_cloud, this produced a hybrid
+    /// bubble: Claude "/login" error + native success concatenated.
+    /// Now: GATE 6 only fires when the utterance clearly chains research
+    /// (search/look up/find/get/research) → action (note/reminder/email).
+    private static let researchVerbs = [
+        "search", "look up", "find ", "research", "get the", "browse",
+        "fetch", "check the web", "tell me about", "what's the latest"
+    ]
+
     private func detectFollowUpAction(originalText: String) -> FollowUpAction? {
         let t = originalText.lowercased()
+
+        // Precondition: must have a research verb. Otherwise the user is
+        // requesting a pure native action — let dispatchNativeTool handle it.
+        guard Self.researchVerbs.contains(where: { t.contains($0) }) else {
+            return nil
+        }
 
         // Note patterns
         let notePatterns = [
