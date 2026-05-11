@@ -49,6 +49,14 @@ struct SetupDiagnosticView: View {
     @State private var needsRepairAfterAutofix = false
     @State private var needsUserWalkthroughIds: Set<String> = []
 
+    // 2026-05-12 batch 8 — 5-path stack overview shown during diagnostics.
+    // Polled in parallel with the legacy check list. Gives the user immediate
+    // visibility into Apple FM / Ollama / Claude Code / active model so they
+    // don't have to scroll down to Settings → 🦙 Ollama to know.
+    @State private var stackOllama: GigiHarnessClient.OllamaInstallStatus?
+    @State private var stackClaudeReady: Bool = false
+    @State private var stackPolling: Bool = false
+
     /// Per-step row shown during the .fixing animation.
     struct AutofixStep: Identifiable, Equatable {
         let id: String
@@ -114,6 +122,7 @@ struct SetupDiagnosticView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     summaryHeader(report: report)
+                    stackOverviewSection
                     autofixBanner(report: report)
                     if isAutofixing { autofixProgressCard }
                     checkList(report: report)
@@ -122,6 +131,7 @@ struct SetupDiagnosticView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 40)
             }
+            .task { await refreshStackOverview() }
             .alert("Rotate secret?", isPresented: $showSecretRotateConfirm) {
                 Button("Cancel", role: .cancel) {
                     pendingAutofixIds = []
@@ -214,6 +224,142 @@ struct SetupDiagnosticView: View {
         .padding(16)
         .background(Color.white.opacity(0.04))
         .cornerRadius(12)
+    }
+
+    // MARK: - 5-PATH STACK OVERVIEW (batch 8, 2026-05-12)
+
+    @ViewBuilder
+    private var stackOverviewSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.grid.2x2.fill")
+                    .foregroundColor(.purple)
+                Text("5-PATH STACK")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(.white.opacity(0.75))
+                    .textCase(.uppercase)
+                Spacer()
+                if stackPolling {
+                    ProgressView().scaleEffect(0.6).tint(.purple)
+                } else {
+                    Button {
+                        Task { await refreshStackOverview() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2)
+                            .foregroundColor(.purple)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                stackMiniCard(
+                    icon: "applelogo",
+                    title: "Apple FM",
+                    state: appleFMStateText(),
+                    detail: appleFMDetailText(),
+                    ok: GigiFoundationAgent.isSupported
+                )
+                stackMiniCard(
+                    icon: "🦙",
+                    title: "Ollama (Path 3)",
+                    state: ollamaStateText(),
+                    detail: ollamaDetailText(),
+                    ok: stackOllama?.nextAction == "ready"
+                )
+                stackMiniCard(
+                    icon: "🤖",
+                    title: "Claude Code (Path 4)",
+                    state: stackClaudeReady ? "✓ Wired" : "○ Not wired",
+                    detail: stackClaudeReady ? "Subprocess + MCP ready" : "Probing harness…",
+                    ok: stackClaudeReady
+                )
+                stackMiniCard(
+                    icon: "doc.fill",
+                    title: "Active model",
+                    state: activeModelText(),
+                    detail: activeModelDetail(),
+                    ok: (stackOllama?.installedCompatibleModels.count ?? 0) > 0
+                )
+            }
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(12)
+    }
+
+    @ViewBuilder
+    private func stackMiniCard(icon: String, title: String, state: String, detail: String, ok: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                if icon.unicodeScalars.first?.properties.isEmojiPresentation == true {
+                    Text(icon).font(.system(size: 14))
+                } else {
+                    Image(systemName: icon).font(.system(size: 12)).foregroundColor(.white.opacity(0.7))
+                }
+                Text(title).font(.caption.weight(.semibold)).foregroundColor(.white.opacity(0.85))
+                Spacer()
+            }
+            Text(state)
+                .font(.subheadline.weight(.bold))
+                .foregroundColor(ok ? .green : .orange)
+            Text(detail)
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.55))
+                .lineLimit(2)
+                .truncationMode(.tail)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.03))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(ok ? Color.green.opacity(0.35) : Color.orange.opacity(0.30), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Stack overview helpers
+
+    @MainActor
+    private func refreshStackOverview() async {
+        stackPolling = true
+        defer { stackPolling = false }
+        async let ollama = GigiHarnessClient.shared.ollamaInstallStatus()
+        async let claude = GigiHarnessClient.shared.claudeCodeStatus()
+        let (o, c) = await (ollama, claude)
+        stackOllama = o
+        stackClaudeReady = c
+    }
+
+    private func appleFMStateText() -> String {
+        GigiFoundationAgent.isSupported ? "✓ Available" : "○ Unavailable"
+    }
+    private func appleFMDetailText() -> String {
+        GigiFoundationAgent.isSupported ? "Apple Intelligence ready" : "Needs iOS 18.1+ + iPhone 15 Pro+"
+    }
+
+    private func ollamaStateText() -> String {
+        guard let s = stackOllama else { return "— probing" }
+        if !s.cliInstalled { return "○ Not installed" }
+        if !s.daemonReachable { return "⚠ Daemon down" }
+        if s.installedCompatibleModels.isEmpty { return "⚠ No model" }
+        return "✓ Ready"
+    }
+    private func ollamaDetailText() -> String {
+        guard let s = stackOllama else { return "querying harness…" }
+        return "\(s.installedCompatibleModels.count)/\(s.installedModels.count) compatible · \(s.hostPlatform) · v\(s.version ?? "?")"
+    }
+
+    private func activeModelText() -> String {
+        guard let s = stackOllama, let first = s.installedCompatibleModels.first else { return "— none" }
+        return first
+    }
+    private func activeModelDetail() -> String {
+        guard let s = stackOllama else { return "querying…" }
+        let tier = UserDefaults.standard.string(forKey: "gigi.ollama.tier") ?? "default"
+        let tierModel = s.compatibleTiers[tier] ?? "?"
+        return "tier \(tier) → \(tierModel)"
     }
 
     private func badge(label: String, ok: Int, total: Int, color: Color) -> some View {
