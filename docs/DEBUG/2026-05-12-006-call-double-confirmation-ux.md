@@ -1,6 +1,6 @@
 # Bug 006 — `Call Leo Corte` shows double confirmation: GIGI bubble + iOS native dialog
 
-- **Status**: open
+- **Status**: ✅ fixed
 - **Severity**: P1 (clear UX friction on a core action)
 - **Discovered**: 2026-05-12 — re-test wave
 - **Area**: iOS · GigiActionBridge.makeCall (or equivalent) · UX
@@ -109,4 +109,29 @@ return "Which \(contact) — \(matches.joined(separator: " or "))?"
 
 ## Resolution
 
-_(empty)_
+- **Commit**: `cfc8b8e` (2026-05-12)
+- **IPA**: TBD — next build (cumulative with bugs 001-004)
+- **Files changed**: `02_GIGI_APP/GIGI/GigiActionBridge.swift:348` — return text simplified.
+
+### Change applied
+
+```swift
+// Before:
+return opened ? "Tap Call to confirm — iOS requires your approval before dialing \(contact)." : "Couldn't start the call."
+
+// After:
+return opened ? "Calling \(contact)." : "Couldn't start the call."
+```
+
+Now the chat shows a short, informative bubble; the iOS native alert is the
+sole confirmation. Matches Siri's UX pattern (Siri says "Calling X" and iOS
+shows its native confirm alert — no duplicate text).
+
+`facetimeCall` already had clean copy ("Starting FaceTime with X") and was
+left unchanged.
+
+### Test plan
+
+- "Call Leo Corte" → bubble: "Calling leo corte." → iOS native alert appears immediately → user taps Call → dial proceeds. Single confirmation.
+- "Call nonexistent contact" → bubble: "Couldn't find nonexistent contact in your contacts." → no iOS alert.
+- "Call" (no contact) → bubble: "Who do you want to call?" → no dispatch.

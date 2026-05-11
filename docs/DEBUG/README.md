@@ -22,7 +22,6 @@ proposed fix. Status tag in the header — update when fixed and add a
 | # | Severity | Title | File |
 |---|---|---|---|
 | 005 | P1 (TBC) | `Set a timer for two minutes` still failing — IPA installed check OR regression | [2026-05-12-005-timer-two-minutes-regression-or-not-installed.md](2026-05-12-005-timer-two-minutes-regression-or-not-installed.md) |
-| 006 | P1 | `Call X` shows double confirmation: GIGI bubble + iOS native dialog | [2026-05-12-006-call-double-confirmation-ux.md](2026-05-12-006-call-double-confirmation-ux.md) |
 
 ## ✅ Fixed bugs
 
@@ -32,6 +31,7 @@ proposed fix. Status tag in the header — update when fixed and add a
 | ✅ [002](2026-05-12-002-note-create-hybrid-response.md) | P1 | `create_note` hybrid response → GATE 6 requires research verb + auth-error short-circuit | `96ecfbd` | next |
 | ✅ [003](2026-05-12-003-ollama-via-claude-login-error.md) | **P0** | knowledge Q&A mis-routed → FM verb anchors + iOS downgrade + fail-soft to Ollama | `f1ef170` | next |
 | ✅ [004](2026-05-12-004-timer-spelled-numbers.md) | P1 | `timer for two minutes` → wordToNumber pre-pass (EN 0-99 + IT) | `d1c75e9` | next |
+| ✅ [006](2026-05-12-006-call-double-confirmation-ux.md) | P1 | `Call X` double confirm → bubble simplified to "Calling X." | `cfc8b8e` | next |
 
 ## Workflow
 
