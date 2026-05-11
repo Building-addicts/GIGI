@@ -15,7 +15,13 @@
 //   docs/knowledge/llm-open-source-research.md §7
 //   ADR-0010 (TBD) — Ollama as first-class Path 3
 
-import { logger } from '../logger.js';
+import { log } from '../logger.js';
+// Shim for the older `logger.info/warn` calls we kept from the stub days.
+const logger = {
+  info: (msg, meta) => log(`[ollama] ${msg}`, meta || ''),
+  warn: (msg, meta) => log(`[ollama][warn] ${msg}`, meta || ''),
+  error: (msg, meta) => log(`[ollama][err] ${msg}`, meta || ''),
+};
 
 const DEFAULT_BASE_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5min hard cap per request

@@ -90,10 +90,13 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/push/unregister' && m === 'POST') { await push.handleUnregister(req, res, deps); return true; }
   if (p === '/api/ios/push/test' && m === 'POST')       { await handlePushTest(req, res, deps); return true; }
 
-  // Phase 2 — Path 3 Ollama (GATE 4)
-  if (p === '/api/ios/local-llm/generate' && m === 'POST') { await localLLM.handleGenerate(req, res, deps); return true; }
-  if (p === '/api/ios/local-llm/status'   && m === 'GET')  { await localLLM.handleStatus(req, res, deps); return true; }
-  if (p === '/api/ios/local-llm/cancel'   && m === 'POST') { await localLLM.handleCancel(req, res, deps); return true; }
+  // Phase 2 — Path 3 Ollama (GATE 4) + Fix-Automatically (2026-05-12 batch 4)
+  if (p === '/api/ios/local-llm/generate'        && m === 'POST') { await localLLM.handleGenerate(req, res, deps); return true; }
+  if (p === '/api/ios/local-llm/status'          && m === 'GET')  { await localLLM.handleStatus(req, res, deps); return true; }
+  if (p === '/api/ios/local-llm/cancel'          && m === 'POST') { await localLLM.handleCancel(req, res, deps); return true; }
+  if (p === '/api/ios/local-llm/install-status'  && m === 'GET')  { await localLLM.handleInstallStatus(req, res, deps); return true; }
+  if (p === '/api/ios/local-llm/install-ollama'  && m === 'POST') { await localLLM.handleInstallOllama(req, res, deps); return true; }
+  if (p === '/api/ios/local-llm/pull-model'      && m === 'POST') { await localLLM.handlePullModel(req, res, deps); return true; }
 
   // Phase 2 — Path 4 Claude Code subprocess + MCP (GATE 5)
   if (p === '/api/ios/agent/claude'        && m === 'POST') { await claudeAgent.handleClaude(req, res, deps); return true; }

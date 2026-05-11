@@ -43,6 +43,14 @@ struct SettingsView: View {
     @State private var ollamaStatus: GigiHarnessClient.LocalLLMStatus? = nil
     @State private var ollamaTier: String = UserDefaults.standard.string(forKey: "gigi.ollama.tier") ?? "default"
     @State private var ollamaProbing: Bool = false
+
+    // 2026-05-12 batch 4 — Fix-Automatically (install ollama + pull model)
+    @State private var ollamaInstall: GigiHarnessClient.OllamaInstallStatus? = nil
+    @State private var ollamaFixing: Bool = false
+    @State private var ollamaFixLog: String = ""
+    @State private var ollamaFixProgress: Int = 0
+    @State private var showModelPicker: Bool = false
+    @State private var pickerSelectedTier: String = "default"
     #if DEBUG
     // D1 — Brain Path Override picker (DEBUG only). Lets you force a specific
     // routing path during testing instead of relying on automatic gate decisions.
@@ -721,12 +729,219 @@ struct SettingsView: View {
                 }
                 .font(.caption)
             }
+
+            // 2026-05-12 batch 4 — Fix Automatically
+            ollamaFixAutomaticallyRow
+
         } header: {
             Text("🦙 Ollama")
         } footer: {
             Text("Path 3 runs reasoning locally on the harness via Ollama (no cloud, no API). Pick a tier that fits your harness RAM. Recommended: \(ollamaStatus?.currentTier ?? "default").")
         }
         .task { await refreshOllamaStatus() }
+        .sheet(isPresented: $showModelPicker) {
+            ollamaModelPickerSheet
+        }
+    }
+
+    // MARK: - Ollama Fix Automatically (2026-05-12 batch 4)
+
+    @ViewBuilder
+    private var ollamaFixAutomaticallyRow: some View {
+        if let install = ollamaInstall {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: install.nextAction == "ready" ? "checkmark.seal.fill" : "wand.and.sparkles")
+                        .foregroundColor(install.nextAction == "ready" ? .green : .accentColor)
+                    Text(ollamaFixSubtitle(install))
+                        .font(.subheadline)
+                    Spacer()
+                }
+
+                if ollamaFixing {
+                    if ollamaFixProgress > 0 {
+                        ProgressView(value: Double(ollamaFixProgress), total: 100)
+                    }
+                    if !ollamaFixLog.isEmpty {
+                        ScrollView {
+                            Text(ollamaFixLog)
+                                .font(.caption2.monospaced())
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 100)
+                        .padding(8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(6)
+                    }
+                } else if install.nextAction != "ready" {
+                    Button {
+                        Task { await runOllamaFixAutomatically(start: install) }
+                    } label: {
+                        HStack {
+                            Image(systemName: "wand.and.sparkles")
+                            Text("Fix Automatically").fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.accentColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("Probing Ollama install state...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private func ollamaFixSubtitle(_ install: GigiHarnessClient.OllamaInstallStatus) -> String {
+        switch install.nextAction {
+        case "install-ollama":     return "Ollama not installed on harness host."
+        case "start-ollama-daemon": return "Ollama installed but daemon not running."
+        case "pull-model":         return "No compatible model installed. Pick a tier to pull."
+        case "ready":              return "Ollama ready · \(install.installedCompatibleModels.count) compatible model(s)."
+        default:                    return install.nextAction
+        }
+    }
+
+    @ViewBuilder
+    private var ollamaModelPickerSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("Which model tier do you want to pull? Larger models give better answers but need more RAM and disk.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                ForEach(["lite", "standard", "default", "pro"], id: \.self) { tier in
+                    let modelName = ollamaInstall?.compatibleTiers[tier] ?? "?"
+                    let alreadyInstalled = (ollamaInstall?.installedModels ?? []).contains(modelName)
+                    Button {
+                        showModelPicker = false
+                        Task { await runOllamaPull(model: modelName, tier: tier) }
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(tier.capitalized).fontWeight(.medium)
+                                    if alreadyInstalled {
+                                        Text("INSTALLED")
+                                            .font(.caption2.weight(.bold))
+                                            .padding(.horizontal, 6).padding(.vertical, 2)
+                                            .background(Color.green.opacity(0.2))
+                                            .foregroundColor(.green)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                                Text(modelName)
+                                    .font(.caption.monospaced())
+                                    .foregroundColor(.secondary)
+                                Text(ollamaTierHint(tier))
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if !alreadyInstalled {
+                                Image(systemName: "arrow.down.circle")
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(alreadyInstalled)
+                }
+            }
+            .navigationTitle("Pull Ollama Model")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showModelPicker = false }
+                }
+            }
+        }
+    }
+
+    private func ollamaTierHint(_ tier: String) -> String {
+        switch tier {
+        case "lite":     return "Min 4-8GB RAM · ~2.5GB disk · fastest"
+        case "standard": return "Min 8-16GB RAM · ~5GB disk · balanced"
+        case "default":  return "Min 16-32GB RAM · ~9GB disk · recommended"
+        case "pro":      return "Min 32GB+ RAM · ~16GB disk · max quality"
+        default:         return ""
+        }
+    }
+
+    @MainActor
+    private func runOllamaFixAutomatically(start install: GigiHarnessClient.OllamaInstallStatus) async {
+        ollamaFixing = true
+        ollamaFixLog = ""
+        ollamaFixProgress = 0
+        defer { ollamaFixing = false }
+
+        switch install.nextAction {
+        case "install-ollama":
+            ollamaFixLog = "Installing Ollama via platform package manager...\n"
+            for await ev in GigiHarnessClient.shared.installOllama() {
+                handleSetupEvent(ev)
+            }
+            // After install, re-probe + chain to pull-model if needed
+            await refreshOllamaStatus()
+            if let after = ollamaInstall, after.nextAction == "pull-model" {
+                showModelPicker = true
+            }
+        case "start-ollama-daemon":
+            ollamaFixLog = "Ollama is installed but daemon is not running. On the harness, run: ollama serve\n"
+        case "pull-model":
+            showModelPicker = true
+        case "ready":
+            ollamaFixLog = "Already ready."
+        default:
+            ollamaFixLog = "Unknown state: \(install.nextAction)\n"
+        }
+    }
+
+    @MainActor
+    private func runOllamaPull(model: String, tier: String) async {
+        ollamaFixing = true
+        ollamaFixLog = "Pulling \(model)...\n"
+        ollamaFixProgress = 0
+        defer { ollamaFixing = false }
+        for await ev in GigiHarnessClient.shared.pullOllamaModel(model) {
+            handleSetupEvent(ev)
+        }
+        // Save tier choice + re-probe
+        UserDefaults.standard.set(tier, forKey: "gigi.ollama.tier")
+        ollamaTier = tier
+        await refreshOllamaStatus()
+    }
+
+    @MainActor
+    private func handleSetupEvent(_ ev: GigiHarnessClient.OllamaSetupEvent) {
+        switch ev {
+        case .thought(let text):
+            ollamaFixLog += text + "\n"
+            if ollamaFixLog.count > 4000 {
+                ollamaFixLog = String(ollamaFixLog.suffix(4000))
+            }
+        case .progress(let pct, let status):
+            ollamaFixProgress = pct
+            ollamaFixLog += "  [\(pct)%] \(status)\n"
+            if ollamaFixLog.count > 4000 {
+                ollamaFixLog = String(ollamaFixLog.suffix(4000))
+            }
+        case .done(let status):
+            ollamaFixLog += "✓ Done · \(status)\n"
+            ollamaFixProgress = 100
+        case .error(let msg):
+            ollamaFixLog += "✗ Error · \(msg)\n"
+        }
     }
 
     private var ollamaStatusIcon: String {
@@ -738,7 +953,13 @@ struct SettingsView: View {
         return .secondary
     }
     private var ollamaStatusText: String {
-        guard let s = ollamaStatus else { return "Probing..." }
+        // Fix 2026-05-12: distinguish "probing" from "not paired" from "result"
+        guard GigiHarnessClient.shared.isConfigured else {
+            return "Harness not paired"
+        }
+        guard let s = ollamaStatus else {
+            return ollamaProbing ? "Probing..." : "No data — tap refresh"
+        }
         if !s.reachable { return "Unreachable. Start `ollama serve` on the harness." }
         let count = s.models?.count ?? 0
         return "Reachable · \(count) model\(count == 1 ? "" : "s") installed"
@@ -750,10 +971,15 @@ struct SettingsView: View {
         defer { ollamaProbing = false }
         guard GigiHarnessClient.shared.isConfigured else {
             ollamaStatus = nil
+            ollamaInstall = nil
             return
         }
-        let s = await GigiHarnessClient.shared.localLLMStatus()
-        ollamaStatus = s
+        // Parallel probe: lightweight status + granular install state
+        async let s = GigiHarnessClient.shared.localLLMStatus()
+        async let i = GigiHarnessClient.shared.ollamaInstallStatus()
+        let (status, install) = await (s, i)
+        ollamaStatus = status
+        ollamaInstall = install
     }
 
     // MARK: - About section

@@ -31,7 +31,11 @@
 // docs/taskplans_new_gigi/GATE-5-path-4-claude-code-subprocess.md §3 Task 5.3-5.6
 
 import { randomUUID } from 'node:crypto';
-import { log, logger } from '../logger.js';
+import { log } from '../logger.js';
+const logger = {
+  info: (msg, meta) => log(`[claude-agent] ${msg}`, meta || ''),
+  warn: (msg, meta) => log(`[claude-agent][warn] ${msg}`, meta || ''),
+};
 import { friendlyTool } from '../claude-runner.js';
 import { markCancelled } from '../queue.js';
 

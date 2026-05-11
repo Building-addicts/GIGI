@@ -308,6 +308,131 @@ extension GigiHarnessClient {
         _ = try? await URLSession.shared.data(for: req)
     }
 
+    // MARK: - Local LLM install / fix-automatically (2026-05-12 batch 4)
+
+    struct OllamaInstallStatus: Decodable {
+        let cliInstalled: Bool
+        let daemonReachable: Bool
+        let version: String?
+        let installedModels: [String]
+        let installedCompatibleModels: [String]
+        let compatibleTiers: [String: String]   // tier name → model
+        let nextAction: String                  // "install-ollama" | "start-ollama-daemon" | "pull-model" | "ready"
+        let hostPlatform: String
+    }
+
+    enum OllamaSetupEvent {
+        case thought(String)
+        case progress(pct: Int, status: String)
+        case done(status: String)
+        case error(String)
+    }
+
+    /// Granular install status: CLI present? daemon reachable? compatible models?
+    func ollamaInstallStatus() async -> OllamaInstallStatus? {
+        guard let cfg = Self.harnessConfigSnapshot() else { return nil }
+        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + "/api/ios/local-llm/install-status"
+        guard let url = URL(string: urlString) else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            if let http = response as? HTTPURLResponse, http.statusCode >= 400 { return nil }
+            struct Envelope: Decodable { let ok: Bool; let data: OllamaInstallStatus? }
+            return (try? JSONDecoder().decode(Envelope.self, from: data))?.data
+        } catch {
+            return nil
+        }
+    }
+
+    /// Install Ollama via platform-native package manager. Streams progress.
+    func installOllama() -> AsyncStream<OllamaSetupEvent> {
+        ollamaSetupStream(path: "/api/ios/local-llm/install-ollama", body: nil)
+    }
+
+    /// Pull a model via `ollama pull`. Streams progress (pct + status).
+    func pullOllamaModel(_ model: String) -> AsyncStream<OllamaSetupEvent> {
+        ollamaSetupStream(
+            path: "/api/ios/local-llm/pull-model",
+            body: ["model": model]
+        )
+    }
+
+    /// Internal SSE consumer for install/pull. Translates server events to
+    /// `OllamaSetupEvent` enum.
+    private func ollamaSetupStream(path: String, body: [String: Any]?) -> AsyncStream<OllamaSetupEvent> {
+        AsyncStream { continuation in
+            Task {
+                guard let cfg = Self.harnessConfigSnapshot() else {
+                    continuation.yield(.error("Harness not paired"))
+                    continuation.finish()
+                    return
+                }
+                let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + path
+                guard let url = URL(string: urlString) else {
+                    continuation.yield(.error("Invalid URL"))
+                    continuation.finish()
+                    return
+                }
+                var req = URLRequest(url: url)
+                req.httpMethod = "POST"
+                req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                if let body {
+                    req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                }
+                do {
+                    let (bytes, response) = try await URLSession.shared.bytes(for: req)
+                    if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                        continuation.yield(.error("HTTP \(http.statusCode)"))
+                        continuation.finish()
+                        return
+                    }
+                    var currentEvent = ""
+                    var currentData = ""
+                    for try await line in bytes.lines {
+                        if line.isEmpty {
+                            if !currentData.isEmpty {
+                                Self.dispatchOllamaEvent(event: currentEvent, data: currentData, continuation: continuation)
+                            }
+                            currentEvent = ""
+                            currentData = ""
+                        } else if line.hasPrefix("event:") {
+                            currentEvent = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                        } else if line.hasPrefix("data:") {
+                            currentData += String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.yield(.error(error.localizedDescription))
+                    continuation.finish()
+                }
+            }
+        }
+    }
+
+    private static func dispatchOllamaEvent(event: String, data: String, continuation: AsyncStream<OllamaSetupEvent>.Continuation) {
+        let parsed = data.data(using: .utf8).flatMap {
+            try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+        }
+        switch event {
+        case "thought":
+            continuation.yield(.thought((parsed?["text"] as? String) ?? data))
+        case "progress":
+            let pct = (parsed?["pct"] as? Int) ?? 0
+            let status = (parsed?["status"] as? String) ?? ""
+            continuation.yield(.progress(pct: pct, status: status))
+        case "done":
+            continuation.yield(.done(status: (parsed?["status"] as? String) ?? "done"))
+        case "error":
+            continuation.yield(.error((parsed?["message"] as? String) ?? data))
+        default:
+            break
+        }
+    }
+
     // MARK: - Local LLM status / hardware probe
 
     struct LocalLLMStatus: Decodable {
