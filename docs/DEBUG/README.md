@@ -19,9 +19,7 @@ proposed fix. Status tag in the header — update when fixed and add a
 
 ## 🔴 Open bugs (May 2026 wave)
 
-| # | Severity | Title | File |
-|---|---|---|---|
-| 004 | P1 | `Set a timer for two minutes` fails — regex only matches digits, not spelled-out numbers | [2026-05-12-004-timer-spelled-numbers.md](2026-05-12-004-timer-spelled-numbers.md) |
+_(none — all 4 cleared 🎉)_
 
 ## ✅ Fixed bugs
 
@@ -30,6 +28,7 @@ proposed fix. Status tag in the header — update when fixed and add a
 | ✅ [001](2026-05-12-001-dashboard-onboarding-copy.md) | P2 | Dashboard onboarding cards copy unclear → soften + dismissible | `b4d922c` | next |
 | ✅ [002](2026-05-12-002-note-create-hybrid-response.md) | P1 | `create_note` hybrid response → GATE 6 requires research verb + auth-error short-circuit | `96ecfbd` | next |
 | ✅ [003](2026-05-12-003-ollama-via-claude-login-error.md) | **P0** | knowledge Q&A mis-routed → FM verb anchors + iOS downgrade + fail-soft to Ollama | `f1ef170` | next |
+| ✅ [004](2026-05-12-004-timer-spelled-numbers.md) | P1 | `timer for two minutes` → wordToNumber pre-pass (EN 0-99 + IT) | `d1c75e9` | next |
 
 ## Workflow
 

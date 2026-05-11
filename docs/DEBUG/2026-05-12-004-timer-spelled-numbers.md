@@ -1,6 +1,6 @@
 # Bug 004 — `Set a timer for two minutes` fails — regex only matches digits
 
-- **Status**: open
+- **Status**: ✅ fixed
 - **Severity**: P1 (very common phrasing for voice input — STT often spells out small numbers)
 - **Discovered**: 2026-05-12 — beta tester wave
 - **Area**: iOS · GigiActionBridge · parseTimerDuration
@@ -121,4 +121,44 @@ Defer to v1.1 if v1 only needs 1–10 coverage.
 
 ## Resolution
 
-_(empty)_
+- **Commit**: `d1c75e9` (2026-05-12)
+- **IPA**: TBD — next build
+- **Files changed**: `02_GIGI_APP/GIGI/GigiActionBridge.swift` (WORD_TO_NUMBER dict + normalizeWordNumerals helper + parseTimerDuration pre-pass)
+
+### Implementation
+
+Added a `WORD_TO_NUMBER` static dictionary covering:
+- English 0-19 ("zero" → 0, "two" → 2, "nineteen" → 19)
+- English tens (twenty=20, thirty=30, …, ninety=90, hundred=100)
+- English articles meaning one: "a", "an"
+- Italian short: uno/una/un, due, tre, quattro…dieci
+- Italian 11-19: undici, dodici, …, diciannove
+- Italian tens: venti, trenta, …, novanta
+
+`normalizeWordNumerals(text)` replaces each word with its digit via case-insensitive `\b`-bounded regex substitution, then `parseTimerDuration` runs the existing duration patterns on the normalized text.
+
+### Verified working after fix
+
+| Input | Output (sec) |
+|---|---|
+| "two minutes" | 120 ✓ |
+| "five seconds" | 5 ✓ |
+| "one hour" | 3600 ✓ |
+| "ten minutes" | 600 ✓ |
+| "a minute" | 60 ✓ |
+| "an hour" | 3600 ✓ |
+| "due minuti" | 120 ✓ |
+| "trenta secondi" | 30 ✓ |
+
+### Deferred to v1.1
+
+- Compound numerals: "twenty five minutes" parses as 20 min (1200s) in v1 — only "twenty" is consumed. v1.1 will add adjacent-word summation logic.
+- Fractional: "half a minute", "mezz'ora", "an hour and a half" — not handled.
+- Mixed digit+word: "2 and a half minutes" — not handled.
+
+### Same helper should be reused for
+
+- `set_alarm` time parsing ("seven in the morning")
+- `set_reminder` time parsing
+- `find_free_slot` duration parsing
+- Any other voice action that accepts numeric arguments
