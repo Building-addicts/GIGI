@@ -134,9 +134,17 @@ class GigiNLUEngine {
         }
 
         // ── MESSAGE ──────────────────────────────────────────────────────────
+        // ORDER MATTERS: most specific triggers FIRST. Otherwise
+        // "send a message on whatsapp to Leo" matches "whatsapp " short
+        // trigger (rest="to Leo") and the contact gets a stray "to" prefix.
+        // 2026-05-12 fix: explicit on-whatsapp variants come first; bare
+        // "whatsapp " kept as last-resort fallback.
         let msgTriggers = [
-            "send a whatsapp to ", "whatsapp ", "send a message to ",
-            "text ", "message ", "send a text to ", "iMessage "
+            "send a message on whatsapp to ", "send a message on telegram to ",
+            "send a message on imessage to ", "send a message on sms to ",
+            "send a whatsapp to ", "send a text to ", "send a message to ",
+            "sent a message to ", "sent a whatsapp to ", "sent a text to ",
+            "text ", "message ", "iMessage ", "whatsapp "
         ]
         for trigger in msgTriggers {
             if let rest = extractAfter(trigger, from: text), !rest.isEmpty {
@@ -472,15 +480,37 @@ class GigiNLUEngine {
     }
 
     private func cleanContactName(_ raw: String) -> String {
-        var name = raw
+        var name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 2026-05-12 fix: strip leading prepositions left over by trigger
+        // matching. E.g. when the trigger "whatsapp " absorbs the prefix and
+        // leaves "to Leo Corte" as the rest, the contact resolution fails
+        // because Contacts have no "to Leo" entry. Italian aliases included.
+        let leadingPrepositions = ["to ", "a ", "al ", "all'", "alla ", "agli ", "alle "]
+        var changed = true
+        while changed {
+            changed = false
+            let lower = name.lowercased()
+            for prep in leadingPrepositions {
+                if lower.hasPrefix(prep) {
+                    name = String(name.dropFirst(prep.count))
+                        .trimmingCharacters(in: .whitespaces)
+                    changed = true
+                    break
+                }
+            }
+        }
+
+        // Strip trailing context that the trigger didn't already remove.
         let suffixes = [" please", " now", " immediately",
-                        " on the phone", " on whatsapp", " on telegram"]
+                        " on the phone", " on whatsapp", " on telegram",
+                        " on imessage", " on sms"]
         for s in suffixes {
             if let r = name.lowercased().range(of: s) {
                 name = String(name[..<r.lowerBound])
             }
         }
-        // Prendi solo le prime 2-3 parole (nome + cognome)
+        // Take only the first 2-3 words (name + surname)
         return name.components(separatedBy: " ")
             .prefix(3).joined(separator: " ")
             .trimmingCharacters(in: .whitespaces)

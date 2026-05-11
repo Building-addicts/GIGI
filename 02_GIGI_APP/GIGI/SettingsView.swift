@@ -748,7 +748,18 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var ollamaFixAutomaticallyRow: some View {
-        if let install = ollamaInstall {
+        if !GigiHarnessClient.shared.isConfigured {
+            // 2026-05-12 fix: was showing "Probing Ollama install state..."
+            // infinite when harness not paired (it's a chicken-egg — we can't
+            // probe Ollama without the harness). Now: clear actionable status.
+            HStack(spacing: 8) {
+                Image(systemName: "link.badge.plus")
+                    .foregroundColor(.orange)
+                Text("Harness not paired — pair it from Settings → Harness first to probe Ollama.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        } else if let install = ollamaInstall {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: install.nextAction == "ready" ? "checkmark.seal.fill" : "wand.and.sparkles")
