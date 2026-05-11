@@ -275,3 +275,4 @@
 - `2026-05-11T15:03:36+0200` · local · session ended on `armando-rework` (last commit: feat(ios): 5-PATH STACK OVERVIEW in SetupDiagnosticView (pair flow + diagnostics) _(modified: 03_HARNESS/server/package-lock.json,03_HARNESS/server/local-llm/config.json)_
 - `2026-05-11T15:05:16+0200` · local · session ended on `armando-rework` (last commit: fix(ios): localLLMStatus() now unwraps the {ok,data} envelope (was decoding raw)) _(modified: 03_HARNESS/server/package-lock.json,03_HARNESS/server/local-llm/config.json)_
 - `2026-05-11T15:12:21+0200` · local · session ended on `armando-rework` (last commit: fix(harness+ios): Ollama returns concise answers — switch to qwen3:14b + syste) _(modified: 03_HARNESS/server/package-lock.json)_
+- `2026-05-11T15:13:58+0200` · local · session ended on `armando-rework` (last commit: fix(ios): 5-PATH STACK mini cards uniform height + text truncation) _(modified: 03_HARNESS/server/package-lock.json)_
