@@ -279,3 +279,4 @@
 - `2026-05-11T15:34:01+0200` · local · session ended on `armando-rework` (last commit: fix(ios): Captured logs view auto-reloads + extracted into its own component) _(modified: 03_HARNESS/server/package-lock.json)_
 - `2026-05-11T15:36:52+0200` · local · session ended on `armando-rework` (last commit: fix(ios): preserve Captured logs + auto-reload Last router decision viewer) _(modified: 03_HARNESS/server/package-lock.json)_
 - `2026-05-11T15:46:39+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(ios): preserve C) _(modified: 03_HARNESS/server/package-lock.json)_
+- `2026-05-11T15:49:58+0200` · local · session ended on `armando-rework` (last commit: fix(ios): GATE 4.9 — Brain Path Override 'Ollama' calls real runLocalLLM (was ) _(modified: 03_HARNESS/server/package-lock.json)_
