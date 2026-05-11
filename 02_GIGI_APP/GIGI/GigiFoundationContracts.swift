@@ -132,7 +132,7 @@ struct FoundationRouterDecision {
     @Guide(description: "Single routing decision. native_tool = run an iOS action via Path 2 Tool calling. delegate_local = simple/medium reasoning via Path 3 Ollama on the harness. delegate_cloud = complex reasoning or browser/code via Path 4 Claude Code. ask_clarification = single short question to disambiguate. reject = politely decline (illegal, harmful, nonsensical). Pick exactly one of: native_tool, delegate_local, delegate_cloud, ask_clarification, reject.")
     var path: String
 
-    @Guide(description: "Canonical action name when path is native_tool, otherwise empty string. Allowed values: set_timer, set_alarm, set_reminder, send_message, make_call, facetime, navigate, play_music, open_app, weather, read_calendar, find_free_slot, read_email, homekit_on, homekit_off, create_note.")
+    @Guide(description: "Canonical action name when path is native_tool, otherwise empty string. Allowed values: set_timer, set_alarm, set_reminder, send_message, make_call, facetime, navigate, play_music, open_app, weather, read_calendar, find_free_slot, read_email, homekit_on, homekit_off, create_note, web_order_food.")
     var primaryAction: String
 
     @Guide(description: "Confidence in this decision, 0.0 to 1.0. Use 0.85+ when extraction is clean, 0.5-0.7 when slots are ambiguous, below 0.5 when you are guessing.")

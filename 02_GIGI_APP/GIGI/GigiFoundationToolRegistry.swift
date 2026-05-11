@@ -407,15 +407,41 @@ struct FMHomeKitOffTool: Tool {
     }
 }
 
+// MARK: - 17. WebOrderFoodTool (bug #011 — food delivery dispatch)
+
+@available(iOS 26.0, *)
+struct FMWebOrderFoodTool: Tool {
+    let name = "web_order_food"
+    let description = "Open a food delivery app or website. Use when the user wants to order food, takeout, kebab, sushi, pizza, or delivery. Prefer this over reject/clarification when the user mentions a delivery service or food."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Service name lowercase: justeat, deliveroo, ubereats, glovo, doordash, talabat. Empty string if the user did not specify a service — bridge will fall back to a web search.")
+        var service: String
+
+        @Guide(description: "Optional restaurant or cuisine query (e.g. 'tariq kebab', 'sushi near me', 'pizza margherita'). Empty if unspecified.")
+        var query: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "web_order_food", params: [
+            "service": arguments.service.lowercased(),
+            "query": arguments.query
+        ])
+    }
+}
+
 // MARK: - Registry
 
 @available(iOS 26.0, *)
 @MainActor
 enum GigiFoundationToolRegistry {
 
-    /// Static collection of all 16 tools (15 native + create_note for the
-    /// GATE 6 killer demo). Used by `GigiRequestRouter` to pick the relevant
-    /// tool (or pass them all to Apple FM when the router decision is ambiguous).
+    /// Static collection of all 17 tools (16 native + create_note for GATE 6
+    /// killer demo + web_order_food for delivery dispatch). Used by
+    /// `GigiRequestRouter` to pick the relevant tool (or pass them all to
+    /// Apple FM when the router decision is ambiguous).
     static var allTools: [any Tool] {
         [
             FMSetTimerTool(),
@@ -433,7 +459,8 @@ enum GigiFoundationToolRegistry {
             FMReadEmailTool(),
             FMHomeKitOnTool(),
             FMHomeKitOffTool(),
-            FMCreateNoteTool()
+            FMCreateNoteTool(),
+            FMWebOrderFoodTool()
         ]
     }
 
@@ -449,7 +476,8 @@ enum GigiFoundationToolRegistry {
         "navigate", "play_music", "open_app",
         "weather", "read_calendar", "find_free_slot", "read_email",
         "homekit_on", "homekit_off",
-        "create_note"
+        "create_note",
+        "web_order_food"
     ]
 }
 

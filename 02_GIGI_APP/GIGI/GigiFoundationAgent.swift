@@ -260,7 +260,8 @@ final class GigiFoundationAgent {
         a literal placeholder you MUST replace.
 
         Input shape: native action command → output shape:
-          path=native_tool, primaryAction=<one of set_timer/set_alarm/set_reminder/send_message/make_call/facetime/navigate/play_music/open_app/weather/read_calendar/find_free_slot/read_email/homekit_on/homekit_off>, complexity=5-15, capabilities=[], slots={{EXTRACTED_FROM_QUERY}}, confidence=0.9-1.0, reason="<3-6 words about the chosen action>".
+          path=native_tool, primaryAction=<one of set_timer/set_alarm/set_reminder/send_message/make_call/facetime/navigate/play_music/open_app/weather/read_calendar/find_free_slot/read_email/homekit_on/homekit_off/create_note/web_order_food>, complexity=5-15, capabilities=[], slots={{EXTRACTED_FROM_QUERY}}, confidence=0.9-1.0, reason="<3-6 words about the chosen action>".
+          Food delivery hint: "order X on JustEat/Deliveroo/Uber Eats/Glovo" or just "order food" / "I'm hungry" → web_order_food with slots.service (lowercase service name, empty if unspecified) + slots.query (optional cuisine/restaurant). Never route food-delivery intent to reject.
 
         Input shape: short factual answer or explanation that needs NO fresh
         web data / tools / code (verbs: "explain", "what is", "who was",

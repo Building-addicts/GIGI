@@ -175,6 +175,11 @@ class GigiActionBridge {
             let q = intent.params["query"] ?? intent.params["raw"] ?? ""
             return await searchWeb(query: q)
 
+        case "web_order_food":
+            let service = intent.params["service"] ?? ""
+            let query   = intent.params["query"] ?? intent.params["raw"] ?? ""
+            return await openFoodDeliveryApp(service: service, query: query)
+
         case "send_email":
             return await sendEmail(
                 to:      intent.params["contact"] ?? "",
@@ -913,6 +918,108 @@ class GigiActionBridge {
             await MainActor.run { UIApplication.shared.open(url) }
         }
         return "Opening Mail."
+    }
+
+    // MARK: - Food delivery dispatch (bug #011)
+    //
+    // Open the right food-delivery surface in this priority:
+    //   1. Native app via custom scheme (e.g. justeat://) — preferred,
+    //      no browser indirection.
+    //   2. Country-aware website (justeat.it for Italy, just-eat.co.uk for UK).
+    //   3. Generic Google search as last resort (when service is unknown).
+    //
+    // Country routing uses Locale.current.region.identifier — same source
+    // as the geo context header sent to Claude (bug #014). Adding more
+    // services later only needs new rows in the dictionaries.
+
+    private func openFoodDeliveryApp(service: String, query: String) async -> String {
+        let svcRaw = service.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let countryCode = Locale.current.region?.identifier.uppercased() ?? "US"
+
+        // Native app schemes — opens directly inside the app if installed.
+        let appScheme: [String: String] = [
+            "justeat":      "justeat://",
+            "just-eat":     "justeat://",
+            "deliveroo":    "deliveroo://",
+            "ubereats":     "ubereats://",
+            "uber-eats":    "ubereats://",
+            "uber eats":    "ubereats://",
+            "glovo":        "glovo://",
+            "doordash":     "doordash://",
+            "talabat":      "talabat://"
+        ]
+        // Country-aware web fallbacks. Key = "service|COUNTRY", or "service" generic.
+        let webURL: [String: String] = [
+            "justeat|IT":   "https://www.justeat.it",
+            "justeat|GB":   "https://www.just-eat.co.uk",
+            "justeat|IE":   "https://www.just-eat.ie",
+            "justeat|ES":   "https://www.just-eat.es",
+            "justeat":      "https://www.justeat.com",
+            "deliveroo|IT": "https://deliveroo.it",
+            "deliveroo|GB": "https://deliveroo.co.uk",
+            "deliveroo":    "https://deliveroo.com",
+            "ubereats":     "https://www.ubereats.com",
+            "glovo|IT":     "https://glovoapp.com/it",
+            "glovo":        "https://glovoapp.com",
+            "doordash":     "https://www.doordash.com",
+            "talabat":      "https://www.talabat.com"
+        ]
+        let displayName: [String: String] = [
+            "justeat":  "Just Eat",
+            "deliveroo": "Deliveroo",
+            "ubereats": "Uber Eats",
+            "glovo":    "Glovo",
+            "doordash": "DoorDash",
+            "talabat":  "Talabat"
+        ]
+        // Canonicalize service alias (just-eat, uber eats → standard form)
+        let svc: String
+        switch svcRaw {
+        case "just-eat", "just eat":  svc = "justeat"
+        case "uber-eats", "uber eats": svc = "ubereats"
+        default: svc = svcRaw
+        }
+        let pretty = displayName[svc] ?? (svc.isEmpty ? "food delivery" : svc.capitalized)
+
+        // (1) Try native app scheme first
+        if !svc.isEmpty, let scheme = appScheme[svc], let url = URL(string: scheme) {
+            let canOpen = await MainActor.run(resultType: Bool.self) { UIApplication.shared.canOpenURL(url) }
+            if canOpen {
+                await MainActor.run {
+                    GigiSmartOrchestrator.shared.showBanner("🍔 Opening \(pretty)…")
+                    UIApplication.shared.open(url)
+                }
+                return "Opening \(pretty)."
+            }
+        }
+
+        // (2) Country-aware website
+        if !svc.isEmpty {
+            let countryKey = "\(svc)|\(countryCode)"
+            let webString = webURL[countryKey] ?? webURL[svc]
+            if let urlStr = webString, let url = URL(string: urlStr) {
+                await MainActor.run {
+                    GigiSmartOrchestrator.shared.showBanner("🍔 Opening \(pretty)…")
+                    UIApplication.shared.open(url)
+                }
+                return "Opening \(pretty) in your browser."
+            }
+        }
+
+        // (3) Generic web search fallback
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "food delivery near me"
+            : query
+        var cs = CharacterSet.urlQueryAllowed; cs.remove(charactersIn: "+&=#")
+        let encoded = q.addingPercentEncoding(withAllowedCharacters: cs) ?? q
+        if let url = URL(string: "https://www.google.com/search?q=\(encoded)") {
+            await MainActor.run {
+                GigiSmartOrchestrator.shared.showBanner("🍔 Searching food delivery…")
+                UIApplication.shared.open(url)
+            }
+            return "Searching for \(q)."
+        }
+        return "I couldn't open a food delivery app."
     }
 
     // MARK: - Web Search

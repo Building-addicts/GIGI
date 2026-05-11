@@ -299,7 +299,14 @@ final class GigiRequestRouter {
         originalText: String,
         history: String
     ) async -> RouteResult {
-        let prompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+        // Bug #014 fix (2026-05-12): prepend a [User context: …] header to
+        // every delegate_cloud prompt so Claude knows the user's country,
+        // locale, and timezone. Without this, Claude defaults to UK/London
+        // for "JustEat", US for "Amazon", etc. — extremely visible failure.
+        // The harness operator manual (`.claude-sandbox/CLAUDE.md`) instructs
+        // Claude to parse this header and localize the response.
+        let rawPrompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+        let prompt = Self.prependUserContext(to: rawPrompt)
 
         guard harness.isConfigured else {
             return .error("Cloud AI needs a paired harness. Pair it from Settings to enable Claude Code.")
@@ -421,6 +428,20 @@ final class GigiRequestRouter {
     private struct FollowUpAction {
         let action: String     // canonical action name
         let title: String?     // optional pre-extracted title
+    }
+
+    /// Bug #014 helper: prepend a [User context: …] header to delegate_cloud
+    /// prompts. The .claude-sandbox/CLAUDE.md operator manual instructs Claude
+    /// to parse this header and localize responses (justeat.it vs just-eat.co.uk,
+    /// "near me" defaults to user's country, etc.). Pulls Locale.current —
+    /// no GPS, so works without location permission.
+    private static func prependUserContext(to prompt: String) -> String {
+        let locale = Locale.current
+        let country = locale.region?.identifier ?? "unknown"
+        let language = locale.language.languageCode?.identifier ?? "en"
+        let timezone = TimeZone.current.identifier
+        let header = "[User context: country=\(country), locale=\(language)_\(country), timezone=\(timezone)]\n"
+        return header + prompt
     }
 
     /// Bug #003 helper: detect web/code/image verbs in the user's text.
@@ -608,6 +629,12 @@ final class GigiRequestRouter {
         if !slots.appName.isEmpty     { params["app"]         = slots.appName }
         if !slots.query.isEmpty       { params["query"]       = slots.query }
         if !slots.platform.isEmpty    { params["platform"]    = slots.platform }
+        // Bug #011 fix: web_order_food bridge path reads `service` (not `app`)
+        // — map appName to BOTH app and service so the bridge handler finds it
+        // when Apple FM falls back to slot extraction (path B).
+        if action == "web_order_food" && !slots.appName.isEmpty {
+            params["service"] = slots.appName.lowercased()
+        }
         if params["raw"] == nil       { params["raw"]         = originalText }
         return params
     }
