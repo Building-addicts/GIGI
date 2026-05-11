@@ -454,6 +454,10 @@ class GigiActionBridge {
             trigger: trigger
         )
         try? await UNUserNotificationCenter.current().add(request)
+        // Visual feedback in-app — parity with call/message/HomeKit handlers.
+        await MainActor.run {
+            GigiSmartOrchestrator.shared.showBanner("⏱️ Timer · \(timerLabel(seconds: seconds))")
+        }
         return "Timer set for \(timerLabel(seconds: seconds))."
     }
 
@@ -515,7 +519,11 @@ class GigiActionBridge {
         try? await UNUserNotificationCenter.current().add(request)
 
         let f = DateFormatter(); f.locale = Locale(identifier: "en-US"); f.dateFormat = "h:mm a"
-        return "Alarm set for \(f.string(from: fireDate))."
+        let label = f.string(from: fireDate)
+        await MainActor.run {
+            GigiSmartOrchestrator.shared.showBanner("⏰ Alarm · \(label)")
+        }
+        return "Alarm set for \(label)."
     }
 
     /// Repeating local notification every day at `hour`:`minute` (replaces any previous GIGI daily routine alarm).
@@ -592,6 +600,9 @@ class GigiActionBridge {
         let slug    = loc.isEmpty ? "auto" : (loc.addingPercentEncoding(withAllowedCharacters: cs) ?? loc)
         guard let url = URL(string: "https://wttr.in/\(slug)?format=j1") else {
             return "Couldn't build the weather request."
+        }
+        await MainActor.run {
+            GigiSmartOrchestrator.shared.showBanner("☁️ Weather · \(loc.isEmpty ? "current location" : loc)")
         }
 
         do {
@@ -862,6 +873,9 @@ class GigiActionBridge {
         reminder.calendar = eventStore.defaultCalendarForNewReminders()
         do {
             try eventStore.save(reminder, commit: true)
+            await MainActor.run {
+                GigiSmartOrchestrator.shared.showBanner("📋 Reminder · \(text.prefix(50))")
+            }
             return "Reminder set: \(text)"
         } catch {
             return "Couldn't save the reminder."
