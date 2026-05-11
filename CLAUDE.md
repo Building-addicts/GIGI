@@ -36,6 +36,7 @@ Assistente vocale "True Agent" su iPhone (Swift/SwiftUI) che delega task a un ha
 | **Live feed lavoro real-time** | issue [#19](https://github.com/Building-addicts/GIGI/issues/19) |
 | **Kickoff message Leo+Fede** | `docs/KICKOFF_LEO_FEDE.md` (per Armando, da copiare in chat) |
 | **Template issue (header 🎯/🔧/✨)** | `.github/ISSUE_TEMPLATE/{feature,sub-issue,parent-epic,bug}.md` |
+| **Task plan Phase 2-4 (8 GATE)** | `docs/taskplans_new_gigi/INDEX.md` |
 
 ## Layout monorepo
 
@@ -57,6 +58,35 @@ docs/           TUTTI i doc project-level
 
 Run rapido harness: `./start-harness.sh` → dettagli in `03_HARNESS/README.md`.
 
+## Task plan post-cleanup (2026-05-11)
+
+Dopo i 2 commit di cleanup pre-Phase 2 (`2f504a9` + `bdc393a`, 46 file, ~1262 righe `_legacy` disconnesse, stub Phase 2 creati), il lavoro implementativo Phase 2-4 è organizzato in **8 task plan modulari** in `docs/taskplans_new_gigi/`. Uno per ogni GATE, ognuno autonomo end-to-end.
+
+**Workflow per ogni GATE**:
+1. Aprire `docs/taskplans_new_gigi/INDEX.md` per scegliere il prossimo GATE
+2. Aprire il MD del GATE selezionato (es. `GATE-2-router-applefm-upfront.md`)
+3. Seguire le 10 sezioni: Obiettivo → Pre-condizioni → Task → AC → E2E → **Test post-creazione (verificabile mesi dopo)** → Rollback → Files → ADR → Note operative
+4. Marcare GATE COMPLETED in INDEX al termine, passare al successivo
+
+**Gli 8 GATE in brief**:
+- **GATE 0** Build verify post-cleanup armando-rework (~45 min)
+- **GATE 1** Spike A — Apple FM iOS 26.4 regression test (1 g)
+- **GATE 2** Router Apple FM upfront (3-5 g)
+- **GATE 3** Path 2 — Apple FM Tool calling (15 tool) (4-6 g)
+- **GATE 4** Path 3 — Ollama harness offline reasoning (4-5 g)
+- **GATE 5** Path 4 — Claude Code subprocess + MCP harness-browser (5-7 g)
+- **GATE 6** Killer demo "Tesla → nota" end-to-end (2-3 g)
+- **GATE 7** Modes UI + setup wizard OSS-friendly (3-4 g)
+- **GATE 8** Hardening + OSS release v0.1.0 (5-7 g)
+
+**Totale stimato**: 27-40 giorni lavorativi (6-8 settimane full-time).
+
+**Pre-requisiti aperti** (PM decision):
+- **Q2** — Lista finale 15 tool Apple FM (sblocca GATE 3). Proposta: `set_timer, set_alarm, set_reminder, send_message, make_call, facetime, navigate, play_music, open_app, weather, read_calendar, find_free_slot, read_email, homekit_on, homekit_off`
+- **Q11** — Pin iOS deployment target 26.3 vs 26.4 con feature flag (sblocca GATE 2, decidere DOPO GATE 1 Spike A)
+
+Ogni task plan è **self-contained**: contiene pre-condizioni, task implementativi granulari, AC binari, test E2E pronunciabili sull'iPhone, test post-creazione (filesystem grep + xcodebuild + runtime inspection ripetibili mesi dopo), rollback plan, file table modificati/creati, ADR collegati, Conventional Commits suggeriti.
+
 ## Memoria progetto — checklist agente
 
 **Session start:**
@@ -64,6 +94,7 @@ Run rapido harness: `./start-harness.sh` → dettagli in `03_HARNESS/README.md`.
 2. `docs/TASK_PLAN.md` per piano dettagliato
 3. CLAUDE.md della sub-cartella se applicabile (es. `03_HARNESS/CLAUDE.md`)
 4. `ACTIVITY_LOG.md` **NON serve leggerlo** — è alimentato automaticamente dall'hook e serve solo a te per ispezione manuale
+5. Per task implementativi Phase 2-4: leggi prima `docs/taskplans_new_gigi/INDEX.md` e poi il MD del GATE corrente (es. `GATE-2-router-applefm-upfront.md`)
 
 **Session end:**
 1. Decisione architetturale presa → nuovo file `docs/adr/NNNN-titolo.md` (formato in `docs/adr/0000-template.md`)
