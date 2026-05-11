@@ -45,7 +45,7 @@ final class GigiLiveActivityController: ObservableObject {
             DispatchQueue.main.async { [weak self] in self?.areActivitiesEnabled = on }
         }
         if !on {
-            print("GIGI LiveActivity: disabled — check Settings → Face ID & Passcode → Live Activities")
+            GigiDebugLogger.log("GIGI LiveActivity: disabled — check Settings → Face ID & Passcode → Live Activities")
             DispatchQueue.main.async { [weak self] in
                 self?.lastActivityError = "Live Activities are off — enable in Settings → Face ID & Passcode."
             }
@@ -91,9 +91,9 @@ final class GigiLiveActivityController: ObservableObject {
     /// an already-compact pill.
     @MainActor
     func descendForListening(transcript: String? = nil) async {
-        print("GIGI LiveActivity: descendForListening ENTER — monitoring=\(monitoringActivity != nil) presence=\(presenceActivity != nil) lastPhase=\(lastPhase)")
+        GigiDebugLogger.log("GIGI LiveActivity: descendForListening ENTER — monitoring=\(monitoringActivity != nil) presence=\(presenceActivity != nil) lastPhase=\(lastPhase)")
         guard enabled else {
-            print("GIGI LiveActivity: descendForListening FAILED — activities disabled")
+            GigiDebugLogger.log("GIGI LiveActivity: descendForListening FAILED — activities disabled")
             return
         }
 
@@ -133,10 +133,10 @@ final class GigiLiveActivityController: ObservableObject {
             lastPhase = .listening
             lastActivityError = nil
             await turn.update(content, alertConfiguration: alert)
-            print("GIGI LiveActivity: turn Activity.request SUCCESS id=\(turn.id) pulse=\(pulseId)")
+            GigiDebugLogger.log("GIGI LiveActivity: turn Activity.request SUCCESS id=\(turn.id) pulse=\(pulseId)")
         } catch {
             lastActivityError = "Failed to start listening Live Activity: \(error.localizedDescription)"
-            print("GIGI LiveActivity: turn Activity.request FAILED — \(error)")
+            GigiDebugLogger.log("GIGI LiveActivity: turn Activity.request FAILED — \(error)")
             await restorePresenceIfNeeded()
         }
     }
@@ -156,7 +156,7 @@ final class GigiLiveActivityController: ObservableObject {
 
         if let presence = presenceActivity {
             if presence.activityState == .stale {
-                print("GIGI LiveActivity: presence activity is stale — recreating")
+                GigiDebugLogger.log("GIGI LiveActivity: presence activity is stale — recreating")
                 await endPresenceActivity()
                 await startPresenceActivity(sessionId: presence.attributes.sessionID)
                 return presenceActivity
@@ -164,7 +164,7 @@ final class GigiLiveActivityController: ObservableObject {
             if presence.activityState == .active || presence.activityState == .pending {
                 return presence
             }
-            print("GIGI LiveActivity: presence activity not active (\(presence.activityState)) — clearing")
+            GigiDebugLogger.log("GIGI LiveActivity: presence activity not active (\(presence.activityState)) — clearing")
             presenceActivity = nil
         }
 
@@ -173,13 +173,13 @@ final class GigiLiveActivityController: ObservableObject {
             case .active, .pending:
                 return mon
             case .stale:
-                print("GIGI LiveActivity: monitoring activity stale — recreating")
+                GigiDebugLogger.log("GIGI LiveActivity: monitoring activity stale — recreating")
                 await endMonitoringActivity(mon)
             case .ended, .dismissed:
-                print("GIGI LiveActivity: monitoring activity \(mon.activityState) — recreating")
+                GigiDebugLogger.log("GIGI LiveActivity: monitoring activity \(mon.activityState) — recreating")
                 monitoringActivity = nil
             @unknown default:
-                print("GIGI LiveActivity: monitoring activity unknown state — recreating")
+                GigiDebugLogger.log("GIGI LiveActivity: monitoring activity unknown state — recreating")
                 await endMonitoringActivity(mon)
             }
         }
@@ -189,7 +189,7 @@ final class GigiLiveActivityController: ObservableObject {
         }) {
             monitoringActivity = recovered
             isMonitoringModeActive = true
-            print("GIGI LiveActivity: recovered existing activity id=\(recovered.id)")
+            GigiDebugLogger.log("GIGI LiveActivity: recovered existing activity id=\(recovered.id)")
             return recovered
         }
 
@@ -222,10 +222,10 @@ final class GigiLiveActivityController: ObservableObject {
             isMonitoringModeActive = true
             lastPhase = phase
             lastActivityError = nil
-            print("GIGI LiveActivity: monitoring Activity.request SUCCESS id=\(act.id) phase=\(phase)")
+            GigiDebugLogger.log("GIGI LiveActivity: monitoring Activity.request SUCCESS id=\(act.id) phase=\(phase)")
             return act
         } catch {
-            print("GIGI LiveActivity: monitoring Activity.request FAILED — \(error)")
+            GigiDebugLogger.log("GIGI LiveActivity: monitoring Activity.request FAILED — \(error)")
             isMonitoringModeActive = false
             lastActivityError = "Failed to start Live Activity: \(error.localizedDescription)"
             return nil
@@ -302,7 +302,7 @@ final class GigiLiveActivityController: ObservableObject {
             lastPhase = .listening
             lastActivityError = nil
         } catch {
-            print("GIGI Live Activity: request failed — \(error)")
+            GigiDebugLogger.log("GIGI Live Activity: request failed — \(error)")
             lastActivityError = "Failed to start Live Activity: \(error.localizedDescription)"
         }
     }
@@ -358,7 +358,7 @@ final class GigiLiveActivityController: ObservableObject {
     /// Pill in `.speaking` while TTS plays. Banner = full response (truncated upstream).
     @MainActor
     func transitionToSpeaking(message: String) async {
-        print("GIGI LiveActivity: transitionToSpeaking ENTER lastPhase=\(lastPhase) activity=\(activity != nil) monitoring=\(monitoringActivity != nil)")
+        GigiDebugLogger.log("GIGI LiveActivity: transitionToSpeaking ENTER lastPhase=\(lastPhase) activity=\(activity != nil) monitoring=\(monitoringActivity != nil)")
         lastPhase = .speaking
         let displayMessage = normalizedMessage(message, for: .speaking)
         let content = ActivityContent(
@@ -367,20 +367,20 @@ final class GigiLiveActivityController: ObservableObject {
         )
         if let activity {
             await activity.update(content)
-            print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=\(activity.id)")
+            GigiDebugLogger.log("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=\(activity.id)")
             return
         }
         if monitoringActivity != nil || isMonitoringModeActive {
             await updateMonitoringPill(state: .speaking, message: displayMessage, staleAfter: 60)
-            print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=monitoring")
+            GigiDebugLogger.log("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=monitoring")
             return
         }
         guard enabled, let activity else {
-            print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=nil")
+            GigiDebugLogger.log("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=nil")
             return
         }
         await activity.update(content)
-        print("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=\(activity.id)")
+        GigiDebugLogger.log("GIGI LiveActivity: transitionToSpeaking EXIT phase=\(lastPhase) activityId=\(activity.id)")
     }
 
     @MainActor
@@ -468,19 +468,19 @@ final class GigiLiveActivityController: ObservableObject {
     /// Start persistent pill. Idempotent — no-op if already active or if presenceActivity owns the island.
     @MainActor
     func startPersistentPill() async {
-        print("GIGI LiveActivity: startPersistentPill ENTER")
+        GigiDebugLogger.log("GIGI LiveActivity: startPersistentPill ENTER")
         let info = ActivityAuthorizationInfo()
-        print("GIGI LiveActivity: areActivitiesEnabled=\(info.areActivitiesEnabled) frequentPushesEnabled=\(info.frequentPushesEnabled)")
+        GigiDebugLogger.log("GIGI LiveActivity: areActivitiesEnabled=\(info.areActivitiesEnabled) frequentPushesEnabled=\(info.frequentPushesEnabled)")
         guard enabled else {
-            print("GIGI LiveActivity: startPersistentPill ABORT — activities disabled at OS level")
+            GigiDebugLogger.log("GIGI LiveActivity: startPersistentPill ABORT — activities disabled at OS level")
             return
         }
         guard !GigiSmartOrchestrator.shared.isPresenceActive else {
-            print("GIGI LiveActivity: startPersistentPill SKIP — Presence owns island")
+            GigiDebugLogger.log("GIGI LiveActivity: startPersistentPill SKIP — Presence owns island")
             return
         }
         guard presenceActivity == nil else {
-            print("GIGI LiveActivity: startPersistentPill SKIP — presenceActivity already owns island")
+            GigiDebugLogger.log("GIGI LiveActivity: startPersistentPill SKIP — presenceActivity already owns island")
             return
         }
         _ = await ensureIslandActivity(
@@ -530,7 +530,7 @@ final class GigiLiveActivityController: ObservableObject {
             presenceActivity = try Activity.request(attributes: attrs, content: content, pushType: nil)
             lastPhase = .sleeping
             lastActivityError = nil
-            print("GIGI LiveActivity: presence Activity.request SUCCESS id=\(presenceActivity?.id ?? "nil")")
+            GigiDebugLogger.log("GIGI LiveActivity: presence Activity.request SUCCESS id=\(presenceActivity?.id ?? "nil")")
             // GIGI issue #88: start periodic staleDate refresh so the pill persists
             // across long-idle days. 30-min cadence is well below iOS' typical
             // stale-dismissal window once `staleDate` has elapsed.
@@ -543,7 +543,7 @@ final class GigiLiveActivityController: ObservableObject {
                 }
             }
         } catch {
-            print("GIGI Live Activity: presence start failed — \(error)")
+            GigiDebugLogger.log("GIGI Live Activity: presence start failed — \(error)")
             lastActivityError = "Failed to start Presence Live Activity: \(error.localizedDescription)"
         }
     }
@@ -562,7 +562,7 @@ final class GigiLiveActivityController: ObservableObject {
         )
         let content = ActivityContent(state: cs, staleDate: Date().addingTimeInterval(3600))
         await act.update(content)
-        print("GIGI LiveActivity: presence staleDate refreshed id=\(act.id)")
+        GigiDebugLogger.log("GIGI LiveActivity: presence staleDate refreshed id=\(act.id)")
     }
 
     @MainActor
@@ -595,7 +595,7 @@ final class GigiLiveActivityController: ObservableObject {
                 sound: .default
             )
             await act.update(content, alertConfiguration: alert)
-            print("GIGI LiveActivity: presence attention update sent id=\(act.id) pulse=\(pulseId ?? "nil")")
+            GigiDebugLogger.log("GIGI LiveActivity: presence attention update sent id=\(act.id) pulse=\(pulseId ?? "nil")")
         } else {
             await act.update(content)
         }

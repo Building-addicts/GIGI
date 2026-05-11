@@ -93,7 +93,7 @@ final class GigiWebAgent: NSObject {
         window.addSubview(webView)
         window.sendSubviewToBack(webView)   // always behind app UI
         isAttached = true
-        print("GIGI WebAgent: attached to window ✓")
+        GigiDebugLogger.log("GIGI WebAgent: attached to window ✓")
     }
 
     /// Make the webview visible and on-screen for user interaction (QR scanning).
@@ -319,7 +319,7 @@ extension GigiWebAgent {
         let alreadyOnWA = currentHost() == "web.whatsapp.com"
         if !alreadyOnWA {
             do {
-                print("GIGI WebAgent: navigating to WhatsApp Web...")
+                GigiDebugLogger.log("GIGI WebAgent: navigating to WhatsApp Web...")
                 try await navigate(to: Self.waURL, timeout: 25)
             } catch {
                 return .failed("Can't reach WhatsApp Web. Check internet.")
@@ -336,7 +336,7 @@ extension GigiWebAgent {
 
         switch state {
         case .qrRequired:
-            print("GIGI WebAgent: QR scan needed")
+            GigiDebugLogger.log("GIGI WebAgent: QR scan needed")
             GigiSpeechService.shared.speak(
                 "Per inviare messaggi su WhatsApp Web, scansiona il QR code in Impostazioni → WhatsApp."
             )
@@ -374,11 +374,11 @@ extension GigiWebAgent {
             try await Task.sleep(nanoseconds: 500_000_000)
 
             let sent = try await clickSendOrEnter()
-            print("GIGI WebAgent: WhatsApp → \(contact): '\(message.prefix(30))' \(sent ? "✓" : "⚠ Enter fallback")")
+            GigiDebugLogger.log("GIGI WebAgent: WhatsApp → \(contact): '\(message.prefix(30))' \(sent ? "✓" : "⚠ Enter fallback")")
             return .success
 
         } catch {
-            print("GIGI WebAgent: automation error — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI WebAgent: automation error — \(error.localizedDescription)")
             return .failed(error.localizedDescription)
         }
     }
@@ -401,10 +401,10 @@ extension GigiWebAgent {
             let sent = try await clickSendOrEnter()
             try await Task.sleep(nanoseconds: 800_000_000)
 
-            print("GIGI WebAgent: WhatsApp → \(contact): '\(message.prefix(30))' ✓ (direct URL)")
+            GigiDebugLogger.log("GIGI WebAgent: WhatsApp → \(contact): '\(message.prefix(30))' ✓ (direct URL)")
             return sent ? .success : .failed("Send button not found on direct URL page.")
         } catch {
-            print("GIGI WebAgent: direct URL send failed — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI WebAgent: direct URL send failed — \(error.localizedDescription)")
             return .failed(error.localizedDescription)
         }
     }
@@ -493,7 +493,7 @@ extension GigiWebAgent {
             """)) as? Bool == true
 
             if !clicked {
-                print("GIGI WebAgent: TheFork — no clickable restaurant found for '\(trimmed)'")
+                GigiDebugLogger.log("GIGI WebAgent: TheFork — no clickable restaurant found for '\(trimmed)'")
                 return false
             }
 
@@ -551,14 +551,14 @@ extension GigiWebAgent {
             """)) as? Bool == true
 
             if confirmed {
-                print("GIGI WebAgent: TheFork — booking submitted (best-effort) for '\(trimmed)' @\(time) (\(guests) guests)")
+                GigiDebugLogger.log("GIGI WebAgent: TheFork — booking submitted (best-effort) for '\(trimmed)' @\(time) (\(guests) guests)")
                 return true
             }
 
-            print("GIGI WebAgent: TheFork — could not auto-confirm booking.")
+            GigiDebugLogger.log("GIGI WebAgent: TheFork — could not auto-confirm booking.")
             return false
         } catch {
-            print("GIGI WebAgent: TheFork error — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI WebAgent: TheFork error — \(error.localizedDescription)")
             return false
         }
     }

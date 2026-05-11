@@ -68,7 +68,7 @@ final class GigiAgentEngine {
 
     /// Entry point: processes one user utterance end-to-end.
     func process(text: String) async -> AgentResult {
-        print("GIGI agentEngine.process ENTRY: text='\(text.prefix(60))'")
+        GigiDebugLogger.log("GIGI agentEngine.process ENTRY: text='\(text.prefix(60))'")
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
 

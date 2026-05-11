@@ -46,13 +46,13 @@ final class GigiFoundationSession {
         guard !permanentlyDisabled else { return }
         let model = SystemLanguageModel.default
         guard model.availability == .available else {
-            print("GIGI Foundation: optional Apple Intelligence unavailable — using harness fallback.")
+            GigiDebugLogger.log("GIGI Foundation: optional Apple Intelligence unavailable — using harness fallback.")
             isAvailable = false
             return
         }
         session = LanguageModelSession(instructions: GigiFoundationAgent.systemPrompt)
         isAvailable = true
-        print("GIGI Foundation: Apple Intelligence ready ✓")
+        GigiDebugLogger.log("GIGI Foundation: Apple Intelligence ready ✓")
     }
 
     // MARK: - Capability check (GATE 3 — Task 3.5)
@@ -108,19 +108,19 @@ final class GigiFoundationSession {
                 followUp: out.followUp
             )
             let normalized = GigiFoundationAgent.normalizedResponse(merged)
-            print("GIGI Foundation: '\(text)' → \(normalized.action) | speech: \(normalized.speech.prefix(60))")
+            GigiDebugLogger.log("GIGI Foundation: '\(text)' → \(normalized.action) | speech: \(normalized.speech.prefix(60))")
 
             return normalized
 
         } catch {
             let desc = error.localizedDescription + "\(error)"
-            print("GIGI Foundation error: \(error)")
+            GigiDebugLogger.log("GIGI Foundation error: \(error)")
             // Model catalog missing — Apple Intelligence not fully downloaded yet
             if desc.contains("modelcatalog") || desc.contains("5000") || desc.contains("SensitiveContentAnalysis") {
                 permanentlyDisabled = true
                 isAvailable = false
                 self.session = nil
-                print("GIGI Foundation: model assets not downloaded. Go to Settings → Apple Intelligence & Siri → enable and wait for download.")
+                GigiDebugLogger.log("GIGI Foundation: model assets not downloaded. Go to Settings → Apple Intelligence & Siri → enable and wait for download.")
             }
             return nil
         }
@@ -181,14 +181,14 @@ final class GigiFoundationSession {
             let result = try await s.respond(to: prompt, generating: FoundationRouterDecision.self)
             let decision = result.content
             let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
-            print("GIGI Router: path=\(decision.path) action=\(decision.primaryAction) " +
+            GigiDebugLogger.log("GIGI Router: path=\(decision.path) action=\(decision.primaryAction) " +
                   "complexity=\(decision.complexityEstimate) confidence=\(String(format: "%.2f", decision.confidence)) " +
                   "caps=\(decision.requiredCapabilities) latencyMs=\(elapsedMs)")
             // Cache for the debug overlay (Show last router decision toggle)
             UserDefaults.standard.set(Self.decisionToJSON(decision), forKey: "gigi.debug.lastRouterDecision")
             return decision
         } catch {
-            print("GIGI Router error: \(error)")
+            GigiDebugLogger.log("GIGI Router error: \(error)")
             let desc = "\(error)"
             if desc.contains("modelcatalog") || desc.contains("SensitiveContentAnalysis") {
                 permanentlyDisabled = true
@@ -276,7 +276,7 @@ final class GigiFoundationSession {
         // leave callers to inspect `toolInvoked` populated from os_log
         // (the Tool struct's `call(arguments:)` is the source of truth).
         let text = result.content
-        print("GIGI Tools: latencyMs=\(elapsedMs) responseLen=\(text.count)")
+        GigiDebugLogger.log("GIGI Tools: latencyMs=\(elapsedMs) responseLen=\(text.count)")
 
         return ToolCallResult(
             toolInvoked: nil,
@@ -291,7 +291,7 @@ final class GigiFoundationSession {
     func resetContext() {
         setupSession()
         routerSession = nil
-        print("GIGI Foundation: session reset.")
+        GigiDebugLogger.log("GIGI Foundation: session reset.")
     }
 }
 
@@ -307,7 +307,7 @@ final class GigiFoundationSession {
     static var isAppleFMAvailable: Bool { false }
 
     private init() {
-        print("GIGI Foundation: FoundationModels not available in this SDK.")
+        GigiDebugLogger.log("GIGI Foundation: FoundationModels not available in this SDK.")
     }
     func respond(text: String, history: String) async -> GigiAgentResponse? { nil }
     func resetContext() {}

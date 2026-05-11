@@ -35,7 +35,7 @@ final class GigiActionDispatcher {
 
     func execute(_ response: GigiAgentResponse) async {
         let intent = response.toIntent()
-        print("GIGI exec: \(intent.label) | \(intent.params.filter { $0.key != "raw" })")
+        GigiDebugLogger.log("GIGI exec: \(intent.label) | \(intent.params.filter { $0.key != "raw" })")
 
         switch intent.label {
         case "remember":

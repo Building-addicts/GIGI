@@ -81,7 +81,7 @@ final class GigiRequestRouter {
                 do {
                     decision = try await GigiFoundationSession.shared.routeRequest(text: text, history: history)
                 } catch {
-                    print("GIGI Router: Apple FM failed (\(error.localizedDescription)) — falling back to keyword router.")
+                    GigiDebugLogger.log("GIGI Router: Apple FM failed (\(error.localizedDescription)) — falling back to keyword router.")
                     decision = fallback.classifyRequest(text: text)
                 }
             } else {
@@ -180,11 +180,11 @@ final class GigiRequestRouter {
                     let final = speech.isEmpty
                         ? GigiFoundationAgent.localSpeech(for: GigiIntent(label: action, confidence: 1.0, params: [:]))
                         : speech
-                    print("GIGI Router → native_tool[FM]: action=\(action) latencyMs=\(result.latencyMs)")
+                    GigiDebugLogger.log("GIGI Router → native_tool[FM]: action=\(action) latencyMs=\(result.latencyMs)")
                     GigiConversationMemory.shared.addModelSpeech(final)
                     return .actionInvoked(speech: final, tool: action)
                 } catch {
-                    print("GIGI Router: respondWithTools failed (\(error.localizedDescription)) — falling back to slot bridge.")
+                    GigiDebugLogger.log("GIGI Router: respondWithTools failed (\(error.localizedDescription)) — falling back to slot bridge.")
                     // Fall through to (B).
                 }
             }
@@ -195,7 +195,7 @@ final class GigiRequestRouter {
         let params = paramsFromSlots(decision.slots, action: action, originalText: originalText)
         let intent = GigiIntent(label: action, confidence: max(0.9, decision.confidence), params: params)
 
-        print("GIGI Router → native_tool[bridge]: action=\(action) params=\(params)")
+        GigiDebugLogger.log("GIGI Router → native_tool[bridge]: action=\(action) params=\(params)")
         let speech = await bridge.execute(intent)
         let final = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? GigiFoundationAgent.localSpeech(for: intent)
@@ -227,7 +227,7 @@ final class GigiRequestRouter {
         // capabilities require a browser, bump up to cloud.
         let caps = Set(decision.requiredCapabilities)
         if !caps.isDisjoint(with: ["browser", "code", "vision", "web_search"]) {
-            print("GIGI Router: delegate_local upgraded to delegate_cloud (capabilities=\(decision.requiredCapabilities))")
+            GigiDebugLogger.log("GIGI Router: delegate_local upgraded to delegate_cloud (capabilities=\(decision.requiredCapabilities))")
             return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
         }
 
@@ -237,7 +237,7 @@ final class GigiRequestRouter {
             return .error("Local AI needs a paired harness. Pair the harness from Settings to enable Ollama.")
         }
 
-        print("GIGI Router → delegate_local: prompt=\(prompt.prefix(80))")
+        GigiDebugLogger.log("GIGI Router → delegate_local: prompt=\(prompt.prefix(80))")
         var fullText = ""
         var sawError: String?
         for await event in harness.runLocalLLM(prompt: prompt, history: history) {
@@ -245,7 +245,7 @@ final class GigiRequestRouter {
             case .chunk(let text):
                 fullText += text
             case .done(let latencyMs):
-                print("GIGI Router: delegate_local done in \(latencyMs)ms")
+                GigiDebugLogger.log("GIGI Router: delegate_local done in \(latencyMs)ms")
             case .error(let msg):
                 sawError = msg
             }
@@ -255,7 +255,7 @@ final class GigiRequestRouter {
             // Ollama unreachable → soft fallback to delegate_cloud if mode allows.
             let mode = currentMode()
             if mode.allowsCloud, harness.isConfigured {
-                print("GIGI Router: Ollama unavailable (\(err)) — falling back to Claude Code.")
+                GigiDebugLogger.log("GIGI Router: Ollama unavailable (\(err)) — falling back to Claude Code.")
                 return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
             }
             return .error("Local AI failed: \(err)")
@@ -283,7 +283,7 @@ final class GigiRequestRouter {
         // until GATE 5 wires GigiHarnessClient.runClaudeCode with MCP support.
         // This keeps continuity — every delegate_cloud query still produces a
         // response — while the new streaming endpoint is being built out.
-        print("GIGI Router → delegate_cloud: prompt=\(prompt.prefix(80)) caps=\(decision.requiredCapabilities)")
+        GigiDebugLogger.log("GIGI Router → delegate_cloud: prompt=\(prompt.prefix(80)) caps=\(decision.requiredCapabilities)")
 
         // Try the new streaming runClaudeCode first; fall back to the legacy
         // bridge if the new endpoint is not yet deployed on the harness.
@@ -294,9 +294,9 @@ final class GigiRequestRouter {
         for await event in harness.runClaudeCode(prompt: prompt, mcpServers: mcpServers) {
             switch event {
             case .thought(let t):
-                print("GIGI ClaudeEvent thought: \(t.prefix(60))")
+                GigiDebugLogger.log("GIGI ClaudeEvent thought: \(t.prefix(60))")
             case .toolUse(let name, _):
-                print("GIGI ClaudeEvent tool_use: \(name)")
+                GigiDebugLogger.log("GIGI ClaudeEvent tool_use: \(name)")
             case .textResponse(let t):
                 collected += t
             case .confirmRequired:
@@ -304,9 +304,9 @@ final class GigiRequestRouter {
                 // For now, auto-cancel destructive actions until UI ships.
                 return .spoken("Action needs confirmation — confirmation UI lands in GATE 5.")
             case .done(let latencyMs):
-                print("GIGI Router: delegate_cloud done in \(latencyMs)ms")
+                GigiDebugLogger.log("GIGI Router: delegate_cloud done in \(latencyMs)ms")
             case .error(let msg):
-                print("GIGI Router: delegate_cloud streaming failed (\(msg)) — falling back to legacy bridge.")
+                GigiDebugLogger.log("GIGI Router: delegate_cloud streaming failed (\(msg)) — falling back to legacy bridge.")
                 streamingFailed = true
             }
         }
@@ -324,7 +324,7 @@ final class GigiRequestRouter {
         // returns the research summary, detect a follow-up action verb in
         // the original utterance + dispatch a native_tool with the summary.
         if let callback = detectFollowUpAction(originalText: originalText) {
-            print("GIGI Router: 2-turn callback detected → \(callback.action) with summary len=\(collected.count)")
+            GigiDebugLogger.log("GIGI Router: 2-turn callback detected → \(callback.action) with summary len=\(collected.count)")
             let secondaryDecision = makeSecondaryDecision(
                 action: callback.action,
                 title: callback.title ?? defaultTitle(for: originalText),

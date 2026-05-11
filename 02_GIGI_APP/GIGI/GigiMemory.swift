@@ -72,7 +72,7 @@ final class GigiMemory {
         defer { bootstrapped = true }
         // 1. We need a non-empty container identifier.
         guard !Self.cloudContainerID.isEmpty else {
-            print("GIGI Memory: no bundle ID — local-only mode")
+            GigiDebugLogger.log("GIGI Memory: no bundle ID — local-only mode")
             return
         }
         // 2. Detect Sideloadly bundle-ID rewrite (it appends .<TEAMID>).
@@ -85,14 +85,14 @@ final class GigiMemory {
         let bid = Bundle.main.bundleIdentifier ?? ""
         let bundleParts = bid.split(separator: ".").count
         if bundleParts > 3 {
-            print("GIGI Memory: bundle ID resigned (\(bid), \(bundleParts) parts) — local-only mode")
+            GigiDebugLogger.log("GIGI Memory: bundle ID resigned (\(bid), \(bundleParts) parts) — local-only mode")
             return
         }
         // 3. ubiquityIdentityToken is the safe gate: returns non-nil only when
         // iCloud is available AND the app has the iCloud entitlement.
         // Returns nil (without raising) on Simulator with no iCloud account.
         guard FileManager.default.ubiquityIdentityToken != nil else {
-            print("GIGI Memory: iCloud unavailable (no ubiquity token) — local-only mode")
+            GigiDebugLogger.log("GIGI Memory: iCloud unavailable (no ubiquity token) — local-only mode")
             return
         }
         // TEMPORARY BYPASS (rework armando-rework, 2026-05-08):
@@ -103,7 +103,7 @@ final class GigiMemory {
         // init entirely; memory falls back to RAM-cache local-only mode.
         // Remove this guard once the container is verified to exist in
         // https://icloud.developer.apple.com → Containers.
-        print("GIGI Memory: CloudKit container init bypassed (rework v1) — local-only mode")
+        GigiDebugLogger.log("GIGI Memory: CloudKit container init bypassed (rework v1) — local-only mode")
         return
 
         // 4. Now safe to construct the container.
@@ -114,12 +114,12 @@ final class GigiMemory {
             iCloudAvailable = (status == .available)
             if iCloudAvailable {
                 await loadAll()
-                print("GIGI Memory: CloudKit ready (\(cache.count) records cached) ✓")
+                GigiDebugLogger.log("GIGI Memory: CloudKit ready (\(cache.count) records cached) ✓")
             } else {
-                print("GIGI Memory: iCloud not available (status: \(status.rawValue)) — using local cache only")
+                GigiDebugLogger.log("GIGI Memory: iCloud not available (status: \(status.rawValue)) — using local cache only")
             }
         } catch {
-            print("GIGI Memory: bootstrap error — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI Memory: bootstrap error — \(error.localizedDescription)")
         }
     }
 
@@ -150,13 +150,13 @@ final class GigiMemory {
             useCountByKey[normalizedKey] = newCount
             guard let db = db else { return }
             try await db.save(record)
-            print("GIGI Memory: saved '\(normalizedKey)' [\(cat)] = '\(value.prefix(40))'")
+            GigiDebugLogger.log("GIGI Memory: saved '\(normalizedKey)' [\(cat)] = '\(value.prefix(40))'")
         } catch {
             if let ck = error as? CKError, ck.code == .quotaExceeded {
                 iCloudAvailable = false
-                print("GIGI Memory: iCloud quota exceeded — falling back to local cache only. Free up iCloud storage to re-enable.")
+                GigiDebugLogger.log("GIGI Memory: iCloud quota exceeded — falling back to local cache only. Free up iCloud storage to re-enable.")
             } else {
-                print("GIGI Memory: save error — \(error.localizedDescription)")
+                GigiDebugLogger.log("GIGI Memory: save error — \(error.localizedDescription)")
             }
         }
         // Keep vector store in sync (async, non-blocking)
@@ -334,7 +334,7 @@ final class GigiMemory {
         let recordID = CKRecord.ID(recordName: normalizedKey)
         guard let db = db else { return }
         _ = try? await db.deleteRecord(withID: recordID)
-        print("GIGI Memory: forgot '\(normalizedKey)'")
+        GigiDebugLogger.log("GIGI Memory: forgot '\(normalizedKey)'")
     }
 
     // MARK: - Context string for LLM injection
@@ -396,7 +396,7 @@ final class GigiMemory {
                     }
                 }
             } catch {
-                print("GIGI Memory: loadAll('\(prefix)') error — \(error.localizedDescription)")
+                GigiDebugLogger.log("GIGI Memory: loadAll('\(prefix)') error — \(error.localizedDescription)")
             }
         }
     }

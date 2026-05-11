@@ -131,10 +131,10 @@ class GigiVADEngine {
             audioEngine.prepare()
             GigiDebugLogger.log("audioEngine.start()")
             try audioEngine.start()
-            print("GIGI VAD: started (STT \(speechEnabled ? "active" : "unauthorized — VAD only"))")
+            GigiDebugLogger.log("GIGI VAD: started (STT \(speechEnabled ? "active" : "unauthorized — VAD only"))")
             GigiDebugLogger.log("VAD started successfully")
         } catch {
-            print("GIGI VAD: AudioEngine error — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI VAD: AudioEngine error — \(error.localizedDescription)")
             GigiDebugLogger.log("audioEngine start error: \(error.localizedDescription)")
             isCapturing = false
             inputNode.removeTap(onBus: 0)
@@ -149,11 +149,11 @@ class GigiVADEngine {
     private func handleSTTResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result {
             latestTranscription = result.bestTranscription.formattedString
-            print("GIGI STT partial: '\(latestTranscription)'")
+            GigiDebugLogger.log("GIGI STT partial: '\(latestTranscription)'")
             updateSilenceThreshold(for: latestTranscription)
 
             if result.isFinal {
-                print("GIGI STT final: '\(latestTranscription)'")
+                GigiDebugLogger.log("GIGI STT final: '\(latestTranscription)'")
                 let text = latestTranscription
                 isWaitingForFinal = false
                 cleanupSTT()
@@ -164,7 +164,7 @@ class GigiVADEngine {
                 }
             }
         } else if let error {
-            print("GIGI STT error: \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI STT error: \(error.localizedDescription)")
             let text = latestTranscription
             isWaitingForFinal = false
             cleanupSTT()
@@ -194,7 +194,7 @@ class GigiVADEngine {
         consecutiveSpeechDuration   = 0
         lastWordCount               = 0
         GigiAudioSequestrator.shared.releaseControl()
-        print("GIGI VAD: audio capture stopped — waiting for STT final")
+        GigiDebugLogger.log("GIGI VAD: audio capture stopped — waiting for STT final")
     }
 
     // MARK: - Full stop
@@ -216,7 +216,7 @@ class GigiVADEngine {
         if shouldRelease {
             GigiAudioSequestrator.shared.releaseControl()
         }
-        print("GIGI VAD: stopped")
+        GigiDebugLogger.log("GIGI VAD: stopped")
     }
 
     private func cleanupSTT() {
@@ -261,7 +261,7 @@ class GigiVADEngine {
             }
 
             if self.hasSpeechStarted, self.silenceDuration >= self.requiredSilence {
-                print("GIGI VAD: silence (\(String(format: "%.1f", db)) dB, req \(String(format: "%.1f", self.requiredSilence))s) — '\(self.latestTranscription)'")
+                GigiDebugLogger.log("GIGI VAD: silence (\(String(format: "%.1f", db)) dB, req \(String(format: "%.1f", self.requiredSilence))s) — '\(self.latestTranscription)'")
                 self.isWaitingForFinal = true
                 self.stopAudioCapture()
                 self.onSilenceDetected?()
@@ -270,7 +270,7 @@ class GigiVADEngine {
                 let snapshot = self.latestTranscription
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                     guard let self, self.isWaitingForFinal else { return }
-                    print("GIGI VAD: STT timeout — using snapshot: '\(snapshot)'")
+                    GigiDebugLogger.log("GIGI VAD: STT timeout — using snapshot: '\(snapshot)'")
                     self.isWaitingForFinal = false
                     self.cleanupSTT()
                     if !snapshot.isEmpty {
@@ -296,7 +296,7 @@ class GigiVADEngine {
         lastWordCount = count
 
         requiredSilence = adaptiveSilenceThreshold(for: partial)
-        print("GIGI VAD: threshold → \(String(format: "%.1f", requiredSilence))s (\(count) words)")
+        GigiDebugLogger.log("GIGI VAD: threshold → \(String(format: "%.1f", requiredSilence))s (\(count) words)")
     }
 
     func adaptiveSilenceThreshold(for partial: String) -> TimeInterval {

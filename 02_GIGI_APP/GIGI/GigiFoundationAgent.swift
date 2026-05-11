@@ -425,7 +425,7 @@ final class GigiFoundationAgent {
         let looksLikeJSON = speech.contains("{") && speech.contains("}") && speech.contains("\"action\"")
 
         if hasLeak || looksLikeJSON {
-            print("GIGI sanitizer: speech field contained prompt structure — replaced with fallback")
+            GigiDebugLogger.log("GIGI sanitizer: speech field contained prompt structure — replaced with fallback")
             return "I'm here — what do you need?"
         }
 

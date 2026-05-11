@@ -31,7 +31,7 @@ extension GigiWebAgent {
     func executeWithVision(url: URL? = nil, task: String, maxSteps: Int = 8) async -> String {
         if let url {
             do {
-                print("GIGI Vision: navigating to \(url.host ?? url.absoluteString)")
+                GigiDebugLogger.log("GIGI Vision: navigating to \(url.host ?? url.absoluteString)")
                 try await navigate(to: url, timeout: 20)
             } catch {
                 return "Navigation failed: \(error.localizedDescription)"
@@ -61,11 +61,11 @@ extension GigiWebAgent {
                     profileContext: profileCtx
                 )
             } catch {
-                print("GIGI Vision: model error at step \(step) — \(error)")
+                GigiDebugLogger.log("GIGI Vision: model error at step \(step) — \(error)")
                 return "Vision model error: \(error.localizedDescription)"
             }
 
-            print("GIGI Vision step \(step)/\(maxSteps): \(action.action) — \(action.reason ?? action.message ?? "")")
+            GigiDebugLogger.log("GIGI Vision step \(step)/\(maxSteps): \(action.action) — \(action.reason ?? action.message ?? "")")
 
             switch action.action {
 
@@ -95,7 +95,7 @@ extension GigiWebAgent {
                 await injectProfileIntoForm()
 
             default:
-                print("GIGI Vision: unknown action '\(action.action)'")
+                GigiDebugLogger.log("GIGI Vision: unknown action '\(action.action)'")
                 continue
             }
 

@@ -46,7 +46,7 @@ struct GIGIApp: App {
                             )) as? Bool ?? false
                             if !still {
                                 UserDefaults.standard.set(false, forKey: "gigi.whatsapp.linked")
-                                print("GIGI: WhatsApp session expired — user must re-link")
+                                GigiDebugLogger.log("GIGI: WhatsApp session expired — user must re-link")
                             }
                         }
                     }

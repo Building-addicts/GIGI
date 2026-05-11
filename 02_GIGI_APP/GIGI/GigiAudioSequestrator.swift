@@ -63,13 +63,13 @@ final class GigiAudioSequestrator: NSObject {
 
         switch type {
         case .began:
-            print("GIGI Audio: Interruption began")
+            GigiDebugLogger.log("GIGI Audio: Interruption began")
             // Pause VAD or Realtime if needed
             Task { @MainActor in
                 GigiSmartOrchestrator.shared.stopListening()
             }
         case .ended:
-            print("GIGI Audio: Interruption ended")
+            GigiDebugLogger.log("GIGI Audio: Interruption ended")
             guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             if options.contains(.shouldResume) {
@@ -95,11 +95,11 @@ final class GigiAudioSequestrator: NSObject {
         switch reason {
         case .oldDeviceUnavailable:
             // BT device disconnected mid-conversation — reactivate so .defaultToSpeaker kicks in
-            print("GIGI Audio: BT disconnected — falling back to speaker")
+            GigiDebugLogger.log("GIGI Audio: BT disconnected — falling back to speaker")
             if captureRefCount > 0 || isSpeaking { activatePlayAndRecord() }
         case .newDeviceAvailable:
             // BT device connected — re-apply category so it is picked up
-            print("GIGI Audio: new audio route available")
+            GigiDebugLogger.log("GIGI Audio: new audio route available")
             if captureRefCount > 0 { activatePlayAndRecord() }
         default:
             break
@@ -126,7 +126,7 @@ final class GigiAudioSequestrator: NSObject {
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             GigiDebugLogger.log("prewarmBluetooth: session active")
         } catch {
-            print("GIGI Audio: prewarm — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI Audio: prewarm — \(error.localizedDescription)")
         }
     }
 
@@ -165,7 +165,7 @@ final class GigiAudioSequestrator: NSObject {
                 )
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
             } catch {
-                print("GIGI Audio: TTS session — \(error.localizedDescription)")
+                GigiDebugLogger.log("GIGI Audio: TTS session — \(error.localizedDescription)")
             }
         }
     }
@@ -196,7 +196,7 @@ final class GigiAudioSequestrator: NSObject {
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             GigiDebugLogger.log("activatePlayAndRecord SUCCESS")
         } catch {
-            print("GIGI Audio: seize — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI Audio: seize — \(error.localizedDescription)")
             GigiDebugLogger.log("activatePlayAndRecord ERROR: \(error.localizedDescription)")
         }
     }
@@ -211,7 +211,7 @@ final class GigiAudioSequestrator: NSObject {
             try session.setActive(false, options: .notifyOthersOnDeactivation)
             GigiDebugLogger.log("deactivate SUCCESS")
         } catch {
-            print("GIGI Audio: release — \(error.localizedDescription)")
+            GigiDebugLogger.log("GIGI Audio: release — \(error.localizedDescription)")
             GigiDebugLogger.log("deactivate ERROR: \(error.localizedDescription)")
         }
     }

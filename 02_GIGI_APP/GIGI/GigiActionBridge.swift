@@ -79,7 +79,7 @@ class GigiActionBridge {
     // MARK: - Execute intent
 
     func execute(_ intent: GigiIntent) async -> String {
-        print("GIGI Bridge: \(intent.label)")
+        GigiDebugLogger.log("GIGI Bridge: \(intent.label)")
 
         switch intent.label {
         case "make_call":
@@ -241,7 +241,7 @@ class GigiActionBridge {
     // MARK: - Gateway (Shortcuts)
 
     func openGatewayShortcut(input: String) async -> Bool {
-        print("GIGI Gateway: payload → \(input)")
+        GigiDebugLogger.log("GIGI Gateway: payload → \(input)")
         let parts = input.split(separator: "|", maxSplits: 2).map(String.init)
         guard let cmd = parts.first else { return false }
         switch cmd {
@@ -251,7 +251,7 @@ class GigiActionBridge {
             let shortcutOpened = await openGatewayXCallbackFallback(input: input)
             if shortcutOpened { return true }
             guard let telURL = URL(string: "tel://\(number)") else { return false }
-            print("GIGI Gateway: tel:// fallback → \(number)")
+            GigiDebugLogger.log("GIGI Gateway: tel:// fallback → \(number)")
             return await MainActor.run(resultType: Bool.self) {
                 UIApplication.shared.open(telURL)
                 return true
@@ -266,17 +266,17 @@ class GigiActionBridge {
             guard let url = URL(string: "whatsapp://send?phone=\(digits)&text=\(encoded)") else { return false }
             let canOpen = await MainActor.run(resultType: Bool.self) { UIApplication.shared.canOpenURL(url) }
             guard canOpen else {
-                print("GIGI Gateway: WhatsApp non installato")
+                GigiDebugLogger.log("GIGI Gateway: WhatsApp non installato")
                 return false
             }
-            print("GIGI Gateway: WhatsApp diretto → \(digits)")
+            GigiDebugLogger.log("GIGI Gateway: WhatsApp diretto → \(digits)")
             return await MainActor.run(resultType: Bool.self) {
                 UIApplication.shared.open(url)
                 return true
             }
         case "URL":
             guard parts.count >= 2, let url = URL(string: parts[1]) else { return false }
-            print("GIGI Gateway: URL diretto → \(url)")
+            GigiDebugLogger.log("GIGI Gateway: URL diretto → \(url)")
             return await MainActor.run(resultType: Bool.self) {
                 UIApplication.shared.open(url)
                 return true
@@ -299,7 +299,7 @@ class GigiActionBridge {
             URLQueryItem(name: "x-cancel", value: GigiGateway.callbackCancelURLString),
         ]
         guard let url = components.url else { return false }
-        print("GIGI Gateway: fallback Shortcuts → \(input)")
+        GigiDebugLogger.log("GIGI Gateway: fallback Shortcuts → \(input)")
         return await MainActor.run(resultType: Bool.self) {
             UIApplication.shared.open(url)
             return true

@@ -59,26 +59,26 @@ class GigiNLUEngine {
 
         // 1. English rule-based (highest priority — fast, reliable)
         if let rule = classifyRules(lower, original: cleaned) {
-            print("GIGI NLU [rules]: '\(lower)' → \(rule.label) (\(Int(rule.confidence * 100))%)")
+            GigiDebugLogger.log("GIGI NLU [rules]: '\(lower)' → \(rule.label) (\(Int(rule.confidence * 100))%)")
             return rule
         }
 
         // 2. MobileBERT
         if let result = classifyWithTransformer(lower) {
-            print("GIGI NLU [BERT]: '\(lower)' → \(result.label) (\(Int(result.confidence * 100))%)")
+            GigiDebugLogger.log("GIGI NLU [BERT]: '\(lower)' → \(result.label) (\(Int(result.confidence * 100))%)")
             let params = extractParams(from: lower, intent: result.label)
             return GigiIntent(label: result.label, confidence: result.confidence, params: params)
         }
 
         // 3. Maximum Entropy fallback
         if let result = classifyWithFallback(lower) {
-            print("GIGI NLU [ME]: '\(lower)' → \(result.label) (\(Int(result.confidence * 100))%)")
+            GigiDebugLogger.log("GIGI NLU [ME]: '\(lower)' → \(result.label) (\(Int(result.confidence * 100))%)")
             let params = extractParams(from: lower, intent: result.label)
             return GigiIntent(label: result.label, confidence: result.confidence, params: params)
         }
 
         // 4. Ultra-fallback
-        print("GIGI NLU: fallback ask_cloud")
+        GigiDebugLogger.log("GIGI NLU: fallback ask_cloud")
         return GigiIntent(label: "ask_cloud", confidence: 0.5, params: ["raw": cleaned])
     }
 
@@ -553,8 +553,8 @@ class GigiNLUEngine {
             let config = MLModelConfiguration()
             config.computeUnits = .all
             transformerModel = try MLModel(contentsOf: url, configuration: config)
-            print("GIGI NLU: MobileBERT caricato ✓")
-        } catch { print("GIGI NLU: Transformer error — \(error)") }
+            GigiDebugLogger.log("GIGI NLU: MobileBERT caricato ✓")
+        } catch { GigiDebugLogger.log("GIGI NLU: Transformer error — \(error)") }
     }
 
     private func loadFallback() {
@@ -562,8 +562,8 @@ class GigiNLUEngine {
             let config = MLModelConfiguration()
             let mlModel = try GigiNLU(configuration: config)
             fallbackClassifier = try NLModel(mlModel: mlModel.model)
-            print("GIGI NLU: Fallback GigiNLU caricato ✓")
-        } catch { print("GIGI NLU: Fallback error — \(error)") }
+            GigiDebugLogger.log("GIGI NLU: Fallback GigiNLU caricato ✓")
+        } catch { GigiDebugLogger.log("GIGI NLU: Fallback error — \(error)") }
     }
 
     private func loadLabels() {
@@ -571,7 +571,7 @@ class GigiNLUEngine {
            let data = try? Data(contentsOf: url),
            let dec  = try? JSONDecoder().decode([String].self, from: data) {
             labels = dec
-            print("GIGI NLU: \(labels.count) labels caricate ✓")
+            GigiDebugLogger.log("GIGI NLU: \(labels.count) labels caricate ✓")
             return
         }
         labels = [
@@ -616,7 +616,7 @@ class GigiNLUEngine {
             scores = scores.map { $0 / sum }
             let bestIdx = scores.indices.max(by: { scores[$0] < scores[$1] }) ?? 0
             return (labels[bestIdx], scores[bestIdx])
-        } catch { print("GIGI NLU transformer error: \(error)"); return nil }
+        } catch { GigiDebugLogger.log("GIGI NLU transformer error: \(error)"); return nil }
     }
 
     // MARK: - Maximum Entropy fallback
@@ -788,7 +788,7 @@ class GigiNLUEngine {
         entities.topics = extractEntityTopics(from: lower)
         entities.actions = extractEntityActions(from: lower)
         entities.sentiment = extractEntitySentiment(from: lower)
-        print("GIGI Entities: \(entities)")
+        GigiDebugLogger.log("GIGI Entities: \(entities)")
         return entities
     }
 
