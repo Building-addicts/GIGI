@@ -33,6 +33,7 @@ proposed fix. Status tag in the header — update when fixed and add a
 | ✅ [003](2026-05-12-003-ollama-via-claude-login-error.md) | **P0** | knowledge Q&A mis-routed → FM verb anchors + iOS downgrade + fail-soft to Ollama | `f1ef170` | next |
 | ✅ [004](2026-05-12-004-timer-spelled-numbers.md) | P1 | `timer for two minutes` → wordToNumber pre-pass (EN 0-99 + IT) | `d1c75e9` | next |
 | ✅ [006](2026-05-12-006-call-double-confirmation-ux.md) | P1 | `Call X` double confirm → bubble simplified to "Calling X." | `cfc8b8e` | next |
+| ✅ [010](2026-05-12-010-call-bypass-ios-popup-via-whatsapp.md) | P1 | `Call X` iOS popup bypass → smart route via WhatsApp when installed, tel:// fallback | TBD | next |
 
 ## Workflow
 
