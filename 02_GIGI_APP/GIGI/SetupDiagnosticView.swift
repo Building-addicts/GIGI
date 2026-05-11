@@ -297,19 +297,30 @@ struct SetupDiagnosticView: View {
                 } else {
                     Image(systemName: icon).font(.system(size: 12)).foregroundColor(.white.opacity(0.7))
                 }
-                Text(title).font(.caption.weight(.semibold)).foregroundColor(.white.opacity(0.85))
-                Spacer()
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.85))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
             }
             Text(state)
                 .font(.subheadline.weight(.bold))
                 .foregroundColor(ok ? .green : .orange)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Text(detail)
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.55))
                 .lineLimit(2)
                 .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Uniform height: minHeight forces the shortest card to grow to match the tallest.
+        // maxHeight: .infinity + LazyVGrid lets the row converge to the tallest card.
+        .frame(maxWidth: .infinity, minHeight: 108, maxHeight: .infinity, alignment: .topLeading)
         .padding(10)
         .background(Color.white.opacity(0.03))
         .cornerRadius(8)
