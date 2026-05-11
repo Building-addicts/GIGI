@@ -461,13 +461,63 @@ class GigiActionBridge {
         return "Timer set for \(timerLabel(seconds: seconds))."
     }
 
+    // Bug #004 fix (2026-05-12): SFSpeech transcribes small numbers as words
+    // ("two minutes" instead of "2 minutes"). The regex below only matches
+    // \d+ → words returned 0 → GIGI asked "How long should the timer run?".
+    // wordToNumber covers EN 0-99 + common IT short numbers + edge tokens
+    // ("a"/"an"/"un"/"una" = 1, "half" → handled by literal). Run a pre-pass
+    // that substitutes word numerals with digits before regex matching.
+    private static let WORD_TO_NUMBER: [String: Int] = [
+        // English single words 0-19
+        "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+        "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+        "nineteen": 19,
+        // English tens
+        "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+        "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+        "hundred": 100,
+        // English articles meaning "one"
+        "a": 1, "an": 1,
+        // Italian short numbers
+        "uno": 1, "una": 1, "un": 1,
+        "due": 2, "tre": 3, "quattro": 4, "cinque": 5,
+        "sei": 6, "sette": 7, "otto": 8, "nove": 9, "dieci": 10,
+        "undici": 11, "dodici": 12, "tredici": 13, "quattordici": 14,
+        "quindici": 15, "sedici": 16, "diciassette": 17, "diciotto": 18,
+        "diciannove": 19,
+        "venti": 20, "trenta": 30, "quaranta": 40, "cinquanta": 50,
+        "sessanta": 60, "settanta": 70, "ottanta": 80, "novanta": 90
+    ]
+
+    /// Substitute word numerals ("two" → "2") before regex digit matching.
+    /// Word boundary `\b` ensures "twentyfive minutes" doesn't accidentally
+    /// match "twenty" inside "twentyfive" — only standalone words substitute.
+    /// Compound numbers (e.g. "twenty five") are not yet collapsed in v1
+    /// — fall through to the matched-tens value (here: 20). v1.1 will add
+    /// adjacent-word summation.
+    private func normalizeWordNumerals(_ text: String) -> String {
+        var out = text
+        for (word, n) in Self.WORD_TO_NUMBER {
+            out = out.replacingOccurrences(
+                of: "\\b\(word)\\b",
+                with: "\(n)",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        return out
+    }
+
     private func parseTimerDuration(_ text: String) -> Int {
-        let lower = text.lowercased()
+        let lower = normalizeWordNumerals(text.lowercased())
         var total = 0
         // 2026-05-12 fix: previous patterns matched only singular forms
         // ("3 minute") because `[^a-z]|$` rejected the trailing "s" of plurals.
         // Now `s?` makes the plural optional AND `\b` enforces a word boundary,
         // so "3 minutes", "3 minute", "3 min" all parse correctly.
+        // 2026-05-12 bug #004: also runs a wordToNumber pre-pass so
+        // "two minutes" → "2 minutes" before regex matching.
         let patterns: [(String, Int)] = [
             ("(\\d+)\\s*(?:hours?|ora|ore|hr|h)\\b", 3600),
             ("(\\d+)\\s*(?:minutes?|minuto|minuti|min|m)\\b", 60),
