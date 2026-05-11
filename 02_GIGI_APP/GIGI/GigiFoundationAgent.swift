@@ -254,36 +254,35 @@ final class GigiFoundationAgent {
         examples but the WORDS must come from the current user query and the
         slot you are asking about. Never echo the example sentences verbatim.
 
-        FEW-SHOT EXAMPLES (structural only — never copy the strings literally):
-        User: "Set a timer for 10 minutes"
-        → path=native_tool, primaryAction=set_timer, complexity=10, capabilities=[], slots.duration="10 minutes", confidence=0.95, reason="simple native timer".
+        STRUCTURAL EXAMPLES (showing the JSON shape only — fill every string
+        field with words derived from the CURRENT user query, never from these
+        examples). Each example below uses {{PARAPHRASED_FROM_USER_QUERY}} as
+        a literal placeholder you MUST replace.
 
-        User: "Send a message to Sara on WhatsApp saying I'll be 15 minutes late"
-        → path=native_tool, primaryAction=send_message, slots.contact=Sara, slots.platform=whatsapp, slots.body="I'll be 15 minutes late", complexity=12, capabilities=[].
+        Input shape: native action command → output shape:
+          path=native_tool, primaryAction=<one of set_timer/set_alarm/set_reminder/send_message/make_call/facetime/navigate/play_music/open_app/weather/read_calendar/find_free_slot/read_email/homekit_on/homekit_off>, complexity=5-15, capabilities=[], slots={{EXTRACTED_FROM_QUERY}}, confidence=0.9-1.0, reason="<3-6 words about the chosen action>".
 
-        User: "Explain Bayes theorem in three sentences"
-        → path=delegate_local, complexity=28, capabilities=[], delegatePrompt="<paraphrase of the SAME user query — here it would be: Explain Bayes theorem in three sentences>", confidence=0.9, reason="short reasoning task".
+        Input shape: reasoning/knowledge/paraphrase request → output shape:
+          path=delegate_local, complexity=15-40, capabilities=[], delegatePrompt="{{PARAPHRASED_FROM_USER_QUERY}}", directSpeech="", confidence=0.7-0.95, reason="<3-6 words>".
 
-        User: "Rephrase 'I'm running late' more professionally"
-        → path=delegate_local, complexity=20, capabilities=[], delegatePrompt="<paraphrase of the SAME user query — here it would be: Rephrase 'I'm running late' more professionally>".
+        Input shape: web research / code task / vision task → output shape:
+          path=delegate_cloud, complexity=40-90, capabilities=<subset of [browser, web_search, code, vision, multi_step]>, delegatePrompt="{{PARAPHRASED_FROM_USER_QUERY}}", directSpeech="", confidence=0.7-0.95.
 
-        User: "Search Wikipedia for Nikola Tesla and tell me his most important invention"
-        → path=delegate_cloud, complexity=65, capabilities=[browser, web_search], delegatePrompt="<paraphrase of the SAME user query — here it would be: Open Wikipedia, find Nikola Tesla's page, return the most-cited invention>".
+        Input shape: ambiguous request missing a required slot → output shape:
+          path=ask_clarification, directSpeech="{{ONE_SHORT_QUESTION_TARGETING_MISSING_SLOT_OF_CURRENT_USER_QUERY}}", confidence=0.3-0.6, reason="missing slot: <name>".
 
-        User: "Write a Python script that sorts a list of integers"
-        → path=delegate_cloud, complexity=45, capabilities=[code], delegatePrompt="<paraphrase of the SAME user query — here it would be: Write a Python script that sorts a list of integers>".
+        Input shape: illegal/harmful/impossible request → output shape:
+          path=reject, directSpeech="{{ONE_POLITE_REFUSAL_REFERENCING_CURRENT_USER_QUERY}}", confidence=0.85-1.0, reason="<3-6 words>".
 
-        User: "Maybe set something for later"
-        → path=ask_clarification, directSpeech="<one short question targeting the missing slot of the SAME user query — here: Sure — what would you like me to set, and for when?>", confidence=0.4.
+        Input shape: casual greeting / small talk / unclear short utterance ("Hey", "How are you", "What's up") → output shape:
+          path=delegate_local, complexity=10, capabilities=[], delegatePrompt="{{REPHRASED_USER_GREETING_OR_SMALL_TALK_QUERY}}", directSpeech="", confidence=0.6, reason="small talk".
+          (Do NOT classify casual greetings as ask_clarification — answer them via delegate_local.)
 
-        User: "Buy bitcoin"
-        → path=reject, directSpeech="<one polite refusal addressing the SAME user query — here: I can't make financial transactions for you.>", confidence=0.95.
-
-        IMPORTANT — DELEGATE PROMPT DERIVATION:
-        The user query you receive in this turn is the ONLY source of truth.
-        Build the delegatePrompt as a paraphrase of THAT query. Examples like
-        "Explain Bayes theorem" are training scaffolding — they are NEVER the
-        right answer unless the current user query actually mentions Bayes.
+        CRITICAL — string-field rules (re-stated):
+        1. delegatePrompt MUST be a paraphrase of the current user query.
+        2. directSpeech MUST be empty for native_tool, delegate_local, delegate_cloud.
+        3. directSpeech for ask_clarification / reject MUST reference the current user query, not any example phrasing.
+        4. NEVER emit the string "Maybe set something for later", "Bayes theorem", "Sara", "Nikola Tesla", "Python script", "Buy bitcoin", or any text that does not appear in or directly paraphrase the user's actual input. These were merely placeholder names in earlier prompt drafts.
 
         OUTPUT: Always a single FoundationRouterDecision conforming to the schema. Never free text outside the schema.
         """
