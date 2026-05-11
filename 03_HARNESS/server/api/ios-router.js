@@ -7,6 +7,8 @@ import * as memory from './ios-memory.js';
 import * as push from './ios-push-register.js';
 import { handlePushTest } from './ios-push-test.js';
 import { handleStatus, recordRequest } from './ios-status.js';
+import * as localLLM from './ios-local-llm.js';
+import * as claudeAgent from './ios-claude-agent.js';
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -80,6 +82,18 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/push/register' && m === 'POST')   { await push.handleRegister(req, res, deps); return true; }
   if (p === '/api/ios/push/unregister' && m === 'POST') { await push.handleUnregister(req, res, deps); return true; }
   if (p === '/api/ios/push/test' && m === 'POST')       { await handlePushTest(req, res, deps); return true; }
+
+  // Phase 2 — Path 3 Ollama (GATE 4)
+  if (p === '/api/ios/local-llm/generate' && m === 'POST') { await localLLM.handleGenerate(req, res, deps); return true; }
+  if (p === '/api/ios/local-llm/status'   && m === 'GET')  { await localLLM.handleStatus(req, res, deps); return true; }
+  if (p === '/api/ios/local-llm/cancel'   && m === 'POST') { await localLLM.handleCancel(req, res, deps); return true; }
+
+  // Phase 2 — Path 4 Claude Code subprocess + MCP (GATE 5, scaffold)
+  if (p === '/api/ios/agent/claude'   && m === 'POST') { await claudeAgent.handleClaude(req, res, deps); return true; }
+  if (p === '/api/ios/agent/confirm'  && m === 'POST') { await claudeAgent.handleConfirm(req, res, deps); return true; }
+  if (p === '/api/ios/agent/cancel'   && m === 'POST' && req.headers['x-cancel-target'] === 'claude') {
+    await claudeAgent.handleCancel(req, res, deps); return true;
+  }
 
   // health
   if (p === '/api/ios/health' && m === 'GET') { json(res, 200, { ok: true, data: { pid: process.pid, uptime_s: Math.floor(process.uptime()) } }); return true; }
