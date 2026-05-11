@@ -11,7 +11,11 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+
+// Module-level __dirname for ESM (used by spawnClaude sandbox cwd resolution).
+const __MODULE_DIR__ = path.dirname(fileURLToPath(import.meta.url));
 import { LOGS_DIR, MEMORY_FILE, CONTEXT_FILE } from './paths.js';
 import { log } from './logger.js';
 import {
@@ -137,11 +141,30 @@ export function spawnClaude(cfg, args, onEvent, onSpawn) {
     // A placeholder value in .env would override the stored key and cause "Invalid API key".
     const claudeEnv = { ...process.env };
     delete claudeEnv.ANTHROPIC_API_KEY;
+
+    // 2026-05-12 LANGUAGE-LEAK FIX:
+    // Claude Code CLI auto-loads CLAUDE.md from the CWD and every parent dir
+    // (walk-up). When spawned from the default harness CWD it picks up the
+    // team-shared Italian CLAUDE.md files (03_HARNESS/CLAUDE.md + repo-root
+    // CLAUDE.md, ~814 lines combined) which override the
+    // `--append-system-prompt` we pass. Result: Claude responds in Italian
+    // regardless of our English instructions.
+    //
+    // Fix: spawn from a dedicated sandbox dir whose only CLAUDE.md is an
+    // English-only operator manual. Walk-up still stops within `~/.claude/`
+    // (global) but that file is also English. The IT docs in the repo
+    // remain untouched — only the spawned subprocess is isolated.
+    const sandboxDir = path.join(__MODULE_DIR__, '.claude-sandbox');
+    const claudeCwd = fs.existsSync(path.join(sandboxDir, 'CLAUDE.md'))
+      ? sandboxDir
+      : __MODULE_DIR__;
+
     const child = spawn(cfg.claude.bin || 'claude', streamArgs, {
       shell: false,
       windowsHide: true,
       timeout: cfg.claude.timeout_ms || 600000,
-      env: claudeEnv
+      env: claudeEnv,
+      cwd: claudeCwd
     });
     if (onSpawn) { try { onSpawn(child); } catch {} }
     let stdout = '', stderr = '';

@@ -92,6 +92,9 @@ function translateClaudeEvent(ev) {
       for (const c of content) {
         if (c.type === 'text' && c.text?.trim()) {
           out.push({ event: 'text', data: { text: c.text } });
+          // 2026-05-12 capillary log: every text fragment Claude emits.
+          const preview = c.text.length > 80 ? c.text.slice(0, 80) + '…' : c.text;
+          try { log(`[claude-agent] text · "${preview.replace(/\n/g, ' ')}"`); } catch {}
         } else if (c.type === 'tool_use') {
           out.push({
             event: 'tool_use',
@@ -101,8 +104,17 @@ function translateClaudeEvent(ev) {
               friendly: friendlyTool(c.name, c.input || {}),
             },
           });
+          // 2026-05-12 capillary log: every tool the model invokes.
+          try {
+            const argSummary = JSON.stringify(c.input || {}).slice(0, 100);
+            log(`[claude-agent] tool_use · ${c.name} · ${argSummary}`);
+          } catch {}
         } else if (c.type === 'thinking' && c.thinking?.trim()) {
           out.push({ event: 'thought', data: { text: c.thinking } });
+          try {
+            const t = c.thinking.length > 80 ? c.thinking.slice(0, 80) + '…' : c.thinking;
+            log(`[claude-agent] thought · "${t.replace(/\n/g, ' ')}"`);
+          } catch {}
         }
       }
       break;
@@ -168,6 +180,10 @@ export async function handleClaude(req, res, deps) {
 
   if (!deviceId) return sendJson(res, 400, { ok: false, error: { code: 'MISSING_DEVICE', message: 'deviceId is required' } });
   if (!prompt)   return sendJson(res, 400, { ok: false, error: { code: 'PROMPT_EMPTY',   message: 'prompt is required' } });
+
+  // 2026-05-12 capillary log: prompt arriving at Path 4 + MCP servers requested.
+  const promptPreview = prompt.length > 80 ? prompt.slice(0, 80) + '…' : prompt;
+  log(`[claude-agent] request START · device=${deviceId.slice(0, 8)}… · mcp=[${mcpServers.join(',')}] · prompt="${promptPreview}"`);
 
   // Open the SSE response upfront.
   sseInit(res);

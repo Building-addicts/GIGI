@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GIGI Live Monitor</title>
+  <style>
+    :root {
+      --bg: #0d0d0f;
+      --fg: #e8e8ea;
+      --muted: #6a6a72;
+      --accent: #c084fc;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --orange: #fb923c;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --pink: #f472b6;
+      --card: #1a1a1f;
+      --border: #2a2a32;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100vh;
+      background: var(--bg); color: var(--fg);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+    }
+    header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 16px;
+      background: linear-gradient(180deg, #161620 0%, var(--bg) 100%);
+    }
+    h1 {
+      margin: 0; font-size: 17px; font-weight: 600;
+      color: var(--accent); letter-spacing: 0.5px;
+    }
+    .pill {
+      padding: 3px 10px; border-radius: 999px; font-size: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .pill.live { background: #052e1a; color: var(--green); border-color: #14532d; }
+    .pill.live::before {
+      content: '●'; margin-right: 4px;
+      animation: blink 1.5s infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.3; } }
+    .controls { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+    .controls label { color: var(--muted); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+    .controls input[type=checkbox] { accent-color: var(--accent); }
+    button, a.btn {
+      background: var(--card); color: var(--fg); border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer;
+      font-family: inherit; font-size: 11px; text-decoration: none;
+    }
+    button:hover, a.btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .stack {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+      padding: 14px 20px; border-bottom: 1px solid var(--border);
+    }
+    @media (max-width: 900px) { .stack { grid-template-columns: repeat(2, 1fr); } }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px;
+    }
+    .card .label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; }
+    .card .value { font-size: 14px; font-weight: 600; margin-top: 4px; word-break: break-all; }
+    .card .value.ok { color: var(--green); }
+    .card .value.warn { color: var(--yellow); }
+    .card .value.err { color: var(--red); }
+    .card .sub { color: var(--muted); font-size: 10px; margin-top: 4px; word-break: break-all; }
+
+    .logwrap { padding: 14px 20px; }
+    .logwrap h2 {
+      margin: 0 0 10px 0; font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .logwrap h2 .count { color: var(--accent); font-weight: 400; }
+    .log {
+      background: #08080a; border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px; max-height: 70vh; overflow-y: auto;
+      font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all;
+    }
+    .log .line { padding: 1px 0; }
+    .log .time { color: var(--muted); }
+    .log .ts-claude { color: var(--pink); }
+    .log .ts-ollama { color: var(--green); }
+    .log .ts-cloudflare { color: var(--orange); }
+    .log .ts-watcher { color: var(--blue); }
+    .log .ts-iosrequest { color: var(--yellow); font-weight: 600; }
+    .log .ts-error { color: var(--red); font-weight: 600; }
+    .log .ts-info { color: var(--fg); }
+
+    .empty {
+      padding: 40px; text-align: center; color: var(--muted);
+    }
+
+    footer {
+      padding: 10px 20px; color: var(--muted); font-size: 10px;
+      border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GIGI · Live Monitor</h1>
+    <span id="status" class="pill live">live</span>
+    <div class="controls">
+      <label><input type="checkbox" id="autoscroll" checked /> auto-scroll</label>
+      <label><input type="checkbox" id="hideheartbeat" checked /> hide polling (health/status)</label>
+      <button id="clear">clear</button>
+      <button id="pause">pause</button>
+      <a class="btn" href="/" title="Back to admin panel">← Panel</a>
+    </div>
+  </header>
+
+  <section class="stack">
+    <div class="card">
+      <div class="label">Tunnel</div>
+      <div id="tunnel-status" class="value">…</div>
+      <div id="tunnel-url" class="sub">…</div>
+    </div>
+    <div class="card">
+      <div class="label">Ollama</div>
+      <div id="ollama-status" class="value">…</div>
+      <div id="ollama-sub" class="sub">…</div>
+    </div>
+    <div class="card">
+      <div class="label">Claude Code</div>
+      <div id="claude-status" class="value">…</div>
+      <div id="claude-sub" class="sub">…</div>
+    </div>
+    <div class="card">
+      <div class="label">iOS Bridge</div>
+      <div id="ios-status" class="value">…</div>
+      <div id="ios-sub" class="sub">…</div>
+    </div>
+  </section>
+
+  <section class="logwrap">
+    <h2>Bridge log <span id="line-count" class="count">0 lines</span></h2>
+    <div id="log" class="log"><div class="empty">Waiting for activity…</div></div>
+  </section>
+
+  <footer>
+    <span>polling every 1s · auto-reload</span>
+    <span id="last-update">—</span>
+  </footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let lastSeen = '';
+    let paused = false;
+
+    function classify(line) {
+      if (!line) return 'ts-info';
+      if (/error|fail|exception|fatal|denied|forbidden/i.test(line)) return 'ts-error';
+      if (/\[ios-request\]/.test(line)) return 'ts-iosrequest';
+      if (/\[claude-agent\]|claude_subprocess|runClaudeCode|tool_use/.test(line)) return 'ts-claude';
+      if (/\[local-llm\]|ollama|qwen/i.test(line)) return 'ts-ollama';
+      if (/\[cloudflared\]|tunnel|trycloudflare/i.test(line)) return 'ts-cloudflare';
+      if (/\[watcher\]|watcher/i.test(line)) return 'ts-watcher';
+      return 'ts-info';
+    }
+
+    function isHeartbeat(line) {
+      // Standard heartbeats
+      if (/heartbeat|alive |tick/i.test(line)) return true;
+      if (line.trim() === '') return true;
+      // iOS polling (every 1-5s) — the iPhone keeps checking health/status
+      // even when idle. These are noise unless you're debugging connectivity.
+      if (/\[ios-request\] GET \/api\/ios\/(health|local-llm\/install-status|agent\/claude-status|local-llm\/status)/.test(line)) return true;
+      return false;
+    }
+
+    async function refreshLog() {
+      if (paused) return;
+      try {
+        const res = await fetch('/api/log/tail?lines=300');
+        const text = await res.text();
+        if (text === lastSeen) return;
+        lastSeen = text;
+        const lines = text.split('\n').filter(Boolean);
+        const hideHB = $('hideheartbeat').checked;
+        const filtered = hideHB ? lines.filter(l => !isHeartbeat(l)) : lines;
+        const html = filtered.map(line => {
+          const m = line.match(/^\[([\d\-T:.Z]+)\]\s*(.+)$/);
+          if (m) {
+            const cls = classify(line);
+            return `<div class="line"><span class="time">[${m[1].slice(11, 19)}]</span> <span class="${cls}">${escapeHtml(m[2])}</span></div>`;
+          }
+          return `<div class="line">${escapeHtml(line)}</div>`;
+        }).join('');
+        $('log').innerHTML = html || '<div class="empty">No activity</div>';
+        $('line-count').textContent = filtered.length + ' lines';
+        if ($('autoscroll').checked) $('log').scrollTop = $('log').scrollHeight;
+        $('last-update').textContent = new Date().toLocaleTimeString();
+      } catch (e) {
+        $('status').className = 'pill';
+        $('status').textContent = 'offline';
+      }
+    }
+
+    async function refreshStack() {
+      try {
+        const res = await fetch('/api/panel/stack-status');
+        const d = await res.json();
+        $('tunnel-status').textContent = d.tunnel?.reachable ? 'reachable' : 'unreachable';
+        $('tunnel-status').className = 'value ' + (d.tunnel?.reachable ? 'ok' : 'err');
+        $('tunnel-url').textContent = d.tunnel?.url || '—';
+
+        $('ollama-status').textContent = d.ollama?.daemonReachable ? 'ready' : 'unreachable';
+        $('ollama-status').className = 'value ' + (d.ollama?.daemonReachable ? 'ok' : 'err');
+        $('ollama-sub').textContent = (d.ollama?.installedCompatibleModels || []).join(', ') || 'no models';
+
+        $('claude-status').textContent = d.claudeCode?.status || '—';
+        $('claude-status').className = 'value ' + (d.claudeCode?.available ? 'ok' : 'warn');
+        $('claude-sub').textContent = 'in-flight: ' + (d.claudeCode?.inFlightCount ?? 0);
+
+        $('ios-status').textContent = d.ios?.bridgeReady ? 'ready' : 'down';
+        $('ios-status').className = 'value ' + (d.ios?.bridgeReady ? 'ok' : 'err');
+        $('ios-sub').textContent = 'bearer: ' + (d.ios?.bearerSet ? 'set' : 'missing');
+      } catch (e) { /* ignore */ }
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
+
+    $('clear').addEventListener('click', () => { $('log').innerHTML = ''; lastSeen = ''; });
+    $('pause').addEventListener('click', (e) => {
+      paused = !paused;
+      e.target.textContent = paused ? 'resume' : 'pause';
+      $('status').className = paused ? 'pill' : 'pill live';
+      $('status').textContent = paused ? 'paused' : 'live';
+    });
+
+    refreshLog(); refreshStack();
+    setInterval(refreshLog, 1000);
+    setInterval(refreshStack, 3000);
+  </script>
+</body>
+</html>

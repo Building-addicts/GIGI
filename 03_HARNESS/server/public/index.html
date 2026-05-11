@@ -300,14 +300,24 @@
     </section>
 
     <section id="tab-logs" class="panel">
-      <div class="card">
-        <div class="row">
-          <h3 style="flex:1;margin:0">Log live</h3>
-          <button class="btn" id="btn-log-refresh">Aggiorna</button>
-          <button class="btn" id="btn-log-clear">Pulisci</button>
-        </div>
-        <pre id="log-box"></pre>
+      <div class="card" style="text-align:center;padding:32px 18px;">
+        <h3 style="margin:0 0 12px;font-size:18px;color:var(--fg);text-transform:none;letter-spacing:0;">
+          📊 Live Monitor
+        </h3>
+        <p class="sub" style="margin:0 0 24px;font-size:13px;max-width:560px;margin-left:auto;margin-right:auto;line-height:1.5;">
+          Dashboard a tutto schermo: 4 stack cards (tunnel · Ollama · Claude · iOS) +
+          log color-coded auto-refresh ogni 1s, color-coded per categoria
+          (🟣 Claude · 🟢 Ollama · 🟠 Cloudflare · 🟡 iOS request · 🔴 error).
+          Apre in nuovo tab — tienilo aperto su un monitor secondario durante la demo.
+        </p>
+        <a class="btn primary" href="/live.html" target="_blank" rel="noopener"
+           style="display:inline-block;padding:10px 24px;font-size:14px;text-decoration:none;">
+          Open Live Monitor →
+        </a>
       </div>
+
+      <!-- Hidden legacy box kept for any old JS that still references it; not displayed -->
+      <pre id="log-box" style="display:none;"></pre>
     </section>
   </main>
 </div>

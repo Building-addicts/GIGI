@@ -11,6 +11,7 @@ import { handlePushTest } from './ios-push-test.js';
 import { handleStatus, recordRequest } from './ios-status.js';
 import * as localLLM from './ios-local-llm.js';
 import * as claudeAgent from './ios-claude-agent.js';
+import { log } from '../logger.js';
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -57,6 +58,16 @@ export async function handleIosRequest(req, res, ctx) {
 
   // Record every authenticated iOS request for the rich Settings card (P6C.1).
   recordRequest();
+
+  // 2026-05-12 capillary logging: surface every incoming iOS request in the
+  // live monitor (Log tab). Helps diagnose "I said something but nothing happened"
+  // — if no line appears here, the request never reached the harness (dead tunnel,
+  // unpaired, wrong bearer, etc).
+  try {
+    const devId = earlyDeviceId || '<no-device-id>';
+    const shortDev = devId === '<no-device-id>' ? devId : devId.slice(0, 8) + '…';
+    log(`[ios-request] ${m} ${p} · device=${shortDev}`);
+  } catch {}
 
   const deps = { readBody, sendJson: json, cfg: ctx.cfg, gigiServer: ctx.gigiServer };
 

@@ -37,6 +37,22 @@ h1{font-size:22px;font-weight:600}
 .panel.active{display:block}
 
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width: 900px) { .grid-4 { grid-template-columns:repeat(2,1fr); } }
+
+/* Live log color coding (Log tab) */
+.pill-live { background: rgba(40,200,90,0.18); color: #6ce39c; }
+.pill-live::before { content: '●'; margin-right: 4px; animation: pillBlink 1.5s infinite; }
+@keyframes pillBlink { 50% { opacity: 0.3; } }
+.log-line { padding: 1px 0; }
+.log-time { color: #6a6a72; }
+.ts-claude { color: #f472b6; }     /* purple-pink — claude-agent */
+.ts-ollama { color: #4ade80; }     /* green     — local-llm/ollama */
+.ts-cloudflare { color: #fb923c; } /* orange    — cloudflared/tunnel */
+.ts-watcher { color: #60a5fa; }    /* blue      — watcher */
+.ts-error { color: #f87171; font-weight: 600; }
+.ts-info { color: var(--fg, #e8e8ea); }
+
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
 .card h3{font-size:13px;color:var(--sub);font-weight:500;
   text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}

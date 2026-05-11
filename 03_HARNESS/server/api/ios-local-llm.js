@@ -133,6 +133,10 @@ export async function handleGenerate(req, res, deps) {
     "or any reasoning monologue. Skip filler phrases. Output the answer only, in natural spoken English."
   );
 
+  // 2026-05-12 capillary log: surface prompt + model selection in live monitor.
+  const promptPreview = prompt.length > 70 ? prompt.slice(0, 70) + '…' : prompt;
+  log(`[local-llm] generate START · model=${model} · runId=${runId.slice(-8)} · prompt="${promptPreview}"`);
+
   // Start SSE response.
   sseInit(res);
 

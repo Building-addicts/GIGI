@@ -83,12 +83,156 @@ async function saveConfig(silent = false) {
   }
 }
 
-async function refreshLogs() {
-  const t = await api('/api/logs?lines=400');
-  const box = $('#log-box');
-  box.textContent = t || '(vuoto)';
-  box.scrollTop = box.scrollHeight;
+// MARK: — Live monitor (Log tab)
+//
+// Auto-refresh log + stack cards every 1s/3s. Color-codes lines by source
+// ([claude-agent] purple, [local-llm] green, [cloudflared] orange,
+// [watcher] blue, error red). Includes pause + hide heartbeats + auto-scroll.
+//
+// Triggered when the user opens the Log tab and stops when they leave.
+
+let liveLogPaused = false;
+let liveLogTimer = null;
+let liveStackTimer = null;
+let liveLastSeen = '';
+
+function liveClassify(text) {
+  if (!text) return 'ts-info';
+  if (/error|fail|exception|fatal|denied|forbidden/i.test(text)) return 'ts-error';
+  if (/\[claude-agent\]|claude_subprocess|runClaudeCode|tool_use/i.test(text)) return 'ts-claude';
+  if (/\[local-llm\]|ollama|qwen/i.test(text)) return 'ts-ollama';
+  if (/\[cloudflared\]|tunnel|trycloudflare/i.test(text)) return 'ts-cloudflare';
+  if (/\[watcher\]/i.test(text)) return 'ts-watcher';
+  return 'ts-info';
 }
+
+function liveIsHeartbeat(line) {
+  return /heartbeat|alive |tick/i.test(line) || line.trim() === '';
+}
+
+function liveEscape(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+async function refreshLogs() {
+  if (liveLogPaused) return;
+  try {
+    const res = await fetch('/api/log/tail?lines=200');
+    const text = await res.text();
+    if (text === liveLastSeen) return;
+    liveLastSeen = text;
+
+    const hideHB = $('#live-hide-heartbeat')?.checked;
+    const lines = text.split('\n').filter(Boolean);
+    const filtered = hideHB ? lines.filter(l => !liveIsHeartbeat(l)) : lines;
+
+    const html = filtered.map(line => {
+      const m = line.match(/^\[([\d\-T:.Z]+)\]\s*(.+)$/);
+      if (m) {
+        const cls = liveClassify(line);
+        return `<div class="log-line"><span class="log-time">[${m[1].slice(11, 19)}]</span> <span class="${cls}">${liveEscape(m[2])}</span></div>`;
+      }
+      return `<div class="log-line">${liveEscape(line)}</div>`;
+    }).join('');
+
+    const box = $('#log-box');
+    if (box) {
+      box.innerHTML = html || '<div class="sub">No activity</div>';
+      const lineCount = $('#live-line-count');
+      if (lineCount) lineCount.textContent = filtered.length + ' lines';
+      if ($('#live-autoscroll')?.checked) box.scrollTop = box.scrollHeight;
+      const lastUpdate = $('#live-last-update');
+      if (lastUpdate) lastUpdate.textContent = 'last update ' + new Date().toLocaleTimeString();
+    }
+  } catch (e) {
+    const pill = $('#live-log-pill');
+    if (pill) { pill.textContent = 'offline'; pill.classList.remove('pill-live'); }
+  }
+}
+
+async function refreshLiveStack() {
+  try {
+    const r = await fetch('/api/panel/stack-status');
+    if (!r.ok) return;
+    const d = await r.json();
+
+    const set = (id, value, klass, sub) => {
+      const el = $('#' + id);
+      if (el) {
+        el.textContent = value;
+        el.className = 'stat ' + (klass || '');
+      }
+      if (sub !== undefined) {
+        const s = $('#' + id.replace('-status', sub.id ? sub.id : '-sub'));
+        if (s && typeof sub === 'string') s.textContent = sub;
+      }
+    };
+
+    // Tunnel
+    const tStat = $('#live-tunnel-status');
+    if (tStat) {
+      tStat.textContent = d.tunnel?.reachable ? '✓ reachable' : '✗ unreachable';
+      tStat.style.color = d.tunnel?.reachable ? 'var(--ok, #4ade80)' : 'var(--err, #f87171)';
+    }
+    const tUrl = $('#live-tunnel-url');
+    if (tUrl) tUrl.textContent = d.tunnel?.url || '—';
+
+    // Ollama
+    const oStat = $('#live-ollama-status');
+    if (oStat) {
+      oStat.textContent = d.ollama?.daemonReachable ? '✓ ready' : '✗ down';
+      oStat.style.color = d.ollama?.daemonReachable ? 'var(--ok, #4ade80)' : 'var(--err, #f87171)';
+    }
+    const oSub = $('#live-ollama-sub');
+    if (oSub) oSub.textContent = (d.ollama?.installedCompatibleModels || []).join(', ') || 'no models';
+
+    // Claude
+    const cStat = $('#live-claude-status');
+    if (cStat) {
+      cStat.textContent = d.claudeCode?.available ? '✓ ' + (d.claudeCode?.status || 'wired') : '✗ unavailable';
+      cStat.style.color = d.claudeCode?.available ? 'var(--ok, #4ade80)' : 'var(--err, #f87171)';
+    }
+    const cSub = $('#live-claude-sub');
+    if (cSub) cSub.textContent = 'in-flight: ' + (d.claudeCode?.inFlightCount ?? 0);
+
+    // iOS
+    const iStat = $('#live-ios-status');
+    if (iStat) {
+      iStat.textContent = d.ios?.bridgeReady ? '✓ ready' : '✗ down';
+      iStat.style.color = d.ios?.bridgeReady ? 'var(--ok, #4ade80)' : 'var(--err, #f87171)';
+    }
+    const iSub = $('#live-ios-sub');
+    if (iSub) iSub.textContent = 'bearer ' + (d.ios?.bearerSet ? 'set' : 'missing');
+  } catch (e) { /* ignore */ }
+}
+
+function startLiveLog() {
+  if (liveLogTimer) return;
+  refreshLogs(); refreshLiveStack();
+  liveLogTimer = setInterval(refreshLogs, 1000);
+  liveStackTimer = setInterval(refreshLiveStack, 3000);
+}
+
+function stopLiveLog() {
+  if (liveLogTimer) { clearInterval(liveLogTimer); liveLogTimer = null; }
+  if (liveStackTimer) { clearInterval(liveStackTimer); liveStackTimer = null; }
+}
+
+// Wire the Pause button
+document.addEventListener('DOMContentLoaded', () => {
+  const pauseBtn = document.getElementById('btn-log-pause');
+  if (pauseBtn) {
+    pauseBtn.onclick = () => {
+      liveLogPaused = !liveLogPaused;
+      pauseBtn.textContent = liveLogPaused ? 'Resume' : 'Pause';
+      const pill = document.getElementById('live-log-pill');
+      if (pill) {
+        pill.textContent = liveLogPaused ? 'paused' : 'live';
+        pill.classList.toggle('pill-live', !liveLogPaused);
+      }
+    };
+  }
+});
 
 $$('.tab').forEach(b => {
   b.onclick = () => {
@@ -96,7 +240,9 @@ $$('.tab').forEach(b => {
     b.classList.add('active');
     $$('.panel').forEach(p => p.classList.remove('active'));
     $(`#tab-${b.dataset.tab}`).classList.add('active');
-    if (b.dataset.tab === 'logs') refreshLogs();
+    // Log tab now hosts a single "Open Live Monitor →" button to the standalone
+    // /live.html page (cleaner full-screen UX). The integrated startLiveLog
+    // timers below are dead code but kept in case the user reverts to embedded.
     if (b.dataset.tab === 'connections') startConnectionsPolling();
     else stopConnectionsPolling();
   };
@@ -309,8 +455,14 @@ $('#btn-start').onclick = async () => { await api('/api/bridge/start', { method:
 $('#btn-stop').onclick = async () => { await api('/api/bridge/stop', { method:'POST' }); refreshStatus(); };
 $('#btn-restart').onclick = async () => { await api('/api/bridge/restart', { method:'POST' }); refreshStatus(); };
 $('#btn-save').onclick = () => saveConfig(false);
-$('#btn-log-refresh').onclick = refreshLogs;
-$('#btn-log-clear').onclick = async () => { await api('/api/logs/clear', { method:'POST' }); refreshLogs(); };
+$('#btn-log-refresh').onclick = () => { liveLastSeen = ''; refreshLogs(); };
+$('#btn-log-clear').onclick = () => {
+  // Clear on-screen only — does NOT delete bridge.log on disk.
+  const box = $('#log-box');
+  if (box) box.innerHTML = '';
+  liveLastSeen = '';
+  const lc = $('#live-line-count'); if (lc) lc.textContent = '0 lines';
+};
 
 async function refreshAutostart() {
   const r = await api('/api/autostart');
