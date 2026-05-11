@@ -21,7 +21,6 @@ proposed fix. Status tag in the header — update when fixed and add a
 
 | # | Severity | Title | File |
 |---|---|---|---|
-| 002 | **P1** | `create_note` returns hybrid response: Claude "/login" error + native success | [2026-05-12-002-note-create-hybrid-response.md](2026-05-12-002-note-create-hybrid-response.md) |
 | 003 | **P0** | `Explain bayes theorem` returns "/login" — Claude Code requires login, not Ollama | [2026-05-12-003-ollama-via-claude-login-error.md](2026-05-12-003-ollama-via-claude-login-error.md) |
 | 004 | P1 | `Set a timer for two minutes` fails — regex only matches digits, not spelled-out numbers | [2026-05-12-004-timer-spelled-numbers.md](2026-05-12-004-timer-spelled-numbers.md) |
 
@@ -30,6 +29,7 @@ proposed fix. Status tag in the header — update when fixed and add a
 | # | Severity | Title | Commit | IPA |
 |---|---|---|---|---|
 | ✅ [001](2026-05-12-001-dashboard-onboarding-copy.md) | P2 | Dashboard onboarding cards copy unclear → soften + dismissible | `b4d922c` | next |
+| ✅ [002](2026-05-12-002-note-create-hybrid-response.md) | P1 | `create_note` hybrid response → GATE 6 requires research verb + auth-error short-circuit | `96ecfbd` | next |
 
 ## Workflow
 
