@@ -39,6 +39,45 @@ export async function handleRequest(req, res, deps) {
     });
   }
 
+  // 2026-05-12 — manual Claude sandbox reset (Opzione A+B button).
+  // Wipes the same state that start-all.sh and claude-runner.js clean,
+  // but on-demand without restarting the harness. Useful mid-session if
+  // Claude is leaking stale context (e.g. previous IT chat, dead MCP refs).
+  if (p === '/api/panel/sandbox/reset' && req.method === 'POST') {
+    try {
+      const serverDir = path.dirname(LOG_FILE).replace(/logs$/, '').replace(/\/$/, '');
+      // serverDir = .../03_HARNESS/server (LOG_FILE is .../logs/bridge.log)
+      const sandboxClaude = path.join(serverDir, '.claude-sandbox', '.claude');
+      const sessions = path.join(serverDir, 'logs', 'sessions.json');
+      let wiped = [];
+      if (fs.existsSync(sandboxClaude)) {
+        fs.rmSync(sandboxClaude, { recursive: true, force: true });
+        wiped.push('.claude-sandbox/.claude/');
+      }
+      if (fs.existsSync(sessions)) {
+        fs.rmSync(sessions, { force: true });
+        wiped.push('logs/sessions.json');
+      }
+      // Also wipe the Claude Code project dir tied to the sandbox CWD.
+      const home = process.env.HOME || process.env.USERPROFILE || '';
+      if (home) {
+        const sandboxCwd = path.join(serverDir, '.claude-sandbox');
+        const projKey = sandboxCwd.replace(/[\\/:]/g, '-').replace(/^-+/, '');
+        const projDir = path.join(home, '.claude', 'projects', projKey);
+        if (fs.existsSync(projDir)) {
+          fs.rmSync(projDir, { recursive: true, force: true });
+          wiped.push('~/.claude/projects/<sandbox>/');
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, data: { wiped, count: wiped.length } }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: { message: e.message } }));
+    }
+    return true;
+  }
+
   // 2026-05-12 batch 5 — tail bridge.log for the unified live-log card.
   if (p === '/api/log/tail') {
     const lines = parseInt(url.searchParams.get('lines') || '80', 10);

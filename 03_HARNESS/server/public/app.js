@@ -454,6 +454,31 @@ if (btnTunnelRestart) btnTunnelRestart.onclick = async () => {
 $('#btn-start').onclick = async () => { await api('/api/bridge/start', { method:'POST' }); refreshStatus(); };
 $('#btn-stop').onclick = async () => { await api('/api/bridge/stop', { method:'POST' }); refreshStatus(); };
 $('#btn-restart').onclick = async () => { await api('/api/bridge/restart', { method:'POST' }); refreshStatus(); };
+
+// 🧹 Reset Claude sandbox (Opzione A+B manual button)
+$('#btn-sandbox-reset').onclick = async () => {
+  const btn = $('#btn-sandbox-reset');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '… wiping';
+  try {
+    const r = await fetch('/api/panel/sandbox/reset', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      btn.textContent = `✓ wiped ${d.data.count} paths`;
+      console.log('[sandbox] wiped:', d.data.wiped);
+    } else {
+      btn.textContent = '✗ failed';
+      console.error('[sandbox] reset failed:', d.error);
+    }
+  } catch (e) {
+    btn.textContent = '✗ ' + e.message;
+  }
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }, 2500);
+};
 $('#btn-save').onclick = () => saveConfig(false);
 $('#btn-log-refresh').onclick = () => { liveLastSeen = ''; refreshLogs(); };
 $('#btn-log-clear').onclick = () => {

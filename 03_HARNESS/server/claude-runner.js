@@ -304,6 +304,22 @@ export async function runClaude(cfg, prompt, deviceId, onEvent, onSpawn, onSessi
     }
     if (useSession) {
       if (isNew) {
+        // 2026-05-12 Opzione B — clean-on-new-session.
+        // Every time we open a brand-new Claude session (not --resume), wipe
+        // any leftover working memory in the sandbox. Guarantees the new
+        // session starts with zero context: no stale notepad entries, no
+        // "Supabase MCP disconnected" residue, no IT phrases sticking around.
+        // Resume sessions intentionally keep their state (multi-turn).
+        try {
+          const sandboxClaudeDir = path.join(__MODULE_DIR__, '.claude-sandbox', '.claude');
+          if (fs.existsSync(sandboxClaudeDir)) {
+            fs.rmSync(sandboxClaudeDir, { recursive: true, force: true });
+            log('[claude-runner] wiped .claude-sandbox/.claude/ on new session');
+          }
+        } catch (e) {
+          log('[claude-runner] sandbox wipe failed:', e.message);
+        }
+
         args.push('--session-id', sessionId);
         const baseSysPrompt = domainSystemPrompt || cfg.claude.system_prompt;
         const sysPrompt = injectSystemContext(baseSysPrompt);

@@ -82,6 +82,24 @@ fi
 # Cleanup stale lock files
 rm -f logs/bridge.lock logs/panel.lock 2>/dev/null
 
+# ─── Claude sandbox wipe (Opzione A — clean-on-start) ──────────────────
+# Before launching, wipe Claude Code working memory + harness session map.
+# This guarantees every harness start spawns Claude with zero context
+# inherited from the previous run — no IT pollution, no "Supabase MCP
+# disconnected" leftover noise, no stale notepad. The .claude-sandbox/CLAUDE.md
+# operator manual (committed in git) is the ONLY thing Claude reads at boot.
+#
+# What we touch (all isolated to the harness sandbox; user's personal
+# Claude Code projects in ~/.claude/projects/* are NEVER touched):
+#   - .claude-sandbox/.claude/        (Claude working memory inside sandbox)
+#   - logs/sessions.json              (deviceId → claudeSessionId map)
+#   - ~/.claude/projects/<sandbox>/   (Claude history for sandbox CWD)
+echo "[start-all] Wiping Claude sandbox state (clean-on-start)..."
+rm -rf .claude-sandbox/.claude/ 2>/dev/null
+rm -f logs/sessions.json 2>/dev/null
+SANDBOX_PROJ="$HOME/.claude/projects/$(pwd | sed 's#[/:\\]#-#g' | sed 's#^-##')--claude-sandbox"
+rm -rf "$SANDBOX_PROJ" 2>/dev/null || true
+
 # Give the OS a moment to release the ports
 sleep 1
 
