@@ -62,6 +62,7 @@ struct SettingsView: View {
                 homeKitSection
                 voiceSection
                 privacySection
+                modesSection
                 debugSection
                 aboutSection
             }
@@ -594,6 +595,39 @@ struct SettingsView: View {
         } header: {
             Text("🔧 Debug")
         }
+    }
+
+    // MARK: - Modes section (Phase 2 — GATE 7)
+
+    private var modesSection: some View {
+        Section {
+            NavigationLink {
+                ModesSelectionView()
+            } label: {
+                HStack {
+                    Image(systemName: "switch.2")
+                        .foregroundColor(.accentColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Operating Mode")
+                            .font(.body)
+                        Text(currentModeLabel)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+            }
+        } header: {
+            Text("⚙️ Modes")
+        } footer: {
+            Text("Switch between Minimal · Local-First · Apple Optimized · Full Power based on which infrastructure you have available.")
+        }
+    }
+
+    private var currentModeLabel: String {
+        let raw = UserDefaults.standard.string(forKey: "gigi.user.mode") ?? GigiMode.fullPower.rawValue
+        let mode = GigiMode(rawValue: raw) ?? .fullPower
+        return "Active: \(mode.displayName)"
     }
 
     // MARK: - About section
