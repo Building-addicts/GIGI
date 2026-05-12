@@ -377,3 +377,4 @@
 - `2026-05-12T18:57:28+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-12T19:02:34+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-12T19:03:56+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
+- `2026-05-12T19:09:12+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session ) _(modified: docs/plans/gigi-capability-expansion-2026-05-12.md)_
