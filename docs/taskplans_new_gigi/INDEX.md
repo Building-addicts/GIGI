@@ -1,4 +1,4 @@
-# Task plans Phase 2-4 — 8 GATE modulari per ribilanciamento GIGI
+# Task plans Phase 2-4 + 5 — 13 GATE modulari (8 ribilanciamento + 5 capability expansion post-MVP)
 
 > **Cartella**: `docs/taskplans_new_gigi/`
 > **Generata**: 2026-05-11 — aggiornata post Groq removal
@@ -52,7 +52,30 @@ L'obiettivo finale: GIGI v0.1.0 OSS-ready, demo "Tesla → nota" in <90s, zero A
 | **7** | Modes UI + setup wizard | 3-4 g | ✅ IMPLEMENTED (2026-05-12) | GATE 6 | `GigiMode` enum + `GigiModeDetector` + `ModesSelectionView` (4 cards) + Settings modesSection + `setup-oss-demo.sh` 10-step idempotent |
 | **8** | Hardening + OSS release v0.1.0 | 5-7 g | 📋 DOCS READY (device tests + tag pending, 2026-05-12) | GATE 7 | README + LICENSE Apache 2.0 + CHANGELOG v0.1.0-rc + `docs/release/DEMO_VIDEO_SCRIPT.md` 3-min storyboard + `docs/release/v0.1.0-release-checklist.md` 10 AC + dep audit + 12-step tag procedure. Manca: device tests Spike A/B/C + demo video recording + tag |
 
-**Totale effort stimato: 28-39 giorni lavorativi**, in linea con il piano §10 (5.5-6.5 settimane / 27-32 giorni). Il range superiore include buffer per Spike B/C + rework iterativo.
+**Totale effort stimato GATE 0-8: 28-39 giorni lavorativi**, in linea con il piano §10 (5.5-6.5 settimane / 27-32 giorni). Il range superiore include buffer per Spike B/C + rework iterativo.
+
+---
+
+## Tabella riassuntiva 5 GATE Capability Expansion (POST-MVP)
+
+> **Origine**: master plan `docs/plans/gigi-capability-expansion-2026-05-12.md` (~600 righe, 13 sezioni)
+> **Scope**: espandere GIGI da 17 a ~62 tool su Apple FM + introdurre meccanismo di discovery a 4 layer (Onboarding, Conversational, UI Sheet, Proactive)
+> **Trigger**: MVP shippato (1 maggio 2026) + beta tester onboardati
+> **ADR target**: ADR-0010 *"Tool taxonomy + discovery UX"* (Proposed → Accepted alla chiusura GATE 12)
+
+| # | Title | Effort | Status | Depends on | Sub-gate | Brief outcome |
+|---|---|---|---|---|---|---|
+| **9** | Capability Week 1 — Power User Unlock | ~12h | 📋 PLANNED (2026-05-12) | MVP shipped | 9.A→9.D | `run_shortcut` meta-tool (universal Shortcuts bridge) + `set_homekit_scene` + `web_search` (Safari) + Onboarding Layer A (3-step tour). 18→21 tool. |
+| **10** | Capability Week 2 — Productivity Boost | ~14h | 📋 PLANNED (2026-05-12) | GATE 9 | 10.A→10.D | `create_calendar_event` (EventKit) + `add_to_note` (Shortcut bridge) + 3 utility (clipboard/battery/flashlight) + 3 knowledge mini (define/calculate/translate) + **Layer B Conversational Discovery** (`discover_capabilities` pseudo-tool intercept). 21→29 tool. |
+| **11** | Capability Week 3 — Ambient & Social | ~14h | 📋 PLANNED (2026-05-12) | GATE 10 | 11.A→11.D | HomeKit fine control (brightness/color/thermostat) + Location (get_now + share) + Messaging deep links (email/Telegram/Signal) + Focus mode. 29→38 tool. |
+| **12** | Capability Week 4 — Knowledge & Meta + Discovery UI | ~14h | 📋 PLANNED (2026-05-12) | GATE 11 | 12.A→12.D | `web_search_inline` (DDG instant answer, no Safari) + `scan_document` (VisionKit) + `get_news_headlines` + `repeat_last_action` + `undo_last_action` + **Layer C UI Sheet** (Dashboard tab "Capabilities" con 7 categorie tap-to-try). ADR-0010 promosso Accepted. 38→43 tool. |
+| **13** | Capability Week 5+ — Long Tail + Proactive Suggestions | 20-40h variabile | 📋 PLANNED (2026-05-12) | GATE 12 + telemetry MVP | 13.LT + 13.P1+P2+P3 | ~20 long-tail tool prioritized backlog (block_number, move/cancel calendar, podcast/playlist, sensor, geofence reminder, set_volume, screenshot, list_shortcuts, ecc.) + **Layer D Proactive Suggestions** (`GigiSuggestionEngine` + 3 provider concreti + opt-in flow). 43→~62 tool. ADR-0010 finale. |
+
+**Totale effort GATE 9-13**: ~74-94h (~10-12 giorni full-time, oppure 4-6 settimane part-time @ ~15h/settimana).
+
+**Capability count finale**: 17 → ~62 tool. **Discovery completo**: 4 layer (A/B/C/D) accessibili da onboarding, voce, UI passive, proactive.
+
+---
 
 ---
 
@@ -88,6 +111,25 @@ GATE 3 (Path 2     GATE 4 (Path 3   (parallelo opt-in: nessuno)
             │
             ▼
         🎉 v0.1.0 OSS public launch
+            │
+            │  ─── POST-MVP capability expansion (linear) ───
+            ▼
+        GATE 9 (Week 1 — power user unlock: run_shortcut + homekit_scene + web_search + Onboarding A)
+            │
+            ▼
+        GATE 10 (Week 2 — productivity: calendar/note/utility/knowledge mini + Layer B discovery)
+            │
+            ▼
+        GATE 11 (Week 3 — ambient & social: HomeKit fine + location + messaging deep links + focus)
+            │
+            ▼
+        GATE 12 (Week 4 — knowledge meta + Layer C UI Sheet — ADR-0010 Accepted)
+            │
+            ▼
+        GATE 13 (Week 5+ — long tail + Layer D Proactive Suggestions)
+            │
+            ▼
+        🚀 v1.1 GIGI capability-rich + 4-layer discovery
 ```
 
 **Note sul grafo**:
@@ -216,5 +258,6 @@ Questa sezione è **critica**: senza di lei un task plan vecchio è inutile (non
 
 ## Changelog INDEX
 
+- **2026-05-12 (late)** — Added **GATE 9-13 Capability Expansion** (POST-MVP roadmap, ~10-12 giorni full-time): 5 nuovi task plan in `docs/taskplans_new_gigi/GATE-9-...md` → `GATE-13-...md` (~2500 righe totali). Master plan source: `docs/plans/gigi-capability-expansion-2026-05-12.md`. ADR-0010 *"Tool taxonomy + discovery UX"* in Proposed state, promosso ad Accepted alla chiusura GATE 12. Scope: 17 → ~62 tool + 4 discovery layer (A Onboarding / B Conversational / C UI Sheet / D Proactive).
 - **2026-05-12** — GATE 2-3-4-5(scaffold)-7 implemented overnight by Claude Opus 4.7. ADR-0007/0008/0009/0010 → Accepted. Build SUCCEEDED. IPA dropped to Windows. Spike A scaffold ready. See `docs/HANDOFF_2026-05-12.md`.
 - **2026-05-11** — versione iniziale creata, 8 GATE + INDEX
