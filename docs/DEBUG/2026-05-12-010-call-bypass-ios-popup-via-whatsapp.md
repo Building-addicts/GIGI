@@ -1,6 +1,6 @@
 # Bug 010 — `Call X` still shows iOS native popup — route via WhatsApp to bypass
 
-- **Status**: ✅ fixed
+- **Status**: ⚠️ wontfix (reverted to tel:// — iOS popup unavoidable)
 - **Severity**: P1 (perceived UX friction, even though it's an iOS system protection)
 - **Discovered**: 2026-05-12 — Armando re-test after bug-006 v1 fix
 - **Area**: iOS · GigiActionBridge.makeCallAutomatic · routing strategy
@@ -115,9 +115,32 @@ the time.
 - WhatsApp install check uses `canOpenURL` (returns true only if scheme registered)
 - WhatsApp scheme requires `LSApplicationQueriesSchemes` Info.plist entry → already present
 
-## Resolution
+## Resolution — REVERTED (live testing surfaced WhatsApp scheme limitations)
 
-- **Commit**: `(this commit)` (2026-05-12)
-- **IPA**: TBD — next build
-- **Files changed**: `02_GIGI_APP/GIGI/GigiActionBridge.swift:325-385` (smart routing branch + fallback)
-- **Related to**: bug 006 v1 (cfc8b8e) which simplified the chat bubble text. This is v2 — the substantive UX fix.
+Multi-attempt history (each tested live on device):
+
+- **v1 `cfc8b8e`**: simplified bubble text from "Tap Call to confirm..." → "Calling X." iOS popup remains.
+- **v2 `a7c58a2`**: used `whatsapp://send?phone=X` to bypass popup. WhatsApp opened the chat, NOT a call. User: *"mi apre solo la chat di whatsapp ma non chiama"* — wrong intent.
+- **v3 `ec80d56`**: switched to `whatsapp://call?phone=X` hoping for direct VoIP call. WhatsApp returned **"Invalid call link"** error. The `whatsapp://call` scheme is reserved for joining specific call link invites (group call URLs), not for placing arbitrary new calls to a phone number.
+
+**Conclusion**: WhatsApp does NOT expose any public URL scheme to **start** a fresh call from outside the app. Any documented routes:
+- `whatsapp://send?phone=X` — opens chat (not call)
+- `whatsapp://call?id=<call-link-id>` — joins existing call link (not creates one)
+- Both are gated by WhatsApp's own UX flow.
+
+### Final solution — v4 (this commit)
+
+Revert `makeCallAutomatic` to plain `tel://X` with iOS standard popup. The popup is unavoidable for third-party apps without CallKit + VoIP entitlement (which is out of scope for v1: requires Apple approval cycle + VoIP-specific use case).
+
+This is the iOS-standard UX shared by every 3rd-party app that wants to place phone calls (Siri non-Apple, Alexa app, Google Assistant, Mail link click, Calendar attendee call, etc).
+
+- **Commit**: `(see following commit)` (2026-05-12)
+- **Files**: `02_GIGI_APP/GIGI/GigiActionBridge.swift:347-374` (reverted to pure tel://)
+- **Bubble copy**: "Calling \(contact)." (v1 fix preserved, no "Tap Call to confirm" redundancy)
+
+### v1.1 follow-up
+
+If iOS popup remains a real pain point in user feedback, the path forward is:
+- Submit CallKit + VoIP entitlement request to Apple (~2 weeks review)
+- Implement CallKit `CXStartCallAction` provider
+- Result: popup replaced by CallKit's own UI (not invisible, but Apple-native and unified with phone app)
