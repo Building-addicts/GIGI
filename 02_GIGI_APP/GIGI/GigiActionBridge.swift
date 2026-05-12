@@ -1506,7 +1506,7 @@ class GigiActionBridge {
         // launches Notes.app. If canOpenURL returns false the user opens
         // Notes manually — message below is clear enough.
         if let url = URL(string: "mobilenotes://"), UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url)
+            await UIApplication.shared.open(url)
         }
 
         let displayTitle = cleanTitle.isEmpty ? "your note" : "'\(cleanTitle)'"
