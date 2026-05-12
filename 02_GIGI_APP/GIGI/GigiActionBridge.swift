@@ -1478,41 +1478,85 @@ class GigiActionBridge {
         return map[n]
     }
 
-    // MARK: - Add to Note (GATE 10.A — MVP clipboard handoff)
+    // MARK: - Add to Note (GATE 10.A — UIActivityViewController share path)
 
-    /// Apple does NOT expose a public API for 3rd-party apps to write into
-    /// specific Notes — Notes is sandboxed. MVP shipped behavior:
-    ///   1. Copy the content to UIPasteboard.general (so user can paste with
-    ///      one motion when they open Notes themselves)
-    ///   2. Return an honest response acknowledging the clipboard handoff
-    ///      and the v1.1 plan for true append via Shortcut bridge
+    /// Sends content to Notes via the iOS system share sheet. Notes has a
+    /// built-in share extension that lets the user pick a destination
+    /// (new note OR existing note) and writes the content NATIVELY — no
+    /// clipboard paste, no fake "open Notes" attempt, no broken expectation.
     ///
-    /// We intentionally do NOT auto-open Notes via `mobilenotes://` because:
-    ///   - The scheme is unreliable on iOS 26 (often fails canOpenURL)
-    ///   - Opening Notes without writing anything creates a broken
-    ///     expectation ("it opened my notes but nothing was added")
-    ///   - Better to be transparent: clipboard is filled, user pastes
+    /// Flow:
+    ///   1. Banner "📋 Sending to Notes..."
+    ///   2. Present UIActivityViewController with the content as the item
+    ///   3. User taps Notes in the share sheet
+    ///   4. Notes share extension shows note picker; user picks "Append to
+    ///      existing note" → done
     ///
-    /// Polish backlog (GATE 14): user installs "GIGI Append to Note"
-    /// Shortcut once. GIGI invokes via shortcuts://x-callback-url for
-    /// truly automatic append. Requires onboarding flow to install the
-    /// Shortcut.
+    /// Clipboard is filled as a backup so if the user dismisses the share
+    /// sheet they can still paste manually.
+    ///
+    /// Polish backlog (GATE 14): user installs a "GIGI Append to Note"
+    /// Shortcut once; GIGI invokes via shortcuts://x-callback-url for
+    /// truly 1-tap append directly to a specific note by name. Today's
+    /// path (share sheet) is 2 taps total — already much better than the
+    /// previous "open Notes, paste manually" MVP.
     @MainActor
     private func addToNote(noteTitle: String, content: String) async -> String {
         let cleanTitle = noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanContent.isEmpty else { return "What should I add to the note?" }
 
+        // Clipboard backup — if the user dismisses the share sheet they can
+        // still paste manually.
         UIPasteboard.general.string = cleanContent
 
-        let displayContent = cleanContent.count > 40
-            ? "\(String(cleanContent.prefix(40)))…"
-            : cleanContent
-        let displayTitle = cleanTitle.isEmpty
-            ? "your note"
-            : "your '\(cleanTitle)' note"
+        // Present share sheet on the topmost view controller.
+        guard let scene = UIApplication.shared.connectedScenes
+                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+                ?? UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootVC = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
+                ?? scene.windows.first?.rootViewController else {
+            // Fallback to plain clipboard message if we can't find a VC to present from.
+            return "Copied '\(cleanContent.prefix(40))…' to your clipboard. Paste into Notes when ready."
+        }
 
-        return "Copied '\(displayContent)' to your clipboard. Paste into \(displayTitle) when ready. Direct Notes write is coming in v1.1 via a Shortcut bridge."
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController { topVC = presented }
+
+        // Prepend a header line with the note title (if any) so the Notes
+        // share extension shows it as context — user immediately knows
+        // which note this content belongs to.
+        let shareText: String
+        if cleanTitle.isEmpty {
+            shareText = cleanContent
+        } else {
+            shareText = "[\(cleanTitle)] \(cleanContent)"
+        }
+
+        let activityVC = UIActivityViewController(
+            activityItems: [shareText],
+            applicationActivities: nil
+        )
+        // Exclude activities that don't make sense for a note-append flow.
+        activityVC.excludedActivityTypes = [
+            .postToFacebook, .postToTwitter, .postToWeibo, .postToTencentWeibo,
+            .postToFlickr, .postToVimeo, .assignToContact, .saveToCameraRoll,
+            .addToReadingList, .airDrop, .openInIBooks, .markupAsPDF
+        ]
+        // iPad popover anchor — required or it crashes on iPad.
+        if let pop = activityVC.popoverPresentationController {
+            pop.sourceView = topVC.view
+            pop.sourceRect = CGRect(x: topVC.view.bounds.midX,
+                                    y: topVC.view.bounds.midY,
+                                    width: 0, height: 0)
+            pop.permittedArrowDirections = []
+        }
+
+        GigiSmartOrchestrator.shared.showBanner("📋 Sending to Notes...")
+        topVC.present(activityVC, animated: true)
+
+        let displayTitle = cleanTitle.isEmpty ? "Notes" : "your '\(cleanTitle)' note"
+        return "Tap Notes in the share sheet, then pick \(displayTitle)."
     }
 
     // MARK: - Email
