@@ -1478,33 +1478,82 @@ class GigiActionBridge {
         return map[n]
     }
 
-    // MARK: - Add to Note (GATE 10.A — UIActivityViewController share path)
+    // MARK: - Add to Note (GATE 10.A — Shortcut bridge with share-sheet fallback)
 
-    /// Sends content to Notes via the iOS system share sheet. Notes has a
-    /// built-in share extension that lets the user pick a destination
-    /// (new note OR existing note) and writes the content NATIVELY — no
-    /// clipboard paste, no fake "open Notes" attempt, no broken expectation.
+    /// Architectural pattern (GATE 14.B.2): when Apple closes write APIs
+    /// for a system app (Notes here), GIGI invokes a user-installed
+    /// Shortcut via `shortcuts://x-callback-url` that uses Shortcuts.app's
+    /// privileged access. This delivers 0-tap UX after one-time setup.
     ///
     /// Flow:
-    ///   1. Banner "📋 Sending to Notes..."
-    ///   2. Present UIActivityViewController with the content as the item
-    ///   3. User taps Notes in the share sheet
-    ///   4. Notes share extension shows note picker; user picks "Append to
-    ///      existing note" → done
+    ///   - IF GigiShortcutRegistry has a registered Shortcut tagged with
+    ///     systemPurpose="append_to_note" AND enabled:
+    ///       → invoke Shortcut via URL scheme with "title|content" input
+    ///       → 0 user taps; Shortcut writes natively to Notes
+    ///   - ELSE (no Shortcut registered):
+    ///       → fall back to UIActivityViewController + Notes share extension
+    ///       → 2 taps but works without setup
     ///
-    /// Clipboard is filled as a backup so if the user dismisses the share
-    /// sheet they can still paste manually.
-    ///
-    /// Polish backlog (GATE 14): user installs a "GIGI Append to Note"
-    /// Shortcut once; GIGI invokes via shortcuts://x-callback-url for
-    /// truly 1-tap append directly to a specific note by name. Today's
-    /// path (share sheet) is 2 taps total — already much better than the
-    /// previous "open Notes, paste manually" MVP.
+    /// Clipboard backup remains in both paths.
     @MainActor
     private func addToNote(noteTitle: String, content: String) async -> String {
         let cleanTitle = noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanContent.isEmpty else { return "What should I add to the note?" }
+
+        // Tier 1: user has a registered Shortcut for append_to_note.
+        if let shortcut = GigiShortcutRegistry.shared.find(byPurpose: "append_to_note") {
+            return await invokeNotesShortcut(
+                shortcut: shortcut,
+                title: cleanTitle,
+                content: cleanContent
+            )
+        }
+
+        // Tier 2: share-sheet fallback (zero setup).
+        return await addToNoteViaShareSheet(noteTitle: cleanTitle, content: cleanContent)
+    }
+
+    /// Tier 1 — invokes the user-installed "Append to Note" Shortcut via
+    /// the canonical shortcuts:// x-callback-url scheme. Input is encoded
+    /// as "title|content" with a pipe separator; the Shortcut splits on
+    /// the pipe and uses its Notes-write privilege.
+    @MainActor
+    private func invokeNotesShortcut(
+        shortcut: RegisteredShortcut,
+        title: String,
+        content: String
+    ) async -> String {
+        let combinedInput = "\(title)|\(content)"
+        var cs = CharacterSet.urlQueryAllowed
+        cs.remove(charactersIn: "+&=#?")
+        let encodedName = shortcut.name.addingPercentEncoding(withAllowedCharacters: cs) ?? shortcut.name
+        let encodedInput = combinedInput.addingPercentEncoding(withAllowedCharacters: cs) ?? combinedInput
+
+        let urlString = "shortcuts://x-callback-url/run-shortcut?name=\(encodedName)&input=text&text=\(encodedInput)"
+        guard let url = URL(string: urlString) else {
+            return "Couldn't build the Shortcut URL."
+        }
+
+        // Clipboard backup in case the Shortcut fails or the user cancels.
+        UIPasteboard.general.string = content
+
+        GigiShortcutRegistry.shared.recordUse(name: shortcut.name)
+        GigiSmartOrchestrator.shared.showBanner("⚡️ Running \(shortcut.name)...")
+        await UIApplication.shared.open(url)
+
+        let displayTitle = title.isEmpty ? "your note" : "your '\(title)' note"
+        return "Appending to \(displayTitle) via Shortcuts."
+    }
+
+    /// Tier 2 — Notes share extension via UIActivityViewController. 2 taps:
+    /// (a) tap Notes in the share sheet, (b) pick destination note. No
+    /// setup required.
+    @MainActor
+    private func addToNoteViaShareSheet(noteTitle: String, content: String) async -> String {
+        // Caller (addToNote) has already trimmed + validated non-empty.
+        let cleanTitle = noteTitle
+        let cleanContent = content
 
         // Clipboard backup — if the user dismisses the share sheet they can
         // still paste manually.

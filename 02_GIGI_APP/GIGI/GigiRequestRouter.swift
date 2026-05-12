@@ -79,6 +79,32 @@ final class GigiRequestRouter {
             return .spoken(speech)
         }
 
+        // GATE 14.B.2 lite — Registered-Shortcut alias intercept.
+        //
+        // The user can register their own Apple Shortcuts in Settings with
+        // natural-language aliases (e.g. Shortcut "accendi torcia" with
+        // alias "open torch"). When the utterance matches any registered
+        // alias literally, dispatch run_shortcut directly. Bypasses Apple
+        // FM and the deterministic verb regex below — explicit user-
+        // declared alias has highest priority.
+        if let registered = GigiShortcutRegistry.shared.matchAlias(text) {
+            GigiDebugLogger.log("GIGI Router: registered-alias match → '\(registered.name)' from utterance '\(text)'")
+            GigiShortcutRegistry.shared.recordUse(name: registered.name)
+            let speech = await GigiActionBridge.shared.execute(GigiIntent(
+                label: "run_shortcut",
+                confidence: 1.0,
+                params: ["name": registered.name, "raw": registered.name, "input": ""]
+            ))
+            let finalSpeech = debugPrefix(
+                routerSource: "alias",
+                tool: "run_shortcut",
+                confidence: 1.0,
+                slot: registered.name
+            ) + speech
+            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+            return .actionInvoked(speech: finalSpeech, tool: "run_shortcut")
+        }
+
         // GATE 10.C tier-0 — Math expression detection.
         //
         // NLEmbedding word vectors don't index pure-number tokens, so

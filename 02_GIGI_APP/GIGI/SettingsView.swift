@@ -74,6 +74,7 @@ struct SettingsView: View {
                 profileSection
                 hardwareTriggerSection
                 homeKitSection
+                myShortcutsSection
                 voiceSection
                 privacySection
                 modesSection
@@ -484,6 +485,43 @@ struct SettingsView: View {
         if n.contains("speaker") || n.contains("audio") { return "hifispeaker.fill" }
         if n.contains("fan") { return "fanblades" }
         return "house.fill"
+    }
+
+    // MARK: - My Shortcuts section (GATE 14.B.2 lite)
+    //
+    // User-declared registry of Apple Shortcuts that GIGI can invoke for
+    // limit cases (Apple-closed APIs like Notes write) and for natural-
+    // language aliasing of user-installed Shortcuts.
+
+    private var myShortcutsSection: some View {
+        Section {
+            NavigationLink {
+                MyShortcutsView()
+            } label: {
+                HStack {
+                    Image(systemName: "command.square.fill")
+                        .foregroundColor(.purple)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("My Shortcuts")
+                        let count = GigiShortcutRegistry.shared.shortcuts.count
+                        if count > 0 {
+                            Text("\(count) registered")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("None registered")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("⚡️ Shortcuts Integration")
+        } footer: {
+            Text("Register your Apple Shortcuts so GIGI can invoke them — for Notes append, custom routines, or natural-language aliases.")
+                .font(.caption)
+        }
     }
 
     // MARK: - Voice section
