@@ -79,6 +79,34 @@ final class GigiRequestRouter {
             return .spoken(speech)
         }
 
+        // GATE 10.C tier-0 — Math expression detection.
+        //
+        // NLEmbedding word vectors don't index pure-number tokens, so
+        // "What's 47 times 23" collapses to just {what, times} for the
+        // semantic match — diluted similarity, falls through to Apple FM
+        // which routes to delegate_local (LLM does arithmetic, slow + costly).
+        //
+        // Direct detection: if the utterance contains digit-operator-digit
+        // patterns (or "X plus Y", "X times Y" etc.), dispatch calculate_math
+        // directly. The expression evaluator handles the math via NSExpression
+        // in microseconds. 100x faster than delegating to an LLM.
+        if let mathExpression = detectMathExpression(in: text) {
+            GigiDebugLogger.log("GIGI Router: tier-0 calculate_math → '\(mathExpression)'")
+            let speech = await GigiActionBridge.shared.execute(GigiIntent(
+                label: "calculate_math",
+                confidence: 1.0,
+                params: ["expression": mathExpression, "raw": mathExpression]
+            ))
+            let finalSpeech = debugPrefix(
+                routerSource: "regex",
+                tool: "calculate_math",
+                confidence: 1.0,
+                slot: mathExpression
+            ) + speech
+            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+            return .actionInvoked(speech: finalSpeech, tool: "calculate_math")
+        }
+
         // GATE 9.A + GATE 15 fix — Explicit verb regex tier-0 fast-path.
         //
         // Restored after GATE 15 device test showed semantic router fails
@@ -877,15 +905,116 @@ final class GigiRequestRouter {
             return ["expression": slot, "raw": slot]
         case "translate_text":
             // translate_text has TWO logical slots: text + targetLanguage.
-            // The simple slot extraction can't split them cleanly without
-            // parsing "to X" patterns. Pass full utterance as text + leave
-            // targetLanguage empty — bridge will detect a missing target
-            // and ask. Apple FM @Generable schema does this split cleanly
-            // when route() falls through to it.
-            return ["text": slot, "targetLanguage": "", "raw": slot]
+            // Parse "<text> to <lang>" / "<text> in <lang>" pattern at the
+            // tail of the slot — covers EN ("good morning to italian") and
+            // IT ("buongiorno in giapponese") variants.
+            let (txt, lang) = parseTranslateSlot(slot)
+            return ["text": txt, "targetLanguage": lang, "raw": slot]
         default:
             return ["raw": slot]
         }
+    }
+
+    // MARK: - Math expression detection (GATE 10.C tier-0)
+
+    /// Returns the math expression if `text` is clearly a math query that
+    /// should bypass Apple FM / LLM and go straight to NSExpression.
+    /// Returns nil otherwise (let semantic / Apple FM handle).
+    ///
+    /// Recognized patterns:
+    ///   - Pure numeric expressions with operators: "47 * 23", "100/8", "2^10"
+    ///   - Natural-language math: "what's 47 times 23", "47 plus 23",
+    ///     "15% of 200", "quanto fa 100 diviso 8"
+    ///   - Common math verbs: "calculate", "compute", "evaluate", "quanto fa"
+    private func detectMathExpression(in text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return nil }
+
+        // Strip common leading verbs that don't add semantic info
+        let leadingPrefixes = [
+            "what's ", "whats ", "what is ",
+            "how much is ", "how much makes ",
+            "calculate the ", "calculate ",
+            "compute the ", "compute ",
+            "evaluate ",
+            "quanto fa ", "quanto è ",
+            "calcola il ", "calcola "
+        ]
+        var stripped = t
+        for prefix in leadingPrefixes where stripped.hasPrefix(prefix) {
+            stripped = String(stripped.dropFirst(prefix.count))
+            break  // only one prefix
+        }
+
+        // Trim trailing "?" / "."
+        stripped = stripped
+            .replacingOccurrences(of: "?", with: "")
+            .replacingOccurrences(of: ".", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Now check: does the remaining string contain (a) at least 2 numbers
+        // and (b) at least one math operator (literal or natural-language)?
+        let digitCount = stripped.filter { $0.isNumber }.count
+        guard digitCount >= 2 else { return nil }
+
+        let mathOperators: [String] = [
+            "+", "-", "*", "/", "%", "^", "**",
+            " plus ", " minus ", " times ", " divided by ", " over ", " x ",
+            " più ", " meno ", " per ", " diviso ", " mod "
+        ]
+        let hasOperator = mathOperators.contains { stripped.contains($0) }
+
+        // Percentage / square-root short forms (single-operand patterns)
+        let isPercentage = stripped.range(of: #"\d+(?:\.\d+)?\s*%"#, options: .regularExpression) != nil
+        let isSqrt = stripped.contains("sqrt(") || stripped.contains("square root")
+
+        guard hasOperator || isPercentage || isSqrt else { return nil }
+
+        return stripped
+    }
+
+    // MARK: - translate_text slot split helper (GATE 10.C bug fix)
+
+    /// Parses "<text> to <lang>" / "<text> in <lang>" patterns out of the
+    /// translate_text slot. Returns (text, langKeyword) tuple. Falls back
+    /// to (raw, "") if no "to/in <lang>" tail is present.
+    ///
+    /// Examples:
+    ///   "good morning to italian"     → ("good morning", "italian")
+    ///   "buongiorno in giapponese"    → ("buongiorno",   "giapponese")
+    ///   "good morning to italia"      → ("good morning", "italia") —
+    ///       "italia" still maps via the bridge language map.
+    private func parseTranslateSlot(_ slot: String) -> (text: String, lang: String) {
+        let trimmed = slot.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return ("", "") }
+
+        // Find the LAST " to " / " in " / " into " marker (last occurrence
+        // — user might say "translate 'to be or not to be' to italian"
+        // where intermediate "to" is text, final "to" is the target).
+        let separators = [" into ", " to ", " in "]
+        var bestSeparatorRange: Range<String.Index>?
+        for sep in separators {
+            if let r = trimmed.range(of: sep, options: [.caseInsensitive, .backwards]) {
+                if bestSeparatorRange == nil || r.upperBound > bestSeparatorRange!.upperBound {
+                    bestSeparatorRange = r
+                }
+            }
+        }
+
+        guard let sepRange = bestSeparatorRange else {
+            return (trimmed, "")
+        }
+
+        let textPart = String(trimmed[trimmed.startIndex..<sepRange.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let langPart = String(trimmed[sepRange.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".?!"))
+
+        if textPart.isEmpty || langPart.isEmpty {
+            return (trimmed, "")
+        }
+        return (textPart, langPart)
     }
 
     // MARK: - Tier-0 regex intercepts (HYBRID with GigiSemanticRouter — GATE 15 fix)

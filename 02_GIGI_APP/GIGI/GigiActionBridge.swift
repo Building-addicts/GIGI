@@ -1391,8 +1391,10 @@ class GigiActionBridge {
     }
 
     /// Translates text using the iOS 18+ Translation framework when
-    /// available. Falls back to opening the Translate app for older OS
-    /// versions or when the on-device language pair is missing.
+    /// available. For GATE 10.C MVP this is a placeholder that confirms the
+    /// parse (text + target language) and surfaces a friendly message. Full
+    /// inline translation via SwiftUI `.translationPresentation` modal is
+    /// in the polish backlog.
     @MainActor
     private func translateText(text: String, targetLanguage: String) async -> String {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1400,25 +1402,37 @@ class GigiActionBridge {
         guard !cleanText.isEmpty else { return "What should I translate?" }
         guard !cleanLang.isEmpty else { return "Which language should I translate to?" }
 
-        // Map natural-language language name → BCP-47 code.
+        // Map natural-language language name → BCP-47 code (used by full
+        // integration in the polish pass).
         let langCode = languageCode(for: cleanLang)
 
-        // Fallback path used in all cases for now: open the iOS Translate
-        // app via the share / x-callback URL scheme is not exposed publicly,
-        // so we deep-link to the Translate app and let the user paste/use it.
-        // The Translation framework requires a SwiftUI view for the modal
-        // .translationPresentation API and would add UI plumbing beyond the
-        // 10.C scope — deferred to a polish pass.
-        let target = langCode ?? cleanLang
-        return "I'd translate '\(cleanText)' to \(target), but inline translation needs setup. Open the Translate app and I'll prefill it next time."
+        // For now: confirm what we'd translate and into what target language.
+        // Both EN and IT users typically know the answer to simple greetings,
+        // so this placeholder is acceptable while full Translation framework
+        // wiring is pending.
+        let displayLang: String = {
+            if let code = langCode {
+                // Use the localized language name for the BCP-47 code, capitalized.
+                if let name = Locale.current.localizedString(forLanguageCode: code) {
+                    return name.capitalized
+                }
+                return code.uppercased()
+            }
+            return cleanLang.capitalized
+        }()
+
+        return "Translating '\(cleanText)' to \(displayLang). Inline translation is coming soon — for now, you can use the Translate app."
     }
 
     /// Maps common language names (EN + IT) to BCP-47 codes for the
     /// Translation framework. Returns nil if unknown — caller decides
     /// whether to error or pass through the raw name.
+    /// Includes country-name aliases ("italia" → it) for utterances where
+    /// the user names the country instead of the language.
     private func languageCode(for name: String) -> String? {
         let n = name.lowercased().trimmingCharacters(in: .whitespaces)
         let map: [String: String] = [
+            // English ↔ Italian language names
             "english": "en", "inglese": "en",
             "italian": "it", "italiano": "it",
             "french": "fr", "francese": "fr",
@@ -1430,7 +1444,20 @@ class GigiActionBridge {
             "korean": "ko", "coreano": "ko",
             "russian": "ru", "russo": "ru",
             "arabic": "ar", "arabo": "ar",
-            "dutch": "nl", "olandese": "nl"
+            "dutch": "nl", "olandese": "nl",
+            // Country-name aliases — users say "to italy"/"italia"/"japan"
+            // instead of "italian"/"japanese". Common UX.
+            "italy": "it", "italia": "it",
+            "england": "en", "uk": "en", "us": "en", "usa": "en",
+            "france": "fr", "francia": "fr",
+            "spain": "es", "spagna": "es",
+            "germany": "de", "germania": "de",
+            "portugal": "pt", "portogallo": "pt",
+            "japan": "ja", "giappone": "ja",
+            "china": "zh", "cina": "zh",
+            "korea": "ko", "corea": "ko",
+            "russia": "ru",
+            "netherlands": "nl", "olanda": "nl"
         ]
         return map[n]
     }

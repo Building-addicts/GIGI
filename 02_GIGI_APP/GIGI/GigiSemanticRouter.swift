@@ -424,11 +424,14 @@ final class GigiSemanticRouter {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Strips trailing "shortcut"/"scorciatoia"/"scene"/"app" filler.
+    /// Strips trailing/leading filler tokens that the trigger prefix didn't
+    /// catch. Per-tool to avoid over-trimming meaningful content.
     private func cleanSlot(_ raw: String, for tool: String) -> String {
         var s = raw
             .replacingOccurrences(of: "\"", with: "")
             .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "?", with: "")
+            .replacingOccurrences(of: "!", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let trailingFiller = [
             " shortcut", " scorciatoia",
@@ -438,6 +441,19 @@ final class GigiSemanticRouter {
         for f in trailingFiller where s.hasSuffix(f) {
             s = String(s.dropLast(f.count))
         }
+
+        // GATE 10.C bug fix — strip dictionary-query trailing filler so
+        // "what does ephemeral mean" → "ephemeral" (not "ephemeral mean")
+        if tool == "define_word" {
+            let dictTrailing = [
+                " mean", " means", " mean",
+                " vuol dire", " significa", " significhi"
+            ]
+            for f in dictTrailing where s.lowercased().hasSuffix(f) {
+                s = String(s.dropLast(f.count))
+            }
+        }
+
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
