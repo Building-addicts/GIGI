@@ -344,49 +344,50 @@ class GigiActionBridge {
             GigiSmartOrchestrator.shared.showBanner("📞 Calling \(contact)...")
         }
 
-        // 2026-05-12 — Smart call routing (bug #006 v2: bypass iOS tel:// popup)
+        // 2026-05-12 — Smart call routing (bug #006 — multiple versions)
         //
-        // iOS forces a confirm alert ("Call +39 X / Cancel") on every tel://
-        // open by third-party apps — a system-level anti-toll-fraud protection
-        // that no app can bypass without CallKit/VoIP entitlement.
+        // v1 (cfc8b8e): simplified bubble text from "Tap Call to confirm..."
+        //   to "Calling X." — iOS popup still shows.
+        // v2 (a7c58a2): tried `whatsapp://send?phone=X` to bypass iOS popup.
+        //   Problem: that opens the CHAT, not a call. User said "Call X"
+        //   → got chat with no call. Wrong intent.
+        // v3 (this commit, B+A per user): use `whatsapp://call?phone=X` for
+        //   a direct VoIP call inside WhatsApp (no iOS popup, actually rings).
+        //   Falls back to `tel://X` when WhatsApp is not installed (iOS
+        //   popup mandatory, but the call actually dials).
+        //   No more whatsapp://send fallback — "Call X" never means "chat".
         //
-        // Workaround: if WhatsApp is installed AND we have a usable
-        // international-format number, open the WhatsApp chat directly via
-        // `whatsapp://send?phone=<digits>`. The user lands inside the WhatsApp
-        // chat with that contact; the prominent call icon in the chat header
-        // is one tap away — no iOS popup. The chat surface also lets the user
-        // pivot to messaging if they prefer.
+        // The `whatsapp://call` scheme is supported by recent WhatsApp
+        // versions (2025+). If an older version ignores the path and just
+        // opens the WhatsApp main screen, the user can manually tap the
+        // recent contact — still better than nothing. We can't detect
+        // WhatsApp version programmatically; we commit to the call URL.
         //
-        // Falls back to tel:// (with the unavoidable iOS popup) when:
-        //   - WhatsApp is not installed
-        //   - The number doesn't have an international prefix we can format
-        //   - The whatsapp:// open fails for any reason
-        //
-        // WhatsApp expects the phone in international format WITHOUT a leading
-        // `+`, e.g. "393756548643" for "+39 375 654 8643". sanitizePhoneNumber
-        // already strips spaces and dashes; we further strip `+`. For numbers
-        // without a country code (e.g. local "06 1234567"), WhatsApp resolution
-        // would fail silently — those skip directly to the tel:// path.
+        // Phone format: WhatsApp expects digits-only with country code,
+        // no leading `+` (e.g. "393756548643" for "+39 375 654 8643").
         let whatsappPhone = digits.hasPrefix("+") ? String(digits.dropFirst()) : digits
-        let hasCountryPrefix = whatsappPhone.count >= 10  // heuristic: country code + national number
-        let whatsappURLString = "whatsapp://send?phone=\(whatsappPhone)"
+        let hasCountryPrefix = whatsappPhone.count >= 10  // country code + national number
 
         let whatsappOpened: Bool = await MainActor.run {
+            // canOpenURL on bare "whatsapp://" returns true iff WhatsApp is installed
+            // (LSApplicationQueriesSchemes whitelists "whatsapp" — see Info.plist).
             guard hasCountryPrefix,
-                  let whatsappURL = URL(string: whatsappURLString),
-                  UIApplication.shared.canOpenURL(whatsappURL) else {
+                  let probe = URL(string: "whatsapp://"),
+                  UIApplication.shared.canOpenURL(probe),
+                  let callURL = URL(string: "whatsapp://call?phone=\(whatsappPhone)") else {
                 return false
             }
-            UIApplication.shared.open(whatsappURL)
+            UIApplication.shared.open(callURL)
             return true
         }
 
         if whatsappOpened {
-            // Successfully routed via WhatsApp — no iOS popup.
-            return "Opening WhatsApp call with \(contact). Tap the call icon at the top of the chat."
+            // WhatsApp received the call URL. Modern versions start ringing
+            // the contact inside WhatsApp directly — no iOS popup.
+            return "Calling \(contact) on WhatsApp."
         }
 
-        // Fallback: tel:// (iOS popup is mandatory, unavoidable).
+        // Fallback: tel:// (iOS popup mandatory, but the call actually dials).
         guard let telURL = URL(string: "tel://\(digits)") else { return "Invalid phone number." }
         let opened = await MainActor.run(resultType: Bool.self) {
             UIApplication.shared.open(telURL)
