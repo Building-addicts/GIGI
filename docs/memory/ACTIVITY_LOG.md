@@ -413,3 +413,4 @@
 - `2026-05-12T23:20:43+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): create_calendar_event uses Apple FM @Generable, not semantic)
 - `2026-05-12T23:23:35+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): add_to_note via UIActivityViewController — actually writes to )
 - `2026-05-12T23:24:29+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(gate-10-a): add_)
+- `2026-05-12T23:41:38+0200` · local · session ended on `armando-rework` (last commit: feat(gate-14-b-2-lite): Shortcut Registry + Settings UI + add_to_note bridge tie)
