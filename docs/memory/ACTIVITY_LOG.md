@@ -394,3 +394,4 @@
 - `2026-05-12T20:50:47+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: merge(gate-9): capab)
 - `2026-05-12T21:03:40+0200` · local · session ended on `armando-rework` (last commit: docs(gate-14): add sub-gate 14.B.2 Shortcut Alias Registry — natural-language )
 - `2026-05-12T21:04:31+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: docs(gate-14): add s)
+- `2026-05-12T21:10:42+0200` · local · session ended on `armando-rework` (last commit: fix(gate-9): discovery intercept — 'what can you do?' echoed input instead of )
