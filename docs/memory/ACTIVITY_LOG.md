@@ -411,3 +411,4 @@
 - `2026-05-12T23:09:03+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): missing await on UIApplication.shared.open in addToNote)
 - `2026-05-12T23:17:36+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): add_to_note honest MVP — clipboard handoff without broken expe)
 - `2026-05-12T23:20:43+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): create_calendar_event uses Apple FM @Generable, not semantic)
+- `2026-05-12T23:23:35+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): add_to_note via UIActivityViewController — actually writes to )
