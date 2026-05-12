@@ -83,6 +83,22 @@ final class GigiContactsEngine {
         return findByName(q).compactMap { phoneAndName(from: $0) }
     }
 
+    /// Bug-017 v3: extended variant including thumbnail photo Data when
+    /// available. iOS users often sync their WhatsApp profile photo to
+    /// Contacts (manually or via CardDAV), so this also exposes "WhatsApp
+    /// photo" for those users — without scraping WhatsApp (blocked by ToS).
+    func disambiguateWithPhotos(_ query: String) async -> [(phone: String, name: String, photo: Data?)] {
+        await ensureCache()
+        let q = query.lowercased()
+        return findByName(q).compactMap { contact in
+            guard let pn = phoneAndName(from: contact) else { return nil }
+            // CNContactImageDataAvailableKey is bool; thumbnail may still be
+            // nil even when imageData is set, so we check explicitly.
+            let thumb = contact.thumbnailImageData
+            return (pn.phone, pn.name, thumb)
+        }
+    }
+
     // MARK: - Cache management
 
     private func ensureCache() async {
@@ -93,12 +109,20 @@ final class GigiContactsEngine {
 
         let contacts: [CNContact] = await Task.detached(priority: .userInitiated) {
             // Omit CNContactNoteKey — iOS 18+ requires separate authorization; causes CNError 102 Unauthorized Keys.
+            // 2026-05-12 bug-017 v2: also request ThumbnailImageData so the
+            // disambiguation bubble can display the contact's photo when
+            // multiple matches share the same first name. iOS users often
+            // sync their WhatsApp profile photo to Contacts (manually or via
+            // CardDAV apps), so this also covers the "WhatsApp photo" use
+            // case without scraping WhatsApp (which is blocked by ToS).
             let keys: [CNKeyDescriptor] = [
                 CNContactGivenNameKey as CNKeyDescriptor,
                 CNContactFamilyNameKey as CNKeyDescriptor,
                 CNContactNicknameKey as CNKeyDescriptor,
                 CNContactPhoneNumbersKey as CNKeyDescriptor,
                 CNContactRelationsKey as CNKeyDescriptor,
+                CNContactThumbnailImageDataKey as CNKeyDescriptor,
+                CNContactImageDataAvailableKey as CNKeyDescriptor,
             ]
             let request = CNContactFetchRequest(keysToFetch: keys)
             var result: [CNContact] = []

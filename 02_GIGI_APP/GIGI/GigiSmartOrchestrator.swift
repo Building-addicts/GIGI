@@ -51,6 +51,18 @@ class GigiSmartOrchestrator: ObservableObject {
         let id = UUID()
         let phone: String
         let name: String
+        // Bug-017 v3: optional thumbnail data from Contacts. Nil when the
+        // user has no photo saved for this contact.
+        let photoData: Data?
+
+        // Equatable/Hashable on identity (id) only — Data isn't hashable
+        // cheaply.
+        static func == (lhs: ContactCandidate, rhs: ContactCandidate) -> Bool {
+            lhs.id == rhs.id
+        }
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(id)
+        }
     }
 
     struct ContactDisambiguationState: Identifiable {
@@ -65,11 +77,13 @@ class GigiSmartOrchestrator: ObservableObject {
 
     func presentContactDisambiguation(
         query: String,
-        candidates: [(phone: String, name: String)],
+        candidates: [(phone: String, name: String, photo: Data?)],
         actionLabel: String,
         completion: @escaping (ContactCandidate?) -> Void
     ) {
-        let mapped = candidates.map { ContactCandidate(phone: $0.phone, name: $0.name) }
+        let mapped = candidates.map {
+            ContactCandidate(phone: $0.phone, name: $0.name, photoData: $0.photo)
+        }
         contactDisambiguation = ContactDisambiguationState(
             query: query,
             candidates: mapped,

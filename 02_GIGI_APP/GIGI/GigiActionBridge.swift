@@ -353,12 +353,14 @@ class GigiActionBridge {
             // If memorized name no longer matches any contact, fall through.
         }
 
-        // Step 2: query all matches
-        let candidates = await GigiContactsEngine.shared.disambiguate(query)
+        // Step 2: query all matches with photo data (bug-017 v3 — show face)
+        let candidates = await GigiContactsEngine.shared.disambiguateWithPhotos(query)
 
         // Step 3-4: standard happy paths
         if candidates.isEmpty { return nil }
-        if candidates.count == 1 { return candidates[0] }
+        if candidates.count == 1 {
+            return (phone: candidates[0].phone, name: candidates[0].name)
+        }
 
         // Step 5: suspend and present disambiguation sheet
         let picked: GigiSmartOrchestrator.ContactCandidate? = await withCheckedContinuation { cont in

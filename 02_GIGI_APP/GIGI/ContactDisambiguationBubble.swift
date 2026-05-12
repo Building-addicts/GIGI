@@ -89,13 +89,10 @@ struct ContactDisambiguationBubble: View {
 
     private func candidateRow(_ candidate: GigiSmartOrchestrator.ContactCandidate) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            // Avatar bubble with first letter (Mail/Contacts-style)
-            Text(initials(for: candidate.name))
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.white)
-                .frame(width: 34, height: 34)
-                .background(Color.purple.opacity(0.45))
-                .clipShape(Circle())
+            // Avatar: prefer Contacts thumbnail, fall back to initials.
+            // Most users who synced a WhatsApp profile photo to Contacts
+            // (manually or via CardDAV) will see the real face here.
+            avatarView(for: candidate)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(candidate.name.isEmpty ? state.query : candidate.name)
@@ -117,6 +114,25 @@ struct ContactDisambiguationBubble: View {
         .background(Color.white.opacity(0.05))
         .cornerRadius(10)
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func avatarView(for candidate: GigiSmartOrchestrator.ContactCandidate) -> some View {
+        if let data = candidate.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 34, height: 34)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5))
+        } else {
+            Text(initials(for: candidate.name))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white)
+                .frame(width: 34, height: 34)
+                .background(Color.purple.opacity(0.45))
+                .clipShape(Circle())
+        }
     }
 
     // MARK: - Helpers
