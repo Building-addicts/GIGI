@@ -99,6 +99,21 @@ final class GigiRequestRouter {
             return .actionInvoked(speech: speech, tool: "run_shortcut")
         }
 
+        // GATE 9.C short-circuit — Apple FM mis-routes "search the web for X"
+        // as delegate_cloud (Claude on harness then answers the query directly
+        // instead of opening Safari). Same pattern as run_shortcut: bypass
+        // Apple FM for unambiguous web search triggers.
+        if let searchQuery = detectWebSearchPattern(in: text) {
+            GigiDebugLogger.log("GIGI Router: web_search short-circuit → '\(searchQuery)'")
+            let speech = await GigiActionBridge.shared.execute(GigiIntent(
+                label: "web_search",
+                confidence: 1.0,
+                params: ["query": searchQuery, "raw": searchQuery]
+            ))
+            GigiConversationMemory.shared.addModelSpeech(speech)
+            return .actionInvoked(speech: speech, tool: "web_search")
+        }
+
         // Mode gating (GATE 7) — read the selected operating mode and use
         // it to disable paths upfront. `.auto` (no mode set) keeps all paths.
         let mode = currentMode()
@@ -785,6 +800,94 @@ final class GigiRequestRouter {
         }
 
         return nil
+    }
+
+    // MARK: - web_search pattern detection (GATE 9.C)
+
+    /// Returns the search query if `text` matches an unambiguous web-search
+    /// trigger pattern; otherwise nil. Apple FM tends to route "search the web
+    /// for X" to delegate_cloud (Claude answers directly) instead of web_search
+    /// (open Safari with query). We short-circuit explicit search intents.
+    ///
+    /// Recognized patterns (case-insensitive):
+    ///   - "search the web for <query>"
+    ///   - "search the web <query>"
+    ///   - "search online for <query>"
+    ///   - "look up <query> online"
+    ///   - "look up <query> on the web"
+    ///   - "find <query> online"
+    ///   - "find <query> on the web"
+    ///   - "google <query>"
+    ///   - "google for <query>"
+    ///   - "search google for <query>"
+    ///   - Italian: "cerca su web <query>", "cerca online <query>",
+    ///     "cerca su google <query>", "cerca <query> su google",
+    ///     "cerca <query> online"
+    private func detectWebSearchPattern(in text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return nil }
+
+        // Leading-prefix patterns. Order matters: longer prefixes first.
+        let leadingPrefixes: [String] = [
+            // English — most specific first
+            "search the web for ", "search the web ",
+            "search online for ", "search online ",
+            "search google for ", "search the internet for ",
+            "look up the ", "look up ",
+            "find online ", "find on the web ",
+            "google for ", "google ",
+            // Italian
+            "cerca su web ", "cerca su internet ",
+            "cerca su google ", "cerca online ",
+            "cerca per "
+        ]
+        for prefix in leadingPrefixes {
+            if t.hasPrefix(prefix), t.count > prefix.count {
+                let raw = String(t.dropFirst(prefix.count))
+                return cleanSearchQuery(raw)
+            }
+        }
+
+        // Trailing-keyword patterns: "<query> online" / "<query> on the web"
+        // Only if the utterance also starts with a search-ish verb (look/find/search),
+        // OR contains "online" / "on the web" at the very end.
+        let trailingKeywords = [" online", " on the web", " on google", " su google", " online"]
+        for kw in trailingKeywords {
+            if t.hasSuffix(kw), t.count > kw.count {
+                let raw = String(t.dropLast(kw.count))
+                let firstWord = raw.split(separator: " ").first.map(String.init) ?? ""
+                // Only accept if the prefix verb is a search-ish action.
+                let searchVerbs: Set<String> = ["look", "find", "search", "cerca", "cercami", "trovami"]
+                if searchVerbs.contains(firstWord) {
+                    // Strip the verb too
+                    let rest = String(raw.dropFirst(firstWord.count)).trimmingCharacters(in: .whitespaces)
+                    // Also strip "up" / "for" if present
+                    let stripped = rest
+                        .replacingOccurrences(of: "^up ", with: "", options: .regularExpression)
+                        .replacingOccurrences(of: "^for ", with: "", options: .regularExpression)
+                        .replacingOccurrences(of: "^per ", with: "", options: .regularExpression)
+                    return cleanSearchQuery(stripped)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Normalizes a web search query — strips quotes, common filler words at
+    /// edges, trims whitespace.
+    private func cleanSearchQuery(_ raw: String) -> String? {
+        var s = raw
+            .replacingOccurrences(of: "\"", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip leading filler if it survived prefix matching
+        let fillerLead = ["for ", "the ", "a "]
+        for f in fillerLead where s.hasPrefix(f) {
+            s = String(s.dropFirst(f.count))
+        }
+        s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? nil : s
     }
 
     /// Normalizes a candidate Shortcut name extracted from the utterance.
