@@ -430,6 +430,27 @@ final class GigiSemanticRouter {
             "translate_text": [
                 "translate ", "how do you say ", "how to say ",
                 "traduci ", "come si dice "
+            ],
+            "add_to_note": [
+                "add to my note ", "add to my notes ",
+                "add to note ", "add to notes ",
+                "append to note ", "append to my note ",
+                "save to note ", "save to my note ",
+                "put in note ", "put in my note ",
+                "aggiungi alla nota ", "aggiungi alle note ",
+                "appendi alla nota ", "salva nella nota ",
+                "salva sulla nota "
+            ],
+            "create_calendar_event": [
+                "create event ", "create an event ",
+                "schedule event ", "schedule an event ",
+                "add event ", "add an event ",
+                "book event ", "book ",
+                "put event ", "put on calendar ",
+                "schedule a meeting ", "schedule meeting ",
+                "crea evento ", "crea un evento ",
+                "metti in calendario ", "aggiungi evento ",
+                "fissa un appuntamento ", "fissa appuntamento "
             ]
         ]
 

@@ -1478,39 +1478,41 @@ class GigiActionBridge {
         return map[n]
     }
 
-    // MARK: - Add to Note (GATE 10.A)
+    // MARK: - Add to Note (GATE 10.A — MVP clipboard handoff)
 
-    /// Appends text to an Apple Note. Apple does NOT expose a public API for
-    /// 3rd-party apps to write into specific Notes — Notes is sandboxed. The
-    /// graceful path we ship in GATE 10.A:
-    ///   1. Copy the content (with a header line showing target note title)
-    ///      to the iOS general pasteboard
-    ///   2. Open the Notes app (mobilenotes:// → Notes.app)
-    ///   3. TTS instructs the user to paste into the named note
+    /// Apple does NOT expose a public API for 3rd-party apps to write into
+    /// specific Notes — Notes is sandboxed. MVP shipped behavior:
+    ///   1. Copy the content to UIPasteboard.general (so user can paste with
+    ///      one motion when they open Notes themselves)
+    ///   2. Return an honest response acknowledging the clipboard handoff
+    ///      and the v1.1 plan for true append via Shortcut bridge
     ///
-    /// Polish backlog (GATE 14): a user-installed "GIGI Append to Note"
-    /// Shortcut bridged via shortcuts://x-callback-url/run-shortcut for
-    /// truly automatic append. Requires one-time onboarding for the
-    /// Shortcut install — out of scope for 10.A MVP.
+    /// We intentionally do NOT auto-open Notes via `mobilenotes://` because:
+    ///   - The scheme is unreliable on iOS 26 (often fails canOpenURL)
+    ///   - Opening Notes without writing anything creates a broken
+    ///     expectation ("it opened my notes but nothing was added")
+    ///   - Better to be transparent: clipboard is filled, user pastes
+    ///
+    /// Polish backlog (GATE 14): user installs "GIGI Append to Note"
+    /// Shortcut once. GIGI invokes via shortcuts://x-callback-url for
+    /// truly automatic append. Requires onboarding flow to install the
+    /// Shortcut.
     @MainActor
     private func addToNote(noteTitle: String, content: String) async -> String {
         let cleanTitle = noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanContent.isEmpty else { return "What should I add to the note?" }
 
-        // Copy to clipboard with a marker so the user knows what's pending.
         UIPasteboard.general.string = cleanContent
 
-        // Try to open Notes via the legacy mobilenotes:// scheme. Apple
-        // removed this in iOS 13 publicly but in many setups it still
-        // launches Notes.app. If canOpenURL returns false the user opens
-        // Notes manually — message below is clear enough.
-        if let url = URL(string: "mobilenotes://"), UIApplication.shared.canOpenURL(url) {
-            await UIApplication.shared.open(url)
-        }
+        let displayContent = cleanContent.count > 40
+            ? "\(String(cleanContent.prefix(40)))…"
+            : cleanContent
+        let displayTitle = cleanTitle.isEmpty
+            ? "your note"
+            : "your '\(cleanTitle)' note"
 
-        let displayTitle = cleanTitle.isEmpty ? "your note" : "'\(cleanTitle)'"
-        return "I copied that to your clipboard. Open Notes, tap \(displayTitle), and paste at the end."
+        return "Copied '\(displayContent)' to your clipboard. Paste into \(displayTitle) when ready. Direct Notes write is coming in v1.1 via a Shortcut bridge."
     }
 
     // MARK: - Email

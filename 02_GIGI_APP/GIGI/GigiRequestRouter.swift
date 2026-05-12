@@ -919,12 +919,12 @@ final class GigiRequestRouter {
             // with the catalog phrases (already meaningful titles).
             return ["title": slot, "date": "today", "time": "12:00", "raw": slot]
         case "add_to_note":
-            // Semantic slot extraction can't reliably split "<note_title> +
-            // <content>" without a clear separator. Fallback: put the
-            // whole slot as content + leave noteTitle empty so the bridge
-            // surfaces "your note" — user pastes into the right one
-            // manually after the clipboard prefill.
-            return ["noteTitle": "", "content": slot, "raw": slot]
+            // Smart split on ':' or '-' separator — common user pattern is
+            // "<note_title>: <content>" (e.g. "work: idea Q3 Macros") or
+            // "<note_title> - <content>". Falls back to (empty title, full
+            // slot as content) when no separator present.
+            let (title, content) = parseAddToNoteSlot(slot)
+            return ["noteTitle": title, "content": content, "raw": slot]
         default:
             return ["raw": slot]
         }
@@ -986,6 +986,40 @@ final class GigiRequestRouter {
         guard hasOperator || isPercentage || isSqrt else { return nil }
 
         return stripped
+    }
+
+    // MARK: - add_to_note slot split helper (GATE 10.A bug fix)
+
+    /// Smart split of "<note_title>: <content>" or "<note_title> - <content>"
+    /// patterns. Returns (noteTitle, content). When no separator is present,
+    /// returns ("", slot) so the bridge surfaces "your note" generically.
+    ///
+    /// Examples:
+    ///   "work: idea Q3 Macros"     → ("work", "idea Q3 Macros")
+    ///   "shopping - buy milk eggs" → ("shopping", "buy milk eggs")
+    ///   "idea Q3 Macros"           → ("", "idea Q3 Macros")
+    ///   "ideas: meeting takeaways" → ("ideas", "meeting takeaways")
+    private func parseAddToNoteSlot(_ slot: String) -> (title: String, content: String) {
+        let trimmed = slot.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return ("", "") }
+
+        // Try ':' first (more deliberate), then ' - ' (common alternative)
+        let separators: [String] = [":", " - ", " — ", " – "]
+        for sep in separators {
+            if let r = trimmed.range(of: sep) {
+                let titlePart = String(trimmed[trimmed.startIndex..<r.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let contentPart = String(trimmed[r.upperBound...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                // Title must be a short noun (≤ 4 words) to count — guards
+                // against splitting on ':' in URLs or timestamps.
+                let titleWordCount = titlePart.split(separator: " ").count
+                if !titlePart.isEmpty, !contentPart.isEmpty, titleWordCount <= 4 {
+                    return (titlePart, contentPart)
+                }
+            }
+        }
+        return ("", trimmed)
     }
 
     // MARK: - translate_text slot split helper (GATE 10.C bug fix)
