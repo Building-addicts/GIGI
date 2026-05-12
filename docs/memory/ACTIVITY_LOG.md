@@ -392,3 +392,4 @@
 - `2026-05-12T20:45:18+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-12T20:46:50+0200` · local · session ended on `armando-rework` (last commit: merge(gate-9): capability expansion Week 1 into armando-rework)
 - `2026-05-12T20:50:47+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: merge(gate-9): capab)
+- `2026-05-12T21:03:40+0200` · local · session ended on `armando-rework` (last commit: docs(gate-14): add sub-gate 14.B.2 Shortcut Alias Registry — natural-language )
