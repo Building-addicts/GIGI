@@ -911,13 +911,13 @@ final class GigiRequestRouter {
             let (txt, lang) = parseTranslateSlot(slot)
             return ["text": txt, "targetLanguage": lang, "raw": slot]
         case "create_calendar_event":
-            // Semantic match path: pass the full slot as title; defer date/
-            // time parsing to the bridge's parseDateTime which already
-            // handles natural-language temporal references ("today",
-            // "tomorrow", "Friday at 3pm"). Apple FM @Generable Arguments
-            // schema does cleaner splits but semantic matches reach here
-            // with the catalog phrases (already meaningful titles).
-            return ["title": slot, "date": "today", "time": "12:00", "raw": slot]
+            // Should NOT normally reach here — create_calendar_event is
+            // removed from the semantic catalog so it falls through to
+            // Apple FM which parses title/date/time via @Generable. If we
+            // somehow get here (catalog drift), defer parsing to the
+            // bridge with the full slot as title and let parseDateTime
+            // surface a "today at noon" fallback.
+            return ["title": slot, "date": "today", "time": "noon", "raw": slot]
         case "add_to_note":
             // Smart split on ':' or '-' separator — common user pattern is
             // "<note_title>: <content>" (e.g. "work: idea Q3 Macros") or

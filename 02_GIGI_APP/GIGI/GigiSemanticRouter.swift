@@ -196,18 +196,16 @@ final class GigiSemanticRouter {
             "ordina pizza", "voglio sushi", "ordina cibo"
         ],
 
-        // PRODUCTIVITY — calendar event / note append (GATE 10.A)
-        "create_calendar_event": [
-            "create event meeting with marco friday at 3pm",
-            "schedule meeting tomorrow at 10",
-            "add event lunch with sara monday",
-            "book event dentist tuesday at 9",
-            "put event coffee with leo on calendar",
-            "crea evento riunione con marco venerdì alle 15",
-            "metti in calendario pranzo con sara",
-            "aggiungi evento dentista martedì alle 9",
-            "schedule a meeting", "create event"
-        ],
+        // PRODUCTIVITY — note append (GATE 10.A)
+        //
+        // NOTE: create_calendar_event INTENTIONALLY OMITTED from semantic
+        // catalog. Calendar events have 3 distinct slots (title + date +
+        // time) that semantic prefix-based slot extraction can't split
+        // reliably. Apple FM @Generable Arguments schema does the split
+        // correctly. Falling through to Apple FM gives much better parsing
+        // for utterances like "Create meeting with Marco friday at 3 PM"
+        // → title='meeting with Marco', date='friday', time='3 PM'.
+        // Trade-off: ~150ms Apple FM latency vs ~5ms semantic — worth it.
         "add_to_note": [
             "add to my note work idea Q3 macros",
             "append to note shopping buy milk and eggs",
@@ -440,18 +438,10 @@ final class GigiSemanticRouter {
                 "aggiungi alla nota ", "aggiungi alle note ",
                 "appendi alla nota ", "salva nella nota ",
                 "salva sulla nota "
-            ],
-            "create_calendar_event": [
-                "create event ", "create an event ",
-                "schedule event ", "schedule an event ",
-                "add event ", "add an event ",
-                "book event ", "book ",
-                "put event ", "put on calendar ",
-                "schedule a meeting ", "schedule meeting ",
-                "crea evento ", "crea un evento ",
-                "metti in calendario ", "aggiungi evento ",
-                "fissa un appuntamento ", "fissa appuntamento "
             ]
+            // create_calendar_event prefixes intentionally omitted — Apple
+            // FM @Generable handles the 3-slot split (title + date + time)
+            // far better than prefix regex. See PRODUCTIVITY catalog note.
         ]
 
         guard let prefixes = prefixesByTool[tool] else {

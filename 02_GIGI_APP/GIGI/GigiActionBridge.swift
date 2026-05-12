@@ -1565,6 +1565,13 @@ class GigiActionBridge {
     // MARK: - Event (create)
 
     func createEvent(title: String, date: String, time: String) async -> String {
+        // GATE 10.A polish — show banner immediately so the user gets visual
+        // feedback that the event creation is in progress, before the
+        // EventKit save + permission prompt.
+        await MainActor.run {
+            GigiSmartOrchestrator.shared.showBanner("📅 Adding to calendar...")
+        }
+
         guard await ensureCalendarAccess() else {
             return "Enable Calendar access in Settings."
         }
@@ -1585,8 +1592,16 @@ class GigiActionBridge {
             let df = DateFormatter()
             df.dateStyle = .medium
             df.timeStyle = .short
+            // Surface a banner with the FINAL outcome too — the chat speech
+            // can be missed when GIGI is in background.
+            await MainActor.run {
+                GigiSmartOrchestrator.shared.showBanner("✅ Event added: \(cleanTitle)")
+            }
             return "'\(cleanTitle)' added on \(df.string(from: startDate)) with a reminder 30 minutes before."
         } catch {
+            await MainActor.run {
+                GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't create event")
+            }
             return "Couldn't create the event."
         }
     }
