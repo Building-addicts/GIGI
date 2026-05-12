@@ -13,6 +13,9 @@ struct MainTabView: View {
     @State private var showPairingSheet = false
     @State private var harnessConfigured = GigiHarnessClient.shared.pairingState.isConfigured
     @ObservedObject private var quickTalk = QuickTalkController.shared
+    // GATE 9.D — Discovery Layer A conversational tour, shown ONCE after
+    // permissions onboarding completes (or skipped for upgrade users).
+    @ObservedObject private var tourFlow = GigiOnboardingFlow.shared
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -86,6 +89,17 @@ struct MainTabView: View {
                     .zIndex(99)
             }
 
+            // GATE 9.D — Layer A conversational tour. Mounts AFTER the
+            // permissions OnboardingView has dismissed (showOnboarding ==
+            // false) and only if `evaluateOnLaunch` decided to show it
+            // (fresh user, <5 turns history). zIndex slightly below
+            // OnboardingView so it never overlaps if both somehow active.
+            if !showOnboarding && tourFlow.shouldShowTour {
+                OnboardingTourView()
+                    .transition(.opacity)
+                    .zIndex(98)
+            }
+
             // Sub #14 3/3: Talking Session task list overlay — sibling of TabView
             // so its DragGesture does not conflict with TabView page swipe.
             // Visible only on Chat tab (selection == 0).
@@ -138,7 +152,22 @@ struct MainTabView: View {
                 showQuickTalk = false
             }
         }
-        .onAppear { refreshHarnessConfiguredState() }
+        .onAppear {
+            refreshHarnessConfiguredState()
+            // GATE 9.D — Layer A tour only triggers if permissions onboarding
+            // is already done. evaluateOnLaunch decides skip-or-show based on
+            // persisted flag + turn count threshold.
+            if !showOnboarding {
+                tourFlow.evaluateOnLaunch()
+            }
+        }
+        .onChange(of: showOnboarding) { _, isShowing in
+            // When the permissions OnboardingView dismisses, decide whether
+            // to fire Layer A as a follow-up. Same evaluator logic.
+            if !isShowing {
+                tourFlow.evaluateOnLaunch()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .gigiReopenOnboarding)) { _ in
             withAnimation { showOnboarding = true }
         }

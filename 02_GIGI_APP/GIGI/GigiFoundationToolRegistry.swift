@@ -432,14 +432,96 @@ struct FMWebOrderFoodTool: Tool {
     }
 }
 
+// MARK: - 18. RunShortcutTool (GATE 9.A — universal Apple Shortcuts bridge)
+
+@available(iOS 26.0, *)
+struct FMRunShortcutTool: Tool {
+    let name = "run_shortcut"
+    let description = """
+    Open the Apple Shortcuts app and run a user-installed Shortcut by name. \
+    THIS IS THE ONLY TOOL TO USE when the utterance starts with "run", \
+    "execute", "launch", "trigger", "esegui", "lancia" OR ends with "shortcut" \
+    or "scorciatoia". Examples that REQUIRE this tool: "run accendi torcia", \
+    "execute work mode", "run accendi torcia shortcut", "trigger my morning \
+    routine", "lancia modalità lavoro", "esegui buongiorno". The body after \
+    the verb is the literal Shortcut name the user chose in the Shortcuts app \
+    — DO NOT interpret it as a HomeKit accessory or timer duration. \
+    NEVER pick set_timer, homekit_on, homekit_off, or open_app for these \
+    utterances — they are explicit Shortcut invocations.
+    """
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Exact or near-exact name of the Shortcut as the user said it. Examples: 'morning routine', 'work mode', 'arrive home'.")
+        var name: String
+
+        @Guide(description: "Optional text input to pass to the Shortcut as its input. Empty string if none.")
+        var input: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "run_shortcut", params: [
+            "name": arguments.name,
+            "input": arguments.input,
+            "raw": arguments.name
+        ])
+    }
+}
+
+// MARK: - 19. SetHomeKitSceneTool (GATE 9.B — scene activation by name)
+
+@available(iOS 26.0, *)
+struct FMSetHomeKitSceneTool: Tool {
+    let name = "set_homekit_scene"
+    let description = "Activate a HomeKit scene by name (e.g. 'Good Morning', 'Cinema', 'Goodnight'). Use when the user asks to activate, run, trigger, or set a scene. NOT for individual accessory control — use homekit_on or homekit_off for single lights/devices."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Scene name as the user said it. Examples: 'Cinema', 'Good morning', 'Sleep mode', 'Movie night'.")
+        var sceneName: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "set_homekit_scene", params: [
+            "scene": arguments.sceneName,
+            "sceneName": arguments.sceneName,
+            "raw": arguments.sceneName
+        ])
+    }
+}
+
+// MARK: - 20. WebSearchTool (GATE 9.C — Safari + DuckDuckGo open)
+
+@available(iOS 26.0, *)
+struct FMWebSearchTool: Tool {
+    let name = "web_search"
+    let description = "Open Safari with a search query (DuckDuckGo). Use when the user asks to search the web, look up something online, or find general information that GIGI does not have natively (e.g. 'search recipes for pasta', 'look up best ramen Milan', 'find news about Rome'). NOT for weather, calendar, or contact lookups — those have dedicated tools."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "The search query in natural language. Examples: 'pasta carbonara recipe', 'weather Tokyo tomorrow', 'best ramen in Milan'.")
+        var query: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "web_search", params: [
+            "query": arguments.query,
+            "raw": arguments.query
+        ])
+    }
+}
+
 // MARK: - Registry
 
 @available(iOS 26.0, *)
 @MainActor
 enum GigiFoundationToolRegistry {
 
-    /// Static collection of all 17 tools (16 native + create_note for GATE 6
-    /// killer demo + web_order_food for delivery dispatch). Used by
+    /// Static collection of all 20 tools (17 baseline + 3 from GATE 9 capability
+    /// expansion Week 1: run_shortcut, set_homekit_scene, web_search). Used by
     /// `GigiRequestRouter` to pick the relevant tool (or pass them all to
     /// Apple FM when the router decision is ambiguous).
     static var allTools: [any Tool] {
@@ -460,7 +542,11 @@ enum GigiFoundationToolRegistry {
             FMHomeKitOnTool(),
             FMHomeKitOffTool(),
             FMCreateNoteTool(),
-            FMWebOrderFoodTool()
+            FMWebOrderFoodTool(),
+            // GATE 9 capability expansion Week 1
+            FMRunShortcutTool(),
+            FMSetHomeKitSceneTool(),
+            FMWebSearchTool()
         ]
     }
 
@@ -477,7 +563,11 @@ enum GigiFoundationToolRegistry {
         "weather", "read_calendar", "find_free_slot", "read_email",
         "homekit_on", "homekit_off",
         "create_note",
-        "web_order_food"
+        "web_order_food",
+        // GATE 9 capability expansion Week 1
+        "run_shortcut",
+        "set_homekit_scene",
+        "web_search"
     ]
 }
 
