@@ -362,3 +362,4 @@
 - `2026-05-12T16:27:51+0200` · local · session ended on `armando-rework` (last commit: feat(bug-017-v4): always show disambiguation + 'Last call' badge on previously-c)
 - `2026-05-12T16:41:23+0200` · local · session ended on `armando-rework` (last commit: docs(plan): voice-aware contact disambiguation — design doc before code)
 - `2026-05-12T16:49:21+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: docs(plan): voice-aw)
+- `2026-05-12T17:12:47+0200` · local · session ended on `armando-rework` (last commit: feat(bug-017-v5): conversational contact disambiguation — text intercept ready)
