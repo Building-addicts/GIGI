@@ -409,3 +409,4 @@
 - `2026-05-12T22:24:55+0200` · local · session ended on `armando-rework` (last commit: feat(gate-10-c): knowledge mini — define_word + calculate_math + translate_tex)
 - `2026-05-12T22:34:21+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-c): 3 bugs from device test — define slot, math tier-0, translate )
 - `2026-05-12T23:09:03+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): missing await on UIApplication.shared.open in addToNote)
+- `2026-05-12T23:17:36+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-a): add_to_note honest MVP — clipboard handoff without broken expe)
