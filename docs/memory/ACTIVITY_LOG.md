@@ -398,3 +398,4 @@
 - `2026-05-12T21:14:11+0200` · local · session ended on `armando-rework` (last commit: fix(gate-9-c): router intercept for web_search — was mis-routed to delegate_cl)
 - `2026-05-12T21:26:53+0200` · local · session ended on `armando-rework` (last commit: fix(gate-9-c): web_search intercept — add 'search web for X' (no article) + ex)
 - `2026-05-12T21:34:09+0200` · local · session ended on `armando-rework` (last commit: feat(gate-15): Smart Router semantic fast-path replaces regex intercepts)
+- `2026-05-12T21:51:49+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: feat(gate-15): Smart)
