@@ -101,8 +101,14 @@ final class GigiRequestRouter {
                 confidence: Double(match.confidence),
                 params: params
             ))
-            GigiConversationMemory.shared.addModelSpeech(speech)
-            return .actionInvoked(speech: speech, tool: match.toolName)
+            let finalSpeech = debugPrefix(
+                routerSource: "semantic",
+                tool: match.toolName,
+                confidence: match.confidence,
+                slot: match.slot
+            ) + speech
+            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+            return .actionInvoked(speech: finalSpeech, tool: match.toolName)
         }
 
         // Mode gating (GATE 7) — read the selected operating mode and use
@@ -161,27 +167,54 @@ final class GigiRequestRouter {
         )
 
         // 3. Dispatch.
+        let result: RouteResult
         switch effectivePath {
         case "native_tool":
-            return await dispatchNativeTool(decision: decision, originalText: text, history: history)
+            result = await dispatchNativeTool(decision: decision, originalText: text, history: history)
         case "delegate_local":
-            return await dispatchDelegateLocal(decision: decision, originalText: text, history: history)
+            result = await dispatchDelegateLocal(decision: decision, originalText: text, history: history)
         case "delegate_cloud":
-            return await dispatchDelegateCloud(decision: decision, originalText: text, history: history)
+            result = await dispatchDelegateCloud(decision: decision, originalText: text, history: history)
         case "ask_clarification":
-            return .spoken(decision.directSpeech.isEmpty
+            result = .spoken(decision.directSpeech.isEmpty
                 ? "Could you say that another way?"
                 : decision.directSpeech)
         case "reject":
-            return .spoken(decision.directSpeech.isEmpty
+            result = .spoken(decision.directSpeech.isEmpty
                 ? "I can't help with that one."
                 : decision.directSpeech)
         case "mode_blocked_local":
-            return .spoken("Local AI is disabled in this mode. Switch to Local-First or Full Power mode to enable Ollama.")
+            result = .spoken("Local AI is disabled in this mode. Switch to Local-First or Full Power mode to enable Ollama.")
         case "mode_blocked_cloud":
-            return .spoken("Cloud mode is disabled in this mode. Switch to Apple Optimized or Full Power mode to enable Claude Code.")
+            result = .spoken("Cloud mode is disabled in this mode. Switch to Apple Optimized or Full Power mode to enable Claude Code.")
         default:
             return .error("Unknown routing decision: \(effectivePath).")
+        }
+
+        // GATE 15 — DEBUG-only routing diagnostic. Prepends a one-line tag
+        // showing which router fired (appleFM path + primaryAction) so the
+        // user can immediately see what got dispatched. Stripped in release
+        // builds via `#if DEBUG` in `debugPrefix()`.
+        let primaryAction = decision.primaryAction.isEmpty ? effectivePath : decision.primaryAction
+        let prefix = debugPrefix(
+            routerSource: "appleFM",
+            tool: primaryAction,
+            confidence: Float(decision.confidence)
+        )
+        return prefix.isEmpty ? result : prependDebug(prefix, to: result)
+    }
+
+    /// Internal helper — re-wraps a RouteResult with the given debug prefix
+    /// prepended to the speech, preserving the case (.spoken / .actionInvoked /
+    /// .error). No-op when prefix is empty (release build).
+    private func prependDebug(_ prefix: String, to result: RouteResult) -> RouteResult {
+        switch result {
+        case .spoken(let s):
+            return .spoken(prefix + s)
+        case .actionInvoked(let s, let tool):
+            return .actionInvoked(speech: prefix + s, tool: tool)
+        case .error(let msg):
+            return .error(prefix + msg)
         }
     }
 
@@ -739,6 +772,32 @@ final class GigiRequestRouter {
         'navigate home', 'play my morning playlist', or 'activate the cinema scene'. \
         I can also run any Shortcut you've made — just say 'run' followed by its name.
         """
+    }
+
+    // MARK: - Debug overlay (DEBUG-only, GATE 15)
+
+    /// Prepends a one-line debug tag to the response speech showing which
+    /// routing source decided and with what confidence. Only active in DEBUG
+    /// builds — production users never see this. Format:
+    /// `[semantic web_search 0.67 'best ramen'] Searching for ...`
+    private func debugPrefix(
+        routerSource: String,
+        tool: String,
+        confidence: Float,
+        slot: String? = nil
+    ) -> String {
+        #if DEBUG
+        let conf = String(format: "%.2f", confidence)
+        let slotPart: String
+        if let s = slot, !s.isEmpty, s.count <= 40 {
+            slotPart = " '\(s)'"
+        } else {
+            slotPart = ""
+        }
+        return "[\(routerSource) \(tool) \(conf)\(slotPart)]\n"
+        #else
+        return ""
+        #endif
     }
 
     // MARK: - Semantic router parameter mapping (GATE 15)
