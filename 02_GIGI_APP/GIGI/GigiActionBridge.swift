@@ -336,8 +336,33 @@ class GigiActionBridge {
         guard let number = resolved.number, !number.isEmpty else {
             return "Couldn't find \(contact) in your contacts."
         }
-        let digits = gatewayPhoneDigits(sanitizePhoneNumber(number))
+        // 2026-05-12 v5 fix — preserve `+` for international dialing.
+        // gatewayPhoneDigits strips ALL non-digits (including '+'), producing
+        // '393756548643' from '+39 375 654 8643'. iOS Phone app then treats it
+        // as a local number missing country code and silently refuses to dial
+        // (user reported: 'tappo il blu, non chiama').
+        //
+        // Apple spec (developer.apple.com PhoneLinks): use `tel:+15551234567`
+        // with leading '+' for international numbers. The '+' is a supported
+        // character in the tel: URL scheme.
+        //
+        // We keep the raw sanitizePhoneNumber output (digits + leading '+')
+        // for the tel: URL, and prepend '+' if missing on a long number.
+        let sanitized = sanitizePhoneNumber(number)
+        let digits = gatewayPhoneDigits(sanitized)
         guard !digits.isEmpty else { return "Invalid phone number for \(contact)." }
+
+        // Build the canonical tel: URL with international format.
+        //   - If the sanitized form already starts with '+', use it as-is.
+        //   - If the digits look international (>= 10) but no '+' is present,
+        //     synthesize a '+' prefix (heuristic: trust the resolver supplied
+        //     a country code).
+        //   - Otherwise (short local numbers), pass digits as-is.
+        let telBody: String = {
+            if sanitized.hasPrefix("+") { return sanitized }
+            if digits.count >= 10        { return "+" + digits }
+            return digits
+        }()
 
         await MainActor.run {
             GigiSmartOrchestrator.shared.stopMicCapture()
@@ -367,7 +392,11 @@ class GigiActionBridge {
         //
         // The popup is friction, but at least the call DIALS. The previous
         // workarounds didn't satisfy the user intent ("Call X" → place a call).
-        guard let telURL = URL(string: "tel://\(digits)") else { return "Invalid phone number." }
+        //
+        // Canonical Apple form: `tel:+CountryCodeNumber` (single colon, no
+        // slashes, leading '+' for international). `telBody` is now built
+        // above with the '+' preserved.
+        guard let telURL = URL(string: "tel:\(telBody)") else { return "Invalid phone number." }
         let opened = await MainActor.run(resultType: Bool.self) {
             UIApplication.shared.open(telURL)
             return true
