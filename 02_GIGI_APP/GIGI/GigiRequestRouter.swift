@@ -69,12 +69,9 @@ final class GigiRequestRouter {
     /// as `.error(message)` for the orchestrator to speak.
     func route(text: String, history: String = "") async -> RouteResult {
         // GATE 9 polish — discovery intercept (Layer B preview, full impl GATE 10).
-        // Apple FM was echoing the query back ("What can you do?" → "What can you
-        // do?") because it routed to ask_clarification with directSpeech set to
-        // the input by mistake. Catch these "what can you do" / "help" /
-        // "cosa sai fare" patterns BEFORE Apple FM dispatch and return a curated
-        // English overview of the 7 capability categories. Layer B in GATE 10
-        // upgrades this to context-aware top-3 suggestions.
+        // Discovery queries ("what can you do?", "cosa sai fare?", "help") are
+        // handled BEFORE the semantic router because they need a curated
+        // English overview response, not a tool dispatch.
         if detectDiscoveryQuery(in: text) {
             let speech = discoveryOverviewResponse()
             GigiDebugLogger.log("GIGI Router: discovery intercept → curated overview")
@@ -82,36 +79,30 @@ final class GigiRequestRouter {
             return .spoken(speech)
         }
 
-        // GATE 9.A short-circuit — Apple FM mis-routes "run X" / "esegui X"
-        // as homekit_on or set_timer because the description of the
-        // run_shortcut tool, although clear, doesn't outweigh the constrained
-        // decoding bias toward concrete tools (it interprets "accendi torcia"
-        // as turn-on-flashlight intent). For unambiguous trigger patterns we
-        // bypass Apple FM entirely and dispatch the tool directly.
-        if let shortcutName = detectRunShortcutPattern(in: text) {
-            GigiDebugLogger.log("GIGI Router: run_shortcut shortcut-circuit → '\(shortcutName)'")
+        // GATE 15 — Smart Router semantic fast-path.
+        //
+        // Replaces the deterministic regex intercepts (run_shortcut,
+        // web_search, etc.) with a single semantic-embedding match against a
+        // curated catalog of trigger phrases per tool. NLEmbedding word
+        // vectors via Accelerate (~5ms per query, fully on-device).
+        //
+        // On confident match (cosine ≥0.55, gap ≥0.05 vs runner-up):
+        //   - dispatch the tool directly with the extracted slot
+        //   - bypass Apple FM entirely (zero LLM tokens spent)
+        //
+        // On ambiguous or low-confidence: fall through to Apple FM —
+        // no behavioral regression for queries the catalog doesn't cover.
+        //
+        // ADR-0012 — Smart Router Architecture.
+        if let match = GigiSemanticRouter.shared.match(text) {
+            let params = buildSemanticParams(for: match)
             let speech = await GigiActionBridge.shared.execute(GigiIntent(
-                label: "run_shortcut",
-                confidence: 1.0,
-                params: ["name": shortcutName, "raw": shortcutName, "input": ""]
+                label: match.toolName,
+                confidence: Double(match.confidence),
+                params: params
             ))
             GigiConversationMemory.shared.addModelSpeech(speech)
-            return .actionInvoked(speech: speech, tool: "run_shortcut")
-        }
-
-        // GATE 9.C short-circuit — Apple FM mis-routes "search the web for X"
-        // as delegate_cloud (Claude on harness then answers the query directly
-        // instead of opening Safari). Same pattern as run_shortcut: bypass
-        // Apple FM for unambiguous web search triggers.
-        if let searchQuery = detectWebSearchPattern(in: text) {
-            GigiDebugLogger.log("GIGI Router: web_search short-circuit → '\(searchQuery)'")
-            let speech = await GigiActionBridge.shared.execute(GigiIntent(
-                label: "web_search",
-                confidence: 1.0,
-                params: ["query": searchQuery, "raw": searchQuery]
-            ))
-            GigiConversationMemory.shared.addModelSpeech(speech)
-            return .actionInvoked(speech: speech, tool: "web_search")
+            return .actionInvoked(speech: speech, tool: match.toolName)
         }
 
         // Mode gating (GATE 7) — read the selected operating mode and use
@@ -750,7 +741,53 @@ final class GigiRequestRouter {
         """
     }
 
-    // MARK: - run_shortcut pattern detection (GATE 9.A)
+    // MARK: - Semantic router parameter mapping (GATE 15)
+
+    /// Maps a `SemanticMatch` to the params dictionary expected by
+    /// `GigiActionBridge.execute(GigiIntent)`. Each tool has a different
+    /// parameter contract — this centralizes the slot → param key mapping.
+    private func buildSemanticParams(for match: SemanticMatch) -> [String: String] {
+        let slot = match.slot
+        switch match.toolName {
+        case "web_search":
+            return ["query": slot, "raw": slot]
+        case "run_shortcut":
+            return ["name": slot, "raw": slot, "input": ""]
+        case "set_homekit_scene":
+            return ["scene": slot, "sceneName": slot, "raw": slot]
+        case "open_app":
+            return ["app": slot, "raw": slot]
+        case "play_music":
+            return ["track": slot, "raw": slot]
+        case "navigate":
+            return ["destination": slot, "raw": slot]
+        case "make_call", "facetime", "send_message":
+            return ["contact": slot, "raw": slot]
+        case "create_note":
+            return ["title": slot, "raw": slot]
+        case "weather":
+            return ["location": slot, "raw": slot]
+        case "set_timer", "set_alarm", "set_reminder":
+            return ["text": slot, "duration": slot, "time": slot, "raw": slot]
+        case "homekit_on":
+            return ["accessory": slot, "raw": slot]
+        case "homekit_off":
+            return ["accessory": slot, "raw": slot]
+        case "read_calendar", "read_email", "find_free_slot":
+            return ["raw": slot]
+        case "web_order_food":
+            return ["service": "", "query": slot, "raw": slot]
+        default:
+            return ["raw": slot]
+        }
+    }
+
+    // MARK: - DEPRECATED — regex intercepts (replaced by GigiSemanticRouter in GATE 15)
+    //
+    // These regex pattern matchers were the GATE 9 patch for Apple FM
+    // mis-routing. Now superseded by the embedding-based semantic router
+    // which scales without adding new patterns. Kept in source for reference
+    // and potential rollback; not called from route().
 
     /// Returns the Shortcut name if `text` matches an unambiguous run-shortcut
     /// trigger pattern; otherwise nil. Apple FM constrained decoding often
