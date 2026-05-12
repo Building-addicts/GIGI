@@ -34,12 +34,12 @@ struct ContactDisambiguationBubble: View {
                 .padding(.top, 16)
 
             VStack(alignment: .leading, spacing: 12) {
-                // Header — GIGI is asking
+                // Header — GIGI is asking conversationally
                 Text(headerText)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.white)
 
-                Text("\(state.candidates.count) contacts match. Tap one to \(state.actionLabel).")
+                Text(subHeaderText)
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.55))
 
@@ -183,7 +183,19 @@ struct ContactDisambiguationBubble: View {
     // MARK: - Helpers
 
     private var headerText: String {
-        "Which \(state.query.capitalized) do you mean?"
+        if state.candidates.count == 2 {
+            let names = state.candidates.map { $0.name }.joined(separator: " or ")
+            return "Which \(state.query.capitalized)? \(names)?"
+        }
+        return "Which \(state.query.capitalized) do you mean?"
+    }
+
+    /// Sub-header — explicit affordance for conversational reply.
+    /// Designed for voice-first: even if the bubble is visual today, the
+    /// copy frames the dialog as something the user can ANSWER (text or
+    /// voice when wired). Tap remains a shortcut.
+    private var subHeaderText: String {
+        "Tell me the name (or number), or just tap below."
     }
 
     private func initials(for name: String) -> String {

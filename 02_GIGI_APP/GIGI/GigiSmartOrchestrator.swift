@@ -80,6 +80,11 @@ class GigiSmartOrchestrator: ObservableObject {
 
     @Published var contactDisambiguation: ContactDisambiguationState?
 
+    /// Counts consecutive unresolved disambig utterances. After 2 fails,
+    /// auto-cancel with a graceful message. Reset on resolve or new
+    /// disambiguation state. Not @Published — purely internal book-keeping.
+    private var disambiguationRetries: Int = 0
+
     func presentContactDisambiguation(
         query: String,
         candidates: [(phone: String, name: String, photo: Data?)],
@@ -97,6 +102,7 @@ class GigiSmartOrchestrator: ObservableObject {
             lastUsedName: lastUsedName,
             completion: completion
         )
+        disambiguationRetries = 0  // fresh dialog, fresh retry budget
     }
 
     func presentDraft(contact: String, platform: String, body: String, raw: String) {
@@ -271,6 +277,56 @@ class GigiSmartOrchestrator: ObservableObject {
         if isQuickTalkSession {
             onQuickTalkStateChange?(.thinking)
             onQuickTalkTranscript?(trimmed)
+        }
+
+        // --- Contact disambiguation voice/text intercept (bug-017 v5) ---
+        // When a ContactDisambiguationState is active, the next utterance
+        // belongs to the dialog ("Rossi" / "primo" / "380" / "cancel") and
+        // must NOT go to the main router (which would treat it as a new
+        // top-level query, mis-routing "Rossi" as a contact search etc).
+        //
+        // We DO add the response to memory.addUser so the user sees their
+        // reply in chat (conversational feel) but we never call
+        // memory.addUserTurn (router history) — protects the next "Call X"
+        // from history pollution. The original "Call Fede" continuation is
+        // still suspended; resolving it via state.completion(candidate)
+        // unblocks the original makeCallAutomatic which then produces the
+        // "Calling X." final response naturally.
+        if let disambig = contactDisambiguation {
+            memory.addUser(trimmed)  // show "Rossi" in chat — conversational
+            let result = GigiContactDisambiguationResolver.resolve(
+                utterance: trimmed,
+                state: disambig
+            )
+            switch result {
+            case .matched(let candidate):
+                disambig.completion(candidate)
+                contactDisambiguation = nil
+                disambiguationRetries = 0
+                isThinking = false
+                return
+            case .cancelled:
+                disambig.completion(nil)
+                contactDisambiguation = nil
+                disambiguationRetries = 0
+                memory.addGigi("OK, cancelled.")
+                isThinking = false
+                return
+            case .unresolved:
+                disambiguationRetries += 1
+                if disambiguationRetries >= 2 {
+                    disambig.completion(nil)
+                    contactDisambiguation = nil
+                    disambiguationRetries = 0
+                    memory.addGigi("OK, never mind.")
+                    isThinking = false
+                    return
+                }
+                let names = disambig.candidates.map { $0.name }.joined(separator: " or ")
+                memory.addGigi("I didn't catch that. \(names)?")
+                isThinking = false
+                return  // bubble persists; awaiting another reply
+            }
         }
 
         // Update UI message list
