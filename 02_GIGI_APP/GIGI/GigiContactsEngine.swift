@@ -87,15 +87,28 @@ final class GigiContactsEngine {
     /// available. iOS users often sync their WhatsApp profile photo to
     /// Contacts (manually or via CardDAV), so this also exposes "WhatsApp
     /// photo" for those users — without scraping WhatsApp (blocked by ToS).
-    func disambiguateWithPhotos(_ query: String) async -> [(phone: String, name: String, photo: Data?)] {
+    func disambiguateWithPhotos(_ query: String) async -> [(phone: String, name: String, photo: Data?, label: String?, org: String?)] {
         await ensureCache()
         let q = query.lowercased()
         return findByName(q).compactMap { contact in
-            guard let pn = phoneAndName(from: contact) else { return nil }
-            // CNContactImageDataAvailableKey is bool; thumbnail may still be
-            // nil even when imageData is set, so we check explicitly.
+            // Bug-017 v6: prefer the first labeled phone (mobile/home/work)
+            // and emit the LOCALIZED label so the bubble can show "Mobile"
+            // alongside the number — critical when first names collide
+            // and no surname/photo distinguishes the candidates.
+            guard let labeled = contact.phoneNumbers.first else { return nil }
+            let phoneRaw = labeled.value.stringValue
+            let phone = sanitize(phoneRaw)
+            let name = [contact.givenName, contact.familyName]
+                .filter { !$0.isEmpty }.joined(separator: " ")
             let thumb = contact.thumbnailImageData
-            return (pn.phone, pn.name, thumb)
+            // CNLabeledValue.localizedString(forLabel:) converts the raw
+            // CNLabel* constants ("_$!<Mobile>!$_") to user-locale strings.
+            let label: String? = {
+                guard let raw = labeled.label, !raw.isEmpty else { return nil }
+                return CNLabeledValue<NSString>.localizedString(forLabel: raw)
+            }()
+            let org: String? = contact.organizationName.isEmpty ? nil : contact.organizationName
+            return (phone, name, thumb, label, org)
         }
     }
 
@@ -123,6 +136,9 @@ final class GigiContactsEngine {
                 CNContactRelationsKey as CNKeyDescriptor,
                 CNContactThumbnailImageDataKey as CNKeyDescriptor,
                 CNContactImageDataAvailableKey as CNKeyDescriptor,
+                // Bug-017 v6: organization helps disambiguate when two
+                // contacts share the same first name AND no surname.
+                CNContactOrganizationNameKey as CNKeyDescriptor,
             ]
             let request = CNContactFetchRequest(keysToFetch: keys)
             var result: [CNContact] = []

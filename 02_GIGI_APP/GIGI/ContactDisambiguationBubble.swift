@@ -18,6 +18,16 @@ import SwiftUI
 //   - System confirmationDialog cannot render phone subtext
 //   - Stays inside the chat flow; the user's next utterance after the
 //     pick can immediately follow visually.
+//
+// Bug-017 v6 — same-first-name handling:
+//   Two contacts with identical first name AND no surname are a real
+//   user case (two "Fede" entries). The bubble now:
+//     - Header collapses to "Which Fede do you mean?" instead of the
+//       absurd "Which Fede? Fede or Fede?"
+//     - Each row surfaces phone label (Mobile/Home/Work) and, when
+//       names tie, organization as a tertiary line
+//     - A small ordinal badge (1/2/3) overlaps the avatar so the
+//       user can confidently say "the first" / "the second"
 
 struct ContactDisambiguationBubble: View {
 
@@ -47,11 +57,15 @@ struct ContactDisambiguationBubble: View {
                 // (memorized in GigiMemory.contact_alias) appears FIRST,
                 // marked with a "Last call" badge for one-tap re-selection.
                 VStack(spacing: 8) {
-                    ForEach(sortedCandidates) { candidate in
+                    ForEach(Array(sortedCandidates.enumerated()), id: \.element.id) { index, candidate in
                         Button {
                             choose(candidate)
                         } label: {
-                            candidateRow(candidate, isLastUsed: isLastUsed(candidate))
+                            candidateRow(
+                                candidate,
+                                ordinal: index + 1,
+                                isLastUsed: isLastUsed(candidate)
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -91,17 +105,30 @@ struct ContactDisambiguationBubble: View {
 
     private func candidateRow(
         _ candidate: GigiSmartOrchestrator.ContactCandidate,
+        ordinal: Int,
         isLastUsed: Bool
     ) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            // Avatar: prefer Contacts thumbnail, fall back to initials.
-            // Most users who synced a WhatsApp profile photo to Contacts
-            // (manually or via CardDAV) will see the real face here.
-            avatarView(for: candidate)
+            // Avatar with ordinal badge (1/2/3) bottom-right — anchors the
+            // "say 'the first' / 'the second'" affordance when names are
+            // visually identical.
+            ZStack(alignment: .bottomTrailing) {
+                avatarView(for: candidate)
+                if needsOrdinalBadge {
+                    Text("\(ordinal)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .frame(width: 16, height: 16)
+                        .background(Color.purple)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.black.opacity(0.7), lineWidth: 1.5))
+                        .offset(x: 2, y: 2)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(candidate.name.isEmpty ? state.query : candidate.name)
+                    Text(displayName(for: candidate, ordinal: ordinal))
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white)
                     if isLastUsed {
@@ -118,9 +145,18 @@ struct ContactDisambiguationBubble: View {
                             .cornerRadius(4)
                     }
                 }
-                Text(prettyPhone(candidate.phone))
+                // Subtitle: phone label + number (e.g. "Mobile · +39 380 …")
+                Text(phoneLine(for: candidate))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundColor(.white.opacity(0.6))
+
+                // Tertiary line: organization, only when first-line name
+                // collisions exist (otherwise it's noise).
+                if allNamesIdentical, let org = candidate.organization {
+                    Text(org)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.45))
+                }
             }
 
             Spacer()
@@ -161,6 +197,24 @@ struct ContactDisambiguationBubble: View {
         return candidate.name.lowercased() == last
     }
 
+    /// True when every candidate has the exact same lowercased name OR all
+    /// candidates have an empty/whitespace-only name. Triggers the fallback
+    /// header copy and the ordinal badge.
+    private var allNamesIdentical: Bool {
+        let names = Set(state.candidates.map {
+            $0.name.lowercased().trimmingCharacters(in: .whitespaces)
+        })
+        return names.count <= 1
+    }
+
+    /// Show the ordinal badge whenever the visible labels are ambiguous —
+    /// either names tie OR any candidate has an empty name.
+    private var needsOrdinalBadge: Bool {
+        allNamesIdentical || state.candidates.contains(where: {
+            $0.name.trimmingCharacters(in: .whitespaces).isEmpty
+        })
+    }
+
     @ViewBuilder
     private func avatarView(for candidate: GigiSmartOrchestrator.ContactCandidate) -> some View {
         if let data = candidate.photoData, let ui = UIImage(data: data) {
@@ -171,7 +225,7 @@ struct ContactDisambiguationBubble: View {
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5))
         } else {
-            Text(initials(for: candidate.name))
+            Text(initials(for: candidate.name.isEmpty ? state.query : candidate.name))
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundColor(.white)
                 .frame(width: 34, height: 34)
@@ -182,12 +236,19 @@ struct ContactDisambiguationBubble: View {
 
     // MARK: - Helpers
 
+    /// Header phrasing — adapts to candidate-name shape so we never produce
+    /// the absurd "Which Fede? Fede or Fede?" output (real case when two
+    /// contacts share the exact same first name AND no surname).
     private var headerText: String {
+        let q = state.query.capitalized
+        if allNamesIdentical {
+            return "Which \(q) do you mean?"
+        }
         if state.candidates.count == 2 {
             let names = state.candidates.map { $0.name }.joined(separator: " or ")
-            return "Which \(state.query.capitalized)? \(names)?"
+            return "Which \(q)? \(names)?"
         }
-        return "Which \(state.query.capitalized) do you mean?"
+        return "Which \(q) do you mean?"
     }
 
     /// Sub-header — explicit affordance for conversational reply.
@@ -195,7 +256,31 @@ struct ContactDisambiguationBubble: View {
     /// copy frames the dialog as something the user can ANSWER (text or
     /// voice when wired). Tap remains a shortcut.
     private var subHeaderText: String {
-        "Tell me the name (or number), or just tap below."
+        if allNamesIdentical {
+            return "Say the number or say 'first' / 'second' — or just tap."
+        }
+        return "Tell me the name (or number), or just tap below."
+    }
+
+    /// Primary line for a row — falls back to "<Name> #N" when first names
+    /// tie so the visible label is never two identical "Fede" strings.
+    private func displayName(
+        for candidate: GigiSmartOrchestrator.ContactCandidate,
+        ordinal: Int
+    ) -> String {
+        let raw = candidate.name.isEmpty ? state.query : candidate.name
+        guard allNamesIdentical else { return raw }
+        return "\(raw) #\(ordinal)"
+    }
+
+    /// Phone line — "Mobile · +39 380 654 8643" when a label exists,
+    /// otherwise just the prettified number.
+    private func phoneLine(for candidate: GigiSmartOrchestrator.ContactCandidate) -> String {
+        let pretty = prettyPhone(candidate.phone)
+        if let label = candidate.phoneLabel, !label.isEmpty {
+            return "\(label) · \(pretty)"
+        }
+        return pretty
     }
 
     private func initials(for name: String) -> String {

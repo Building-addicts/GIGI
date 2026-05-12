@@ -54,6 +54,13 @@ class GigiSmartOrchestrator: ObservableObject {
         // Bug-017 v3: optional thumbnail data from Contacts. Nil when the
         // user has no photo saved for this contact.
         let photoData: Data?
+        // Bug-017 v6: phone label localized ("Mobile", "Home", "Work",
+        // "iPhone") and organization name. When two contacts share the
+        // same first name AND no surname (real user case: two "Fede"
+        // entries), these fields are what makes them distinguishable
+        // in the bubble.
+        let phoneLabel: String?
+        let organization: String?
 
         // Equatable/Hashable on identity (id) only — Data isn't hashable
         // cheaply.
@@ -87,13 +94,19 @@ class GigiSmartOrchestrator: ObservableObject {
 
     func presentContactDisambiguation(
         query: String,
-        candidates: [(phone: String, name: String, photo: Data?)],
+        candidates: [(phone: String, name: String, photo: Data?, label: String?, org: String?)],
         actionLabel: String,
         lastUsedName: String? = nil,
         completion: @escaping (ContactCandidate?) -> Void
     ) {
         let mapped = candidates.map {
-            ContactCandidate(phone: $0.phone, name: $0.name, photoData: $0.photo)
+            ContactCandidate(
+                phone: $0.phone,
+                name: $0.name,
+                photoData: $0.photo,
+                phoneLabel: $0.label,
+                organization: $0.org
+            )
         }
         contactDisambiguation = ContactDisambiguationState(
             query: query,
