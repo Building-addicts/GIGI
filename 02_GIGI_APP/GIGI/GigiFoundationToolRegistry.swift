@@ -531,16 +531,75 @@ struct FMWebSearchTool: Tool {
     }
 }
 
+// MARK: - 21. ReadClipboardTool (GATE 10.B — utility)
+
+@available(iOS 26.0, *)
+struct FMReadClipboardTool: Tool {
+    let name = "read_clipboard"
+    let description = "Read aloud the current iOS clipboard text. Use when the user asks 'what's in my clipboard', 'read clipboard', 'what did I copy', or 'tell me what's copied'. NOT for setting clipboard or other clipboard operations."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Empty — no arguments needed.")
+        var unused: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "read_clipboard", params: [:])
+    }
+}
+
+// MARK: - 22. GetDeviceBatteryTool (GATE 10.B — utility)
+
+@available(iOS 26.0, *)
+struct FMGetDeviceBatteryTool: Tool {
+    let name = "get_device_battery"
+    let description = "Report the iPhone's current battery level and charging state. Use when the user asks 'how's my battery', 'battery level', 'is my phone charging', 'quanto ho di batteria'. NOT for other device info — only battery."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Empty — no arguments needed.")
+        var unused: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "get_device_battery", params: [:])
+    }
+}
+
+// MARK: - 23. ToggleFlashlightTool (GATE 10.B — utility)
+
+@available(iOS 26.0, *)
+struct FMToggleFlashlightTool: Tool {
+    let name = "toggle_flashlight"
+    let description = "Turn the iPhone flashlight (rear LED torch) on or off. Use when the user asks 'turn on flashlight', 'flashlight on', 'turn off torch', 'accendi torcia', 'spegni torcia'. NOT for HomeKit lights — that's homekit_on/homekit_off."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Target state: 'on' or 'off'. Empty string toggles current state.")
+        var state: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "toggle_flashlight", params: [
+            "state": arguments.state.lowercased(),
+            "raw": arguments.state
+        ])
+    }
+}
+
 // MARK: - Registry
 
 @available(iOS 26.0, *)
 @MainActor
 enum GigiFoundationToolRegistry {
 
-    /// Static collection of all 20 tools (17 baseline + 3 from GATE 9 capability
-    /// expansion Week 1: run_shortcut, set_homekit_scene, web_search). Used by
-    /// `GigiRequestRouter` to pick the relevant tool (or pass them all to
-    /// Apple FM when the router decision is ambiguous).
+    /// Static collection of all 23 tools (17 baseline + 3 from GATE 9 Week 1 +
+    /// 3 from GATE 10.B Week 2 utility). Used by `GigiRequestRouter` to pick
+    /// the relevant tool (or pass them all to Apple FM when ambiguous).
     static var allTools: [any Tool] {
         [
             FMSetTimerTool(),
@@ -563,7 +622,11 @@ enum GigiFoundationToolRegistry {
             // GATE 9 capability expansion Week 1
             FMRunShortcutTool(),
             FMSetHomeKitSceneTool(),
-            FMWebSearchTool()
+            FMWebSearchTool(),
+            // GATE 10.B capability expansion Week 2 — utility
+            FMReadClipboardTool(),
+            FMGetDeviceBatteryTool(),
+            FMToggleFlashlightTool()
         ]
     }
 
@@ -584,7 +647,11 @@ enum GigiFoundationToolRegistry {
         // GATE 9 capability expansion Week 1
         "run_shortcut",
         "set_homekit_scene",
-        "web_search"
+        "web_search",
+        // GATE 10.B capability expansion Week 2 — utility
+        "read_clipboard",
+        "get_device_battery",
+        "toggle_flashlight"
     ]
 }
 

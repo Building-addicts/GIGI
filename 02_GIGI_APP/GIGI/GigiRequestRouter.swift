@@ -864,6 +864,13 @@ final class GigiRequestRouter {
             return ["raw": slot]
         case "web_order_food":
             return ["service": "", "query": slot, "raw": slot]
+        case "read_clipboard", "get_device_battery":
+            // No arguments; tool is invocation-only.
+            return [:]
+        case "toggle_flashlight":
+            // Slot may contain explicit state token ("on"/"off"/"accendi"/etc.)
+            // — pass through; bridge normalizes.
+            return ["state": slot, "raw": slot]
         default:
             return ["raw": slot]
         }

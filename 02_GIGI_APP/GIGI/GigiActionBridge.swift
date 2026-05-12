@@ -245,6 +245,19 @@ class GigiActionBridge {
             let input = intent.params["input"] ?? ""
             return await runAppleShortcut(name: name, input: input)
 
+        case "read_clipboard":
+            // GATE 10.B — read iOS pasteboard text.
+            return await readClipboardText()
+
+        case "get_device_battery":
+            // GATE 10.B — battery level + charging state.
+            return await getDeviceBatteryStatus()
+
+        case "toggle_flashlight":
+            // GATE 10.B — torch on/off. Accepts "on"/"off"/empty (toggle).
+            let state = intent.params["state"] ?? ""
+            return await toggleFlashlight(targetState: state)
+
         case "read_news":
             let q = intent.params["query"] ?? intent.params["raw"] ?? "top news"
             return await readNews(query: q)
@@ -1188,6 +1201,97 @@ class GigiActionBridge {
             UIApplication.shared.open(url)
         }
         return "Running '\(trimmed)'."
+    }
+
+    // MARK: - Utility tools (GATE 10.B)
+
+    /// Reads the iOS general pasteboard. If empty, says so. If the text is
+    /// long (>200 chars), reads the first 200 with an ellipsis.
+    @MainActor
+    private func readClipboardText() async -> String {
+        let pasteboard = UIPasteboard.general
+        guard let text = pasteboard.string, !text.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return "Your clipboard is empty."
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count > 200 {
+            let preview = String(trimmed.prefix(200))
+            return "Your clipboard: \"\(preview)…\""
+        }
+        return "Your clipboard: \"\(trimmed)\""
+    }
+
+    /// Reads UIDevice battery level + charging state. Note: battery
+    /// monitoring must be enabled or level reports -1.
+    @MainActor
+    private func getDeviceBatteryStatus() async -> String {
+        let device = UIDevice.current
+        let wasMonitoring = device.isBatteryMonitoringEnabled
+        if !wasMonitoring { device.isBatteryMonitoringEnabled = true }
+
+        let level = device.batteryLevel
+        let state = device.batteryState
+
+        if !wasMonitoring {
+            // Leave monitoring on — small power cost is negligible, and
+            // re-enabling on every call wastes setup time. Other parts of
+            // the app may benefit from the live reading.
+        }
+
+        guard level >= 0 else {
+            return "I can't read the battery level right now."
+        }
+
+        let percent = Int(round(level * 100))
+        let stateDescription: String
+        switch state {
+        case .charging:    stateDescription = " and charging"
+        case .full:        stateDescription = " and fully charged"
+        case .unplugged:   stateDescription = ""
+        case .unknown:     stateDescription = ""
+        @unknown default:  stateDescription = ""
+        }
+        return "Battery is at \(percent) percent\(stateDescription)."
+    }
+
+    /// Toggles the rear LED torch on / off. Accepts "on"/"off" or empty
+    /// (toggles current state). Requires camera access — gracefully
+    /// degrades with a clear error if the camera is unavailable (e.g. on
+    /// devices without a torch).
+    @MainActor
+    private func toggleFlashlight(targetState: String) async -> String {
+        guard let device = AVCaptureDevice.default(for: .video) else {
+            return "This device doesn't have a flashlight."
+        }
+        guard device.hasTorch else {
+            return "This device doesn't support the flashlight."
+        }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
+            let normalized = targetState.lowercased().trimmingCharacters(in: .whitespaces)
+            let on: Bool
+            switch normalized {
+            case "on", "true", "yes", "accendi", "accesa", "1":
+                on = true
+            case "off", "false", "no", "spegni", "spenta", "0":
+                on = false
+            default:
+                // Toggle current state
+                on = !device.isTorchActive
+            }
+
+            if on {
+                try device.setTorchModeOn(level: 1.0)
+                return "Flashlight on."
+            } else {
+                device.torchMode = .off
+                return "Flashlight off."
+            }
+        } catch {
+            return "Couldn't change the flashlight: \(error.localizedDescription)."
+        }
     }
 
     // MARK: - Email

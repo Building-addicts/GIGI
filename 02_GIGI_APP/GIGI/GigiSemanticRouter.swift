@@ -196,6 +196,25 @@ final class GigiSemanticRouter {
             "ordina pizza", "voglio sushi", "ordina cibo"
         ],
 
+        // UTILITY — clipboard / battery / flashlight (GATE 10.B)
+        "read_clipboard": [
+            "what's in my clipboard", "read my clipboard", "what did i copy",
+            "tell me what's copied", "what's on the clipboard",
+            "cosa ho copiato", "leggi clipboard", "cosa c'è negli appunti"
+        ],
+        "get_device_battery": [
+            "what's my battery", "battery level", "how much battery",
+            "is my phone charging", "am i charging", "battery status",
+            "quanta batteria", "livello batteria", "sto caricando",
+            "il telefono è in carica"
+        ],
+        "toggle_flashlight": [
+            "turn on the flashlight", "flashlight on", "turn off torch",
+            "torch off", "turn on the torch", "switch on the flashlight",
+            "accendi la torcia", "spegni la torcia", "torcia accesa",
+            "torcia spenta"
+        ],
+
         // META — automation
         "run_shortcut": [
             "run my morning routine", "execute work mode",
