@@ -356,3 +356,4 @@
 - `2026-05-12T15:15:28+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(bug-006-v4): fin)
 - `2026-05-12T15:27:43+0200` · local · session ended on `armando-rework` (last commit: fix(bug-006-v5): tel:+ international format — was tel://digits, didn't dial)
 - `2026-05-12T15:54:09+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(bug-006-v5): tel)
+- `2026-05-12T16:09:12+0200` · local · session ended on `armando-rework` (last commit: feat(bug-017): contact disambiguation with memorized alias (A+B))
