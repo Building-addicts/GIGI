@@ -871,6 +871,18 @@ final class GigiRequestRouter {
             // Slot may contain explicit state token ("on"/"off"/"accendi"/etc.)
             // — pass through; bridge normalizes.
             return ["state": slot, "raw": slot]
+        case "define_word":
+            return ["word": slot, "raw": slot]
+        case "calculate_math":
+            return ["expression": slot, "raw": slot]
+        case "translate_text":
+            // translate_text has TWO logical slots: text + targetLanguage.
+            // The simple slot extraction can't split them cleanly without
+            // parsing "to X" patterns. Pass full utterance as text + leave
+            // targetLanguage empty — bridge will detect a missing target
+            // and ask. Apple FM @Generable schema does this split cleanly
+            // when route() falls through to it.
+            return ["text": slot, "targetLanguage": "", "raw": slot]
         default:
             return ["raw": slot]
         }

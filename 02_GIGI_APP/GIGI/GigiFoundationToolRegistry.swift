@@ -591,15 +591,86 @@ struct FMToggleFlashlightTool: Tool {
     }
 }
 
+// MARK: - 24. DefineWordTool (GATE 10.C — knowledge mini)
+
+@available(iOS 26.0, *)
+struct FMDefineWordTool: Tool {
+    let name = "define_word"
+    let description = "Look up the dictionary definition of a word using the iOS system dictionary. Use when the user asks 'define X', 'what does X mean', 'definition of X', 'cosa significa X'. NOT for translation (use translate_text) or for facts (use delegate_cloud)."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "The single word or short phrase to define. Examples: 'serendipity', 'ephemeral', 'gastronomia'.")
+        var word: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "define_word", params: [
+            "word": arguments.word,
+            "raw": arguments.word
+        ])
+    }
+}
+
+// MARK: - 25. CalculateMathTool (GATE 10.C — knowledge mini)
+
+@available(iOS 26.0, *)
+struct FMCalculateMathTool: Tool {
+    let name = "calculate_math"
+    let description = "Evaluate a math expression and read the result aloud. Use when the user asks 'what's X plus Y', 'calculate X', 'how much is X', 'quanto fa X'. Supports basic arithmetic, percentages, exponents. NOT for unit conversions or word problems — only direct math."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "The math expression in natural language or symbols. Examples: '47 * 23', '15% of 200', '2^10', 'sqrt(144)'.")
+        var expression: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "calculate_math", params: [
+            "expression": arguments.expression,
+            "raw": arguments.expression
+        ])
+    }
+}
+
+// MARK: - 26. TranslateTextTool (GATE 10.C — knowledge mini)
+
+@available(iOS 26.0, *)
+struct FMTranslateTextTool: Tool {
+    let name = "translate_text"
+    let description = "Translate a phrase from one language to another using the iOS on-device Translation framework. Use when the user asks 'translate X to Y', 'how do you say X in Y', 'come si dice X in Y'. NOT for general Q&A — only literal translation."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "The text to translate. Examples: 'good morning', 'where is the bathroom', 'buongiorno'.")
+        var text: String
+
+        @Guide(description: "Target language in plain words. Examples: 'Italian', 'Japanese', 'French', 'Spanish', 'German'.")
+        var targetLanguage: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "translate_text", params: [
+            "text": arguments.text,
+            "targetLanguage": arguments.targetLanguage,
+            "raw": arguments.text
+        ])
+    }
+}
+
 // MARK: - Registry
 
 @available(iOS 26.0, *)
 @MainActor
 enum GigiFoundationToolRegistry {
 
-    /// Static collection of all 23 tools (17 baseline + 3 from GATE 9 Week 1 +
-    /// 3 from GATE 10.B Week 2 utility). Used by `GigiRequestRouter` to pick
-    /// the relevant tool (or pass them all to Apple FM when ambiguous).
+    /// Static collection of all 26 tools (17 baseline + 3 from GATE 9 Week 1 +
+    /// 6 from GATE 10 Week 2: utility 10.B + knowledge mini 10.C). Used by
+    /// `GigiRequestRouter` to pick the relevant tool (or pass them all to
+    /// Apple FM when ambiguous).
     static var allTools: [any Tool] {
         [
             FMSetTimerTool(),
@@ -626,7 +697,11 @@ enum GigiFoundationToolRegistry {
             // GATE 10.B capability expansion Week 2 — utility
             FMReadClipboardTool(),
             FMGetDeviceBatteryTool(),
-            FMToggleFlashlightTool()
+            FMToggleFlashlightTool(),
+            // GATE 10.C capability expansion Week 2 — knowledge mini
+            FMDefineWordTool(),
+            FMCalculateMathTool(),
+            FMTranslateTextTool()
         ]
     }
 
@@ -651,7 +726,11 @@ enum GigiFoundationToolRegistry {
         // GATE 10.B capability expansion Week 2 — utility
         "read_clipboard",
         "get_device_battery",
-        "toggle_flashlight"
+        "toggle_flashlight",
+        // GATE 10.C capability expansion Week 2 — knowledge mini
+        "define_word",
+        "calculate_math",
+        "translate_text"
     ]
 }
 

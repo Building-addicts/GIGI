@@ -196,6 +196,30 @@ final class GigiSemanticRouter {
             "ordina pizza", "voglio sushi", "ordina cibo"
         ],
 
+        // KNOWLEDGE MINI — define / calculate / translate (GATE 10.C)
+        "define_word": [
+            "define serendipity", "what does ephemeral mean",
+            "definition of altruism", "define the word resilient",
+            "tell me the meaning of pristine",
+            "cosa significa serendipità", "definizione di altruismo",
+            "che cosa vuol dire effimero"
+        ],
+        "calculate_math": [
+            "what's 47 times 23", "calculate 100 divided by 8",
+            "how much is 15% of 200", "compute 2 to the power of 10",
+            "what's the square root of 144", "47 plus 23",
+            "quanto fa 47 per 23", "calcola 100 diviso 8",
+            "quanto è il 15 percento di 200"
+        ],
+        "translate_text": [
+            "translate good morning to italian",
+            "how do you say hello in japanese",
+            "translate 'where is the bathroom' to french",
+            "come si dice good morning in italiano",
+            "come si dice ciao in giapponese",
+            "traduci hello in francese"
+        ],
+
         // UTILITY — clipboard / battery / flashlight (GATE 10.B)
         "read_clipboard": [
             "what's in my clipboard", "read my clipboard", "what did i copy",
@@ -364,6 +388,26 @@ final class GigiSemanticRouter {
             "navigate": [
                 "navigate to ", "directions to ", "take me to ",
                 "go to ", "portami a ", "indicazioni per ", "navigate "
+            ],
+            "define_word": [
+                "define the word ", "define ",
+                "what does the word ", "what does ",
+                "definition of the word ", "definition of ",
+                "tell me the meaning of ", "meaning of ",
+                "cosa significa la parola ", "cosa significa ",
+                "definizione di ", "che cosa vuol dire ",
+                "che vuol dire "
+            ],
+            "calculate_math": [
+                "calculate the ", "calculate ",
+                "what's ", "whats ", "what is ",
+                "how much is ", "compute the ", "compute ",
+                "quanto fa ", "calcola il ", "calcola ",
+                "quanto è il ", "quanto è ", "quanto vale "
+            ],
+            "translate_text": [
+                "translate ", "how do you say ", "how to say ",
+                "traduci ", "come si dice "
             ]
         ]
 

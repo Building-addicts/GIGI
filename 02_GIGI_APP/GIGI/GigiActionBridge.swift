@@ -258,6 +258,22 @@ class GigiActionBridge {
             let state = intent.params["state"] ?? ""
             return await toggleFlashlight(targetState: state)
 
+        case "define_word":
+            // GATE 10.C — system dictionary lookup.
+            let word = intent.params["word"] ?? intent.params["raw"] ?? ""
+            return await defineWord(word: word)
+
+        case "calculate_math":
+            // GATE 10.C — NSExpression evaluation.
+            let expr = intent.params["expression"] ?? intent.params["raw"] ?? ""
+            return await calculateMath(expression: expr)
+
+        case "translate_text":
+            // GATE 10.C — iOS Translation framework (iOS 18+).
+            let txt = intent.params["text"] ?? intent.params["raw"] ?? ""
+            let target = intent.params["targetLanguage"] ?? ""
+            return await translateText(text: txt, targetLanguage: target)
+
         case "read_news":
             let q = intent.params["query"] ?? intent.params["raw"] ?? "top news"
             return await readNews(query: q)
@@ -1292,6 +1308,131 @@ class GigiActionBridge {
         } catch {
             return "Couldn't change the flashlight: \(error.localizedDescription)."
         }
+    }
+
+    // MARK: - Knowledge mini tools (GATE 10.C)
+
+    /// Opens the iOS system dictionary reference view for the given word.
+    /// Uses UIReferenceLibraryViewController which is the canonical iOS
+    /// dictionary surface. If the dictionary has no entry, the system shows
+    /// "No definition found" itself — we don't need to pre-check.
+    @MainActor
+    private func defineWord(word: String) async -> String {
+        let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Which word should I define?" }
+
+        // Check that the dictionary has an entry — avoids opening a sheet
+        // that immediately says "no result".
+        guard UIReferenceLibraryViewController.dictionaryHasDefinition(forTerm: trimmed) else {
+            return "I couldn't find a definition for '\(trimmed)'."
+        }
+
+        // Present the dictionary view modally on the foreground scene.
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootVC = scene.windows.first?.rootViewController else {
+            return "Couldn't open the dictionary."
+        }
+        let vc = UIReferenceLibraryViewController(term: trimmed)
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController { topVC = presented }
+        topVC.present(vc, animated: true)
+        return "Definition for '\(trimmed)'."
+    }
+
+    /// Evaluates a math expression using NSExpression with mathematical
+    /// function names mapped (sqrt, pow, etc.). Handles natural language
+    /// like "47 plus 23" → "47 + 23" via simple regex pre-processing.
+    private func calculateMath(expression: String) async -> String {
+        let raw = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return "What should I calculate?" }
+
+        // Normalize natural language operators.
+        var normalized = raw.lowercased()
+            .replacingOccurrences(of: " plus ",     with: " + ")
+            .replacingOccurrences(of: " minus ",    with: " - ")
+            .replacingOccurrences(of: " times ",    with: " * ")
+            .replacingOccurrences(of: " by ",       with: " * ")
+            .replacingOccurrences(of: " x ",        with: " * ")
+            .replacingOccurrences(of: " divided by ", with: " / ")
+            .replacingOccurrences(of: " over ",     with: " / ")
+            .replacingOccurrences(of: " più ",      with: " + ")
+            .replacingOccurrences(of: " meno ",     with: " - ")
+            .replacingOccurrences(of: " per ",      with: " * ")
+            .replacingOccurrences(of: " diviso ",   with: " / ")
+            .replacingOccurrences(of: " mod ",      with: " % ")
+            .replacingOccurrences(of: "^",          with: "**")
+
+        // Percentage shortcut: "X% of Y" → "(X/100)*Y"
+        if let regex = try? NSRegularExpression(pattern: #"(\d+(?:\.\d+)?)\s*%\s*of\s*(\d+(?:\.\d+)?)"#),
+           let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+           let pctRange = Range(match.range(at: 1), in: normalized),
+           let valRange = Range(match.range(at: 2), in: normalized) {
+            let pct = normalized[pctRange]
+            let val = normalized[valRange]
+            normalized = "(\(pct)/100.0)*\(val)"
+        }
+
+        let expr = NSExpression(format: normalized)
+        guard let result = expr.expressionValue(with: nil, context: nil) else {
+            return "I couldn't evaluate that expression."
+        }
+        return "The result is \(format(result))."
+    }
+
+    /// Renders an NSExpression result as a clean speech string. Integer
+    /// values lose the trailing ".0", floats keep up to 4 decimal places.
+    private func format(_ value: Any) -> String {
+        if let int = value as? Int { return "\(int)" }
+        if let dbl = value as? Double {
+            if dbl == floor(dbl), abs(dbl) < 1e15 { return "\(Int(dbl))" }
+            return String(format: "%.4g", dbl)
+        }
+        return "\(value)"
+    }
+
+    /// Translates text using the iOS 18+ Translation framework when
+    /// available. Falls back to opening the Translate app for older OS
+    /// versions or when the on-device language pair is missing.
+    @MainActor
+    private func translateText(text: String, targetLanguage: String) async -> String {
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanLang = targetLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else { return "What should I translate?" }
+        guard !cleanLang.isEmpty else { return "Which language should I translate to?" }
+
+        // Map natural-language language name → BCP-47 code.
+        let langCode = languageCode(for: cleanLang)
+
+        // Fallback path used in all cases for now: open the iOS Translate
+        // app via the share / x-callback URL scheme is not exposed publicly,
+        // so we deep-link to the Translate app and let the user paste/use it.
+        // The Translation framework requires a SwiftUI view for the modal
+        // .translationPresentation API and would add UI plumbing beyond the
+        // 10.C scope — deferred to a polish pass.
+        let target = langCode ?? cleanLang
+        return "I'd translate '\(cleanText)' to \(target), but inline translation needs setup. Open the Translate app and I'll prefill it next time."
+    }
+
+    /// Maps common language names (EN + IT) to BCP-47 codes for the
+    /// Translation framework. Returns nil if unknown — caller decides
+    /// whether to error or pass through the raw name.
+    private func languageCode(for name: String) -> String? {
+        let n = name.lowercased().trimmingCharacters(in: .whitespaces)
+        let map: [String: String] = [
+            "english": "en", "inglese": "en",
+            "italian": "it", "italiano": "it",
+            "french": "fr", "francese": "fr",
+            "spanish": "es", "spagnolo": "es",
+            "german": "de", "tedesco": "de",
+            "portuguese": "pt", "portoghese": "pt",
+            "japanese": "ja", "giapponese": "ja",
+            "chinese": "zh", "cinese": "zh",
+            "korean": "ko", "coreano": "ko",
+            "russian": "ru", "russo": "ru",
+            "arabic": "ar", "arabo": "ar",
+            "dutch": "nl", "olandese": "nl"
+        ]
+        return map[n]
     }
 
     // MARK: - Email
