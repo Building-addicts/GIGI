@@ -1,4 +1,4 @@
-# Task plans Phase 2-4 + 5 — 13 GATE modulari (8 ribilanciamento + 5 capability expansion post-MVP)
+# Task plans Phase 2-4 + 5 — 14 GATE modulari (8 ribilanciamento + 6 capability expansion post-MVP)
 
 > **Cartella**: `docs/taskplans_new_gigi/`
 > **Generata**: 2026-05-11 — aggiornata post Groq removal
@@ -70,10 +70,13 @@ L'obiettivo finale: GIGI v0.1.0 OSS-ready, demo "Tesla → nota" in <90s, zero A
 | **11** | Capability Week 3 — Ambient & Social | ~14h | 📋 PLANNED (2026-05-12) | GATE 10 | 11.A→11.D | HomeKit fine control (brightness/color/thermostat) + Location (get_now + share) + Messaging deep links (email/Telegram/Signal) + Focus mode. 29→38 tool. |
 | **12** | Capability Week 4 — Knowledge & Meta + Discovery UI | ~14h | 📋 PLANNED (2026-05-12) | GATE 11 | 12.A→12.D | `web_search_inline` (DDG instant answer, no Safari) + `scan_document` (VisionKit) + `get_news_headlines` + `repeat_last_action` + `undo_last_action` + **Layer C UI Sheet** (Dashboard tab "Capabilities" con 7 categorie tap-to-try). ADR-0010 promosso Accepted. 38→43 tool. |
 | **13** | Capability Week 5+ — Long Tail + Proactive Suggestions | 20-40h variabile | 📋 PLANNED (2026-05-12) | GATE 12 + telemetry MVP | 13.LT + 13.P1+P2+P3 | ~20 long-tail tool prioritized backlog (block_number, move/cancel calendar, podcast/playlist, sensor, geofence reminder, set_volume, screenshot, list_shortcuts, ecc.) + **Layer D Proactive Suggestions** (`GigiSuggestionEngine` + 3 provider concreti + opt-in flow). 43→~62 tool. ADR-0010 finale. |
+| **14** | Capability Week 6 — Macro Engine + Voice Authoring | 12-15h | 📋 PLANNED (2026-05-12) | GATE 13 + telemetry | 14.A→14.D | **Macro Engine in-process GIGI** bypassa il signing-wall di Apple Shortcuts. User dice *"when I say 'gym time' do A+B+C"* → Apple FM (o Claude Code per condizionali) parsa → save CloudKit → trigger phrase invoca sequence di tool. 4 nuovi tool (`create_macro`, `list_macros`, `delete_macro`, `edit_macro`). ADR-0011 PROPOSED → Accepted. 62→66 tool + macro infinitamente componibili. |
 
-**Totale effort GATE 9-13**: ~74-94h (~10-12 giorni full-time, oppure 4-6 settimane part-time @ ~15h/settimana).
+**Totale effort GATE 9-14**: ~86-109h (~12-14 giorni full-time, oppure 5-7 settimane part-time @ ~15h/settimana).
 
-**Capability count finale**: 17 → ~62 tool. **Discovery completo**: 4 layer (A/B/C/D) accessibili da onboarding, voce, UI passive, proactive.
+**Capability count finale**: 17 → ~66 tool + macro engine (infinite combinazioni custom). **Discovery completo**: 4 layer (A/B/C/D) accessibili da onboarding, voce, UI passive, proactive + macro voice-authored.
+
+**🌍 Language compliance (hard rule)**: tutte le user-facing string in **inglese** (TTS, Text/Button/Label SwiftUI, Alert, showBanner, push body, accessibility hint, App Store metadata). Italiano consentito ESCLUSIVAMENTE in doc internal, code comment, ADR, commit message, body issue/PR, log structured. Verificato in ogni GATE via grep guard `bash docs/runbooks/language-audit.sh` (creato come deliverable GATE 14, applicato retroattivamente come pre-commit hook ai GATE 9-13).
 
 ---
 
@@ -129,7 +132,10 @@ GATE 3 (Path 2     GATE 4 (Path 3   (parallelo opt-in: nessuno)
         GATE 13 (Week 5+ — long tail + Layer D Proactive Suggestions)
             │
             ▼
-        🚀 v1.1 GIGI capability-rich + 4-layer discovery
+        GATE 14 (Week 6 — Macro Engine + voice authoring — ADR-0011 Accepted)
+            │
+            ▼
+        🚀 v1.1 GIGI capability-rich + 4-layer discovery + voice-authored macro automation
 ```
 
 **Note sul grafo**:
@@ -258,6 +264,7 @@ Questa sezione è **critica**: senza di lei un task plan vecchio è inutile (non
 
 ## Changelog INDEX
 
+- **2026-05-12 (latest)** — Added **GATE 14 Macro Engine + Voice Authoring** (~12-15h post-GATE 13). Risolve la richiesta utente *"GIGI può creare automazioni custom dinamicamente?"* bypassando il signing-wall di Apple Shortcuts: Macro Engine in-process GIGI (`GigiMacroEngine.swift` + iCloud sync via CloudKit) compone tool esistenti in sequenze voice-authored. 4 nuovi tool (`create_macro`, `list_macros`, `delete_macro`, `edit_macro`). ADR-0011 PROPOSED → Accepted alla chiusura. Master plan §6 Week 6 esteso, §13 nuova sezione "Note tecniche — perché Macro Engine invece di Shortcut programmatici" (spiega che Apple ha chiuso .shortcut signing dal iOS 16+ con crypto verification). **Rafforzato §2.6 principio HARD RULE English-only user-facing** + AC-T7 cross-cutting language audit per OGNI GATE (9-14) + R9 risk + `docs/runbooks/language-audit.sh` come deliverable GATE 14.
 - **2026-05-12 (late)** — Added **GATE 9-13 Capability Expansion** (POST-MVP roadmap, ~10-12 giorni full-time): 5 nuovi task plan in `docs/taskplans_new_gigi/GATE-9-...md` → `GATE-13-...md` (~2500 righe totali). Master plan source: `docs/plans/gigi-capability-expansion-2026-05-12.md`. ADR-0010 *"Tool taxonomy + discovery UX"* in Proposed state, promosso ad Accepted alla chiusura GATE 12. Scope: 17 → ~62 tool + 4 discovery layer (A Onboarding / B Conversational / C UI Sheet / D Proactive).
 - **2026-05-12** — GATE 2-3-4-5(scaffold)-7 implemented overnight by Claude Opus 4.7. ADR-0007/0008/0009/0010 → Accepted. Build SUCCEEDED. IPA dropped to Windows. Spike A scaffold ready. See `docs/HANDOFF_2026-05-12.md`.
 - **2026-05-11** — versione iniziale creata, 8 GATE + INDEX

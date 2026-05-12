@@ -43,8 +43,8 @@ sa fare (oggi è opaco — l'utente deve "indovinare" i comandi).
 
 1. **Description quality > tool count.** Un tool con `description` ambigua
    peggiora la qualità del router più di 10 tool ben descritti. Ogni
-   description segue il pattern: *"<azione>. Use when <trigger>. NOT for
-   <controesempio>."*
+   description segue il pattern: *"<action>. Use when <trigger>. NOT for
+   <counter-example>."*
 2. **Capability-first, UI-second.** Prima sblocchiamo la capability lato
    tool, poi mostriamo come scoprirla. Mai aggiungere tool che non possiamo
    *insegnare* all'utente.
@@ -53,10 +53,21 @@ sa fare (oggi è opaco — l'utente deve "indovinare" i comandi).
    per gap che iOS non copre.
 4. **One meta-tool to rule them all.** `run_shortcut` come escape hatch
    universale per qualsiasi cosa l'utente sa già costruire in Shortcuts —
-   estendibilità infinita senza nostro coding.
-5. **Discovery deve essere conversational.** L'utente chiede *"cosa sai
-   fare?"* o *"come ti dico di X?"* e GIGI risponde con esempi rilevanti
-   al contesto. No menu statico di 60 voci.
+   estendibilità infinita senza nostro coding. Esteso da `create_macro`
+   (GATE 14) per composizione voice-authored di tool esistenti.
+5. **Discovery deve essere conversational.** L'utente chiede *"what can you
+   do?"* o *"how do I X?"* e GIGI risponde con esempi rilevanti al contesto.
+   No menu statico di 60 voci.
+6. **🌍 English-only user-facing (HARD RULE).** Qualsiasi stringa visibile
+   o pronunciabile all'utente — `Text(...)`, `Button(...)`, `Label(...)`,
+   `Alert title/message`, `speech.speak(...)`, `showBanner(...)`,
+   `LocalNotification body`, push notification, Dynamic Island label,
+   accessibility hint, App Store metadata, onboarding tour copy, error
+   message — **deve essere in inglese**. Italiano consentito ESCLUSIVAMENTE
+   in: doc internal (`docs/`), code comments, ADR, commit message, body di
+   issue/PR, log structured (`logger.info(...)`), commenti CLAUDE.md.
+   L'utente PUÒ parlare italiano (Apple FM è bilingue input), ma GIGI
+   risponde in inglese sempre. Vedi CLAUDE.md §"🌍 Lingua — regola dura".
 
 ---
 
@@ -313,6 +324,55 @@ Web search inline, news, document scanning, undo/repeat.
 Tutti i tool rimanenti del catalogo (~30) + Layer D proactive suggestions.
 Implementazione **a richiesta** — non tutti hanno alto ROI per ogni utente.
 
+### 🧠 Week 6 (~12-15h): "Macro Engine + Voice Authoring" — GATE 14
+
+**Il moltiplicatore finale di valore.** Permette all'utente di comporre
+i 62 tool esistenti in **macro user-defined trigger-da-voce**, senza
+toccare l'app Shortcuts di Apple. Aggira il signing-wall di Apple per
+.shortcut file generati programmaticamente (vedi note tecniche §13).
+
+Pattern:
+```
+User: "GIGI, when I say 'gym time' set Focus Sport, play Gym playlist,
+       and start a 60-minute timer"
+              ↓ Apple FM parsa → MacroAction sequence
+              ↓ save in CloudKit (iCloud sync cross-device)
+
+[future]
+User: "gym time"
+              ↓ MacroEngine.tryMatch → execute sequence
+              ↓ GIGI TTS: "Sport Focus on. Gym playlist starting.
+                 Timer set for 60 minutes."
+```
+
+| Item | Effort | Files |
+|---|---|---|
+| Macro Engine core + iCloud sync | 5h | `GigiMacroEngine.swift`, `GigiMacroSync.swift`, `GigiMacro.swift` (model) |
+| Voice authoring (`create_macro` Tool) | 4h | `GigiMacroParser.swift` + tool wrapper, `@Generable` Arguments |
+| Macro management (`list_macros`, `delete_macro`, `edit_macro`) | 3h | 3 nuovi Tool in `GigiFoundationToolRegistry` |
+| Claude Code fallback per macro condizionali | 3h | Hook in `GigiActionBridge.delegateToHarness` per request `parse_conditional_macro` |
+
+**AC GATE 14**:
+- Trigger phrase fuzzy-match ritorna macro corretto
+- Persistenza iCloud, sync cross-device entro 60s
+- Voice authoring funziona per macro semplici (sequenza piatta) on-device via Apple FM
+- Macro condizionali (es. *"if it's after 10pm turn off lights, else dim them"*)
+  delegano a Claude Code subprocess e ritornano JSON valido
+- TTS confirmation in **inglese sempre** (regola lingua §2.6)
+- Tool count finale: ~62 + 4 (macro management) = 66 tool
+
+### Riassunto roadmap
+
+| Fase | GATE | Tool count target | Discovery layer | Effort cumulato |
+|---|---|---|---|---|
+| MVP shipped | — | 17 | — | (baseline) |
+| Week 1 | 9 | 21 | A (Onboarding) | 12h |
+| Week 2 | 10 | 29 | A + B (Conversational) | 26h |
+| Week 3 | 11 | 38 | A + B | 40h |
+| Week 4 | 12 | 43 | A + B + C (UI Sheet) | 54h |
+| Week 5+ | 13 | ~62 | A + B + C + D (Proactive) | 74-94h |
+| Week 6 | 14 | ~66 + macro engine | A + B + C + D + Macro | 86-109h |
+
 ---
 
 ## 7. ADR Proposal — Tool Taxonomy + Discovery UX
@@ -356,6 +416,9 @@ meccanismo di scoperta. L'utente non sa cosa l'app sa fare.
 - Telemetry su quali tool sono effettivamente usati (anonimo, opt-in).
 - A/B test discovery layer A vs no-onboarding sui beta tester.
 - Eventuale tool subsetting dinamico se latenza diventa problema.
+- Macro Engine (GATE 14): voice-authored automation che bypassa il
+  signing-wall di Apple per .shortcut programmatici. ADR-0011 PROPOSTA
+  da formalizzare alla chiusura GATE 13.
 
 ---
 
@@ -363,11 +426,17 @@ meccanismo di scoperta. L'utente non sa cosa l'app sa fare.
 
 ### Per-tool (applicato a ogni nuovo tool)
 - [ ] **AC-T1**: Tool registrato in `GigiFoundationToolRegistry.allTools` E in `canonicalActions`.
-- [ ] **AC-T2**: `description` segue pattern *"<action>. Use when <trigger>. NOT for <controesempio>."*
-- [ ] **AC-T3**: Almeno 1 `@Guide` su ogni argument con esempio concreto.
+- [ ] **AC-T2**: `description` segue pattern *"<action>. Use when <trigger>. NOT for <counter-example>."* — **in inglese**.
+- [ ] **AC-T3**: Almeno 1 `@Guide` su ogni argument con esempio concreto — **in inglese**.
 - [ ] **AC-T4**: Unit test in `GigiFoundationToolRegistryTests.swift` che verifica: (a) tool resolva da `tool(for:)`, (b) `call(arguments:)` dispatch sull'intent corretto in `GigiActionBridge`.
-- [ ] **AC-T5**: E2E test pronunciabile sull'iPhone fisico (1 frase di esempio nel commit message).
-- [ ] **AC-T6**: Aggiunto a `GigiCapabilityCatalog.swift` con `category`, `userExample`, `discoveryHint`.
+- [ ] **AC-T5**: E2E test pronunciabile sull'iPhone fisico (1 frase di esempio nel commit message). Frase utente input può essere in qualsiasi lingua (Apple FM bilingue); risposta GIGI **deve essere in inglese**.
+- [ ] **AC-T6**: Aggiunto a `GigiCapabilityCatalog.swift` con `category`, `userExample` (inglese), `discoveryHint` (inglese).
+- [ ] **AC-T7 (LANG-AUDIT cross-cutting)**: Nessuna stringa italiana in user-facing surface. Grep guard CI:
+  ```bash
+  bash docs/runbooks/language-audit.sh 02_GIGI_APP/GIGI/
+  # exit 1 se trova match in Text("...italian..."), speech.speak("...italian..."),
+  # showBanner("...italian..."), Alert title/message, push body, accessibility hint
+  ```
 
 ### Per-discovery layer
 - [ ] **AC-D1 (Onboarding)**: Nuovo utente vede tour 3-step alla prima apertura. Skip se ≥5 turn già fatti.
@@ -393,7 +462,9 @@ meccanismo di scoperta. L'utente non sa cosa l'app sa fare.
 | **R5**: HomeKit tool falliscono per accessory offline / config errata | Basso | Alto | Graceful error: *"I couldn't reach \(accessory). Try again or check Home app."* No crash. |
 | **R6**: VisionKit `scan_document` richiede permission camera già concesso | Medio | Basso | Permission check + fallback message *"Grant Camera in Settings to scan documents."* |
 | **R7**: Onboarding flow allunga TTV (time-to-value) — utenti abbandonano | Alto | Basso | Onboarding ≤ 60 secondi totali. Skip button visibile. Vale solo per nuovi (flag `onboarding_completed_v2`). |
-| **R8**: Lingua: tutti i tool description in EN ma utenti italiani → router potrebbe matchare worse su query IT | Medio | Medio | Test parity EN/IT su eval set. Aggiungere esempi IT in `@Guide` quando ambigui (es. *"chiama" or "call"*). |
+| **R8**: Lingua: tutti i tool description in EN ma utenti italiani → router potrebbe matchare worse su query IT | Medio | Medio | Test parity EN/IT su eval set. Aggiungere esempi IT in `@Guide` quando ambigui (es. *"chiama" or "call"*). Apple FM è bilingue input — utente può parlare IT, ma GIGI risponde EN sempre. |
+| **R9**: Stringa italiana user-facing accidentalmente committata da Claude/dev disattento | Medio | Alto | Grep guard CI `bash docs/runbooks/language-audit.sh` come pre-commit hook + AC-T7 cross-cutting in ogni GATE. Block merge se exit code ≠ 0. |
+| **R10 (GATE 14 only)**: Macro Engine trigger phrase fuzzy-match falsi positivi (es. *"set timer"* matcha *"set"* macro generico) | Medio | Medio | Trigger phrase richiede match esatto post-normalization (lowercase + trim + remove punctuation). No fuzzy edit distance per macro. Se utente vuole flessibilità, definisce più macro varianti. |
 
 ---
 
@@ -427,10 +498,16 @@ meccanismo di scoperta. L'utente non sa cosa l'app sa fare.
 | `02_GIGI_APP/GIGI/GigiWebFetchService.swift` | **Nuovo** | `web_search_inline` via URLSession |
 | `02_GIGI_APP/GIGI/GigiRequestRouter.swift` | Modifica | Intercept `discover_capabilities` pseudo-intent prima del tool calling |
 | `02_GIGI_APP/GIGI.entitlements` | Modifica eventuale | Add `com.apple.developer.event-kit` se non già presente |
-| `docs/adr/0010-tool-taxonomy-discovery.md` | **Nuovo** | ADR formal |
+| `docs/adr/0010-tool-taxonomy-discovery.md` | **Nuovo** | ADR formal (Proposed → Accepted alla chiusura GATE 12) |
+| `docs/adr/0011-macro-engine-voice-authoring.md` | **Nuovo (GATE 14)** | ADR formal Macro Engine — voice-authored automation bypassing iOS Shortcuts signing-wall |
 | `docs/runbooks/add-new-tool.md` | **Nuovo** | Runbook step-by-step per aggiungere un tool |
-| `docs/eval/router-eval-set.md` | **Nuovo** | 50-query eval set EN+IT con labels |
+| `docs/runbooks/language-audit.md` | **Nuovo** | Runbook grep-audit per verificare zero stringhe italiane user-facing (`Text/Button/Label/speech.speak/showBanner/alerts`) |
+| `docs/eval/router-eval-set.md` | **Nuovo** | 50-query eval set EN+IT input ↔ EN output |
 | `docs/taskplans_new_gigi/POST-MVP-week1-quick-wins.md` | **Nuovo** | Granularizzazione Week 1 in sub-task |
+| `02_GIGI_APP/GIGI/GigiMacroEngine.swift` | **Nuovo (GATE 14)** | Macro Engine core: tryMatch + execute |
+| `02_GIGI_APP/GIGI/GigiMacroSync.swift` | **Nuovo (GATE 14)** | CloudKit fetch/save/delete macros (entitlement iCloud già presente) |
+| `02_GIGI_APP/GIGI/GigiMacroParser.swift` | **Nuovo (GATE 14)** | Voice authoring via Apple FM con `@Generable` MacroAction schema |
+| `02_GIGI_APP/GIGI/GigiMacro.swift` | **Nuovo (GATE 14)** | Codable `GigiMacro` + `MacroAction` models |
 
 ---
 
@@ -447,7 +524,40 @@ meccanismo di scoperta. L'utente non sa cosa l'app sa fare.
 
 ---
 
-## 13. Execution Handoff
+## 13. Note tecniche — perché Macro Engine invece di Shortcut programmatici
+
+Durante la planning fase un'idea legittima è emersa: *"Claude Code sul harness
+genera un .shortcut file ad-hoc per ogni richiesta utente e lo installa sull'iPhone."*
+Approccio bloccato da Apple a livello crittografico:
+
+| iOS version | Stato signing Shortcut | Conseguenza |
+|---|---|---|
+| 13-15 | Plist signed, formato semi-aperto | Tool reverse-engineered (`unsign`) generavano .shortcut validi |
+| 16+ | Signing crittografico stretto via `ShortcutCenter` | File non firmati da Apple → rifiutati al momento install |
+| 17-26 | Sandbox closed | Solo .shortcut firmati real-time da iCloud share Apple installabili |
+
+Quindi Claude Code che genera dinamicamente .shortcut **non funziona su iOS 26**.
+
+La soluzione adottata in GATE 14 — **Macro Engine in-process GIGI** — bypassa
+interamente Shortcuts:
+- Macro = sequenza di MacroAction (riferimenti a tool GIGI esistenti)
+- Trigger phrase → MacroEngine.tryMatch → execute sequence
+- Voice authoring via Apple FM on-device (semplici) o Claude Code (condizionali)
+- Storage in CloudKit (iCloud sync, entitlement già presente)
+- Editing conversazionale: *"GIGI add 'play music' to 'gym time'"*
+
+Limitazione onesta: la macro può comporre **solo i tool che GIGI conosce**
+(~62 dopo GATE 13). Per azioni totalmente fuori (es. controllare Tesla via
+web custom), serve combinare con `run_shortcut` (path A) — l'utente costruisce
+manualmente lo Shortcut in app Shortcuts e GIGI lo invoca per nome.
+
+Trade-off accettabile: Macro Engine copre 80% delle automazioni custom desiderate
+("modo lavoro", "buonanotte", "tempo palestra") senza dipendere dal signing
+proprietario Apple, che è muro definitivo per 3rd-party.
+
+---
+
+## 14. Execution Handoff
 
 Plan completo, **NON eseguito**. Per ralph this:
 
