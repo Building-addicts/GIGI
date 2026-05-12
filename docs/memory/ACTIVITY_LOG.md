@@ -352,3 +352,4 @@
 - `2026-05-12T14:50:02+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-12T14:53:57+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-12T14:58:41+0200` · local · session ended on `armando-rework` (last commit: fix(bug-006-v3): switch from whatsapp://send to whatsapp://call for direct VoIP )
+- `2026-05-12T15:13:21+0200` · local · session ended on `armando-rework` (last commit: fix(bug-006-v4): final — revert to tel:// (WhatsApp call scheme rejected by ap)
