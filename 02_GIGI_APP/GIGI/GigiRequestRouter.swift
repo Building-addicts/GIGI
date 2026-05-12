@@ -68,6 +68,20 @@ final class GigiRequestRouter {
     /// Always returns a `RouteResult` — never throws. Errors are surfaced
     /// as `.error(message)` for the orchestrator to speak.
     func route(text: String, history: String = "") async -> RouteResult {
+        // GATE 9 polish — discovery intercept (Layer B preview, full impl GATE 10).
+        // Apple FM was echoing the query back ("What can you do?" → "What can you
+        // do?") because it routed to ask_clarification with directSpeech set to
+        // the input by mistake. Catch these "what can you do" / "help" /
+        // "cosa sai fare" patterns BEFORE Apple FM dispatch and return a curated
+        // English overview of the 7 capability categories. Layer B in GATE 10
+        // upgrades this to context-aware top-3 suggestions.
+        if detectDiscoveryQuery(in: text) {
+            let speech = discoveryOverviewResponse()
+            GigiDebugLogger.log("GIGI Router: discovery intercept → curated overview")
+            GigiConversationMemory.shared.addModelSpeech(speech)
+            return .spoken(speech)
+        }
+
         // GATE 9.A short-circuit — Apple FM mis-routes "run X" / "esegui X"
         // as homekit_on or set_timer because the description of the
         // run_shortcut tool, although clear, doesn't outweigh the constrained
@@ -661,6 +675,64 @@ final class GigiRequestRouter {
     private func currentMode() -> GigiMode {
         let raw = UserDefaults.standard.string(forKey: "gigi.user.mode") ?? GigiMode.fullPower.rawValue
         return GigiMode(rawValue: raw) ?? .fullPower
+    }
+
+    // MARK: - Discovery query detection (GATE 9 polish, Layer B preview)
+
+    /// Detects "what can you do" / "help" / "cosa sai fare" type queries
+    /// that should NOT go through Apple FM tool calling (which mis-routes
+    /// them as ask_clarification with echoed input). Returns true if the
+    /// utterance is an unambiguous discovery / help request.
+    ///
+    /// Layer B in GATE 10 will upgrade this to context-aware top-3 suggestions
+    /// (different responses by time-of-day, location, recent activity). For
+    /// now this provides a curated static overview to fix the echo bug.
+    private func detectDiscoveryQuery(in text: String) -> Bool {
+        let t = text.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?!.,"))
+        guard !t.isEmpty else { return false }
+
+        // Exact-match high-confidence discovery utterances (case-insensitive,
+        // punctuation-stripped).
+        let exactMatches: Set<String> = [
+            // English
+            "what can you do", "what can you help with", "what do you do",
+            "what are your capabilities", "what are your features",
+            "help", "help me", "what's possible", "what is possible",
+            "how do i use you", "how do i use this", "how can i use you",
+            "what can gigi do", "show me what you can do",
+            "tell me what you can do", "what can i ask you",
+            "what can i ask", "what can i say",
+            // Italian
+            "cosa sai fare", "cosa puoi fare", "che cosa sai fare",
+            "che cosa puoi fare", "aiuto", "aiutami",
+            "cosa puoi farmi fare", "cosa posso chiederti",
+            "cosa posso dirti", "come ti uso",
+            "dimmi cosa sai fare", "fammi vedere cosa sai fare"
+        ]
+        if exactMatches.contains(t) { return true }
+
+        // Prefix matches: "how do i ..." that DON'T match a specific tool
+        // are too ambiguous to intercept — leave to Apple FM. Same with
+        // generic "tell me about" queries.
+        // (intentionally narrow scope to avoid false positives)
+
+        return false
+    }
+
+    /// Curated English overview shown when the user asks discovery queries.
+    /// Static for GATE 9 — context-aware top-3 comes in GATE 10 Layer B.
+    private func discoveryOverviewResponse() -> String {
+        // Single multi-line response that surfaces the 7 categories with a
+        // concrete example for each. Kept under 60 words so TTS stays under
+        // 15 seconds. Always English per CLAUDE.md §Lingua hard rule.
+        return """
+        I can help with a few things. Try saying: 'set a timer for 5 minutes', \
+        'what's the weather', 'call mom', 'send a message to Marco on WhatsApp', \
+        'navigate home', 'play my morning playlist', or 'activate the cinema scene'. \
+        I can also run any Shortcut you've made — just say 'run' followed by its name.
+        """
     }
 
     // MARK: - run_shortcut pattern detection (GATE 9.A)
