@@ -79,6 +79,34 @@ final class GigiRequestRouter {
             return .spoken(speech)
         }
 
+        // GATE 9.A + GATE 15 fix — Explicit verb regex tier-0 fast-path.
+        //
+        // Restored after GATE 15 device test showed semantic router fails
+        // for "Run X" where X is a single concrete word ("call", "mom",
+        // "luce"). Word embedding averages bias toward the concrete word's
+        // tool (make_call, homekit_on) and lose the run intent signal.
+        //
+        // Regex is precision-100 for explicit verbs (run/execute/launch/
+        // trigger/esegui/lancia) — any text after the verb IS a Shortcut
+        // name by definition. Semantic router stays as tier-1 fallback
+        // for natural variants the regex doesn't cover.
+        if let shortcutName = detectRunShortcutPattern(in: text) {
+            GigiDebugLogger.log("GIGI Router: regex tier-0 run_shortcut → '\(shortcutName)'")
+            let speech = await GigiActionBridge.shared.execute(GigiIntent(
+                label: "run_shortcut",
+                confidence: 1.0,
+                params: ["name": shortcutName, "raw": shortcutName, "input": ""]
+            ))
+            let finalSpeech = debugPrefix(
+                routerSource: "regex",
+                tool: "run_shortcut",
+                confidence: 1.0,
+                slot: shortcutName
+            ) + speech
+            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+            return .actionInvoked(speech: finalSpeech, tool: "run_shortcut")
+        }
+
         // GATE 15 — Smart Router semantic fast-path.
         //
         // Replaces the deterministic regex intercepts (run_shortcut,
@@ -841,12 +869,19 @@ final class GigiRequestRouter {
         }
     }
 
-    // MARK: - DEPRECATED — regex intercepts (replaced by GigiSemanticRouter in GATE 15)
+    // MARK: - Tier-0 regex intercepts (HYBRID with GigiSemanticRouter — GATE 15 fix)
     //
-    // These regex pattern matchers were the GATE 9 patch for Apple FM
-    // mis-routing. Now superseded by the embedding-based semantic router
-    // which scales without adding new patterns. Kept in source for reference
-    // and potential rollback; not called from route().
+    // After GATE 15 device test surfaced regression on "Run call" / "Run mom"
+    // (semantic router word-embedding bias toward concrete tools), the regex
+    // pattern matchers were restored as a tier-0 deterministic fast-path
+    // BEFORE the semantic router. They are 100% precision for explicit verb
+    // prefixes (run/execute/launch/trigger/esegui/lancia) — any text after
+    // the verb IS the Shortcut name by definition. Semantic router stays as
+    // tier-1 fallback for natural-language variants the regex doesn't cover.
+    //
+    // detectWebSearchPattern is still NOT called from route() — web_search
+    // semantics narrowed to explicit "Safari/phone" intent per ADR-0013;
+    // generic research queries delegate_cloud via Apple FM.
 
     /// Returns the Shortcut name if `text` matches an unambiguous run-shortcut
     /// trigger pattern; otherwise nil. Apple FM constrained decoding often
