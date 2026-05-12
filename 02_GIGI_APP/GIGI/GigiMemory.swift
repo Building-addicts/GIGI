@@ -246,6 +246,31 @@ final class GigiMemory {
         await touch(record: record)
     }
 
+    // MARK: - Contact alias (bug #017 — disambiguation memory)
+    //
+    // When the user says "Call Marco" and there are 2+ Marcos, GIGI presents
+    // a sheet; after the user picks, the chosen full name is stored here so
+    // the next "Call Marco" goes through silently. Alias key shape:
+    //   "contact_alias:marco" → "Marco Rossi"
+    // The full name is then re-resolved via Contacts (handles renames).
+
+    func rememberContactAlias(query: String, name: String) async {
+        let key = "contact_alias:\(query.lowercased().trimmingCharacters(in: .whitespaces))"
+        await remember(key: key, value: name, category: "contact_alias")
+    }
+
+    func recallContactAlias(for query: String) async -> String? {
+        let key = "contact_alias:\(query.lowercased().trimmingCharacters(in: .whitespaces))"
+        return await recall(key)
+    }
+
+    func forgetContactAlias(query: String) async {
+        let key = "contact_alias:\(query.lowercased().trimmingCharacters(in: .whitespaces))"
+        cache.removeValue(forKey: key)
+        // iCloud-side cleanup not done here (best-effort local only — alias
+        // will simply be re-prompted on next ambiguity).
+    }
+
     // MARK: - Recall
 
     func recall(_ key: String) async -> String? {

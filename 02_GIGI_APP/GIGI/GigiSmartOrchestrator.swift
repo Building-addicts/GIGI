@@ -35,6 +35,49 @@ class GigiSmartOrchestrator: ObservableObject {
     @Published var showDraftPreview: Bool = false
     @Published var pendingDraft: PendingDraft?
 
+    // MARK: - Contact disambiguation (bug #017 — multi-match safety)
+    //
+    // When the user says "Call Marco" and Contacts has 2+ Marcos, GIGI shows
+    // a sheet listing all matches. User taps the intended one → dispatch
+    // proceeds. User taps Cancel → action aborted. After the first pick,
+    // GigiMemory remembers it so subsequent "Call Marco" goes straight
+    // through (no popup repetition).
+    //
+    // The state is published; ChatView observes and presents a
+    // confirmationDialog. The completion closure is invoked once by the UI
+    // and resolves a CheckedContinuation in GigiActionBridge.
+
+    struct ContactCandidate: Identifiable, Hashable {
+        let id = UUID()
+        let phone: String
+        let name: String
+    }
+
+    struct ContactDisambiguationState: Identifiable {
+        let id = UUID()
+        let query: String           // user-spoken name, e.g. "Marco"
+        let candidates: [ContactCandidate]
+        let actionLabel: String     // "call", "message", "facetime"
+        let completion: (ContactCandidate?) -> Void
+    }
+
+    @Published var contactDisambiguation: ContactDisambiguationState?
+
+    func presentContactDisambiguation(
+        query: String,
+        candidates: [(phone: String, name: String)],
+        actionLabel: String,
+        completion: @escaping (ContactCandidate?) -> Void
+    ) {
+        let mapped = candidates.map { ContactCandidate(phone: $0.phone, name: $0.name) }
+        contactDisambiguation = ContactDisambiguationState(
+            query: query,
+            candidates: mapped,
+            actionLabel: actionLabel,
+            completion: completion
+        )
+    }
+
     func presentDraft(contact: String, platform: String, body: String, raw: String) {
         pendingDraft = PendingDraft(contact: contact, platform: platform, body: body, raw: raw)
         showDraftPreview = true

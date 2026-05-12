@@ -321,6 +321,67 @@ class GigiActionBridge {
     }
     private func gatewayURLPayload(_ urlString: String) -> String    { "URL|\(urlString)" }
 
+    // MARK: - Contact disambiguation (bug #017)
+    //
+    // Returns the resolved (phone, name) for `contact` query, asking the user
+    // to choose between candidates when there are 2+ matches in Contacts.
+    // Uses GigiContactsEngine.disambiguate() to get all candidates.
+    //
+    // Flow:
+    //   1. Check GigiMemory.recallContactAlias(query) — if user already picked
+    //      a specific contact for this alias, use it silently.
+    //   2. disambiguate(query) → all matches.
+    //   3. 0 matches → return nil (caller surfaces "Couldn't find X").
+    //   4. 1 match → return it directly.
+    //   5. 2+ matches → present sheet, await user pick (or cancel).
+    //      After pick → memorize alias in GigiMemory.
+    //
+    // Used by makeCallAutomatic, facetimeCall, sendMessageAutomatic. Other
+    // actions (e.g. find_free_slot) keep the legacy single-match resolver.
+    private func disambiguateContact(
+        query: String,
+        actionLabel: String
+    ) async -> (phone: String, name: String)? {
+        // Step 1: check memorized alias first (zero friction after first pick)
+        if let memorized = await GigiMemory.shared.recallContactAlias(for: query) {
+            // memorized = full contact name. Use disambiguate to fetch the
+            // phone for that specific name (handles renames/edits gracefully).
+            let all = await GigiContactsEngine.shared.disambiguate(memorized)
+            if let exact = all.first(where: { $0.name.lowercased() == memorized.lowercased() }) {
+                return exact
+            }
+            // If memorized name no longer matches any contact, fall through.
+        }
+
+        // Step 2: query all matches
+        let candidates = await GigiContactsEngine.shared.disambiguate(query)
+
+        // Step 3-4: standard happy paths
+        if candidates.isEmpty { return nil }
+        if candidates.count == 1 { return candidates[0] }
+
+        // Step 5: suspend and present disambiguation sheet
+        let picked: GigiSmartOrchestrator.ContactCandidate? = await withCheckedContinuation { cont in
+            Task { @MainActor in
+                GigiSmartOrchestrator.shared.presentContactDisambiguation(
+                    query: query,
+                    candidates: candidates,
+                    actionLabel: actionLabel
+                ) { picked in
+                    cont.resume(returning: picked)
+                }
+            }
+        }
+
+        guard let picked else { return nil }  // user tapped Cancel
+
+        // Memorize the choice for next time. Best-effort, fire-and-forget.
+        Task.detached(priority: .background) {
+            await GigiMemory.shared.rememberContactAlias(query: query, name: picked.name)
+        }
+        return (phone: picked.phone, name: picked.name)
+    }
+
     // MARK: - Call
 
     private func sanitizePhoneNumber(_ raw: String) -> String {
@@ -332,10 +393,18 @@ class GigiActionBridge {
         guard await ensureContactsAccess() else {
             return "Turn on Contacts for GIGI in Settings → Privacy → Contacts."
         }
-        let resolved = await resolveContact(contact)
-        guard let number = resolved.number, !number.isEmpty else {
-            return "Couldn't find \(contact) in your contacts."
+        // Bug #017: disambiguate when multiple matches exist — never silently
+        // call the wrong contact.
+        guard let picked = await disambiguateContact(query: contact, actionLabel: "call") else {
+            // No match at all OR user tapped Cancel in the disambiguation sheet.
+            // Differentiate the two cases by re-querying disambiguate quickly.
+            let allMatches = await GigiContactsEngine.shared.disambiguate(contact)
+            return allMatches.isEmpty
+                ? "Couldn't find \(contact) in your contacts."
+                : "Call cancelled."
         }
+        let number = picked.phone
+        let displayName = picked.name.isEmpty ? contact : picked.name
         // 2026-05-12 v5 fix — preserve `+` for international dialing.
         // gatewayPhoneDigits strips ALL non-digits (including '+'), producing
         // '393756548643' from '+39 375 654 8643'. iOS Phone app then treats it
@@ -366,7 +435,7 @@ class GigiActionBridge {
 
         await MainActor.run {
             GigiSmartOrchestrator.shared.stopMicCapture()
-            GigiSmartOrchestrator.shared.showBanner("📞 Calling \(contact)...")
+            GigiSmartOrchestrator.shared.showBanner("📞 Calling \(displayName)...")
         }
 
         // 2026-05-12 — Call routing (bug #006 — final version)
@@ -401,17 +470,23 @@ class GigiActionBridge {
             UIApplication.shared.open(telURL)
             return true
         }
-        return opened ? "Calling \(contact)." : "Couldn't start the call."
+        return opened ? "Calling \(displayName)." : "Couldn't start the call."
     }
 
     // MARK: - Messages
 
     func sendMessageAutomatic(to contact: String, body: String, platform: String) async -> String {
         guard !contact.isEmpty else { return "Who should I message?" }
-        let resolved = await resolveContact(contact)
-        guard let number = resolved.number, !number.isEmpty else {
-            return "Couldn't find \(contact)."
+        // Bug #017: disambiguate when multiple matches exist — never silently
+        // message the wrong contact.
+        guard let picked = await disambiguateContact(query: contact, actionLabel: "message") else {
+            let allMatches = await GigiContactsEngine.shared.disambiguate(contact)
+            return allMatches.isEmpty
+                ? "Couldn't find \(contact)."
+                : "Message cancelled."
         }
+        let number = picked.phone
+        let _ = picked.name.isEmpty ? contact : picked.name  // displayName reserved for future use
         let digits = gatewayPhoneDigits(sanitizePhoneNumber(number))
         guard !digits.isEmpty else { return "Invalid phone number for \(contact)." }
 
@@ -854,10 +929,18 @@ class GigiActionBridge {
 
     private func facetimeCall(contact: String, audio: Bool) async -> String {
         guard !contact.isEmpty else { return "Who do you want to FaceTime?" }
-        let resolved = await resolveContact(contact)
-        guard let number = resolved.number, !number.isEmpty else {
-            return "Couldn't find \(contact) in your contacts."
+        // Bug #017: disambiguate when multiple matches exist.
+        guard let picked = await disambiguateContact(
+            query: contact,
+            actionLabel: audio ? "FaceTime audio" : "FaceTime"
+        ) else {
+            let allMatches = await GigiContactsEngine.shared.disambiguate(contact)
+            return allMatches.isEmpty
+                ? "Couldn't find \(contact) in your contacts."
+                : "FaceTime cancelled."
         }
+        let number = picked.phone
+        let displayName = picked.name.isEmpty ? contact : picked.name
         let scheme = audio ? "facetime-audio" : "facetime"
         let digits = gatewayPhoneDigits(sanitizePhoneNumber(number))
         guard let url = URL(string: "\(scheme)://\(digits)") else {
@@ -865,7 +948,7 @@ class GigiActionBridge {
         }
         GigiSmartOrchestrator.shared.showBanner(audio ? "📞 FaceTime audio..." : "📹 FaceTime video...")
         await UIApplication.shared.open(url)
-        return audio ? "Starting FaceTime audio with \(contact)." : "Starting FaceTime with \(contact)."
+        return audio ? "Starting FaceTime audio with \(displayName)." : "Starting FaceTime with \(displayName)."
     }
 
     // MARK: - Media (Apple Music / system player)

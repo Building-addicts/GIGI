@@ -91,6 +91,39 @@ struct ChatView: View {
         .sheet(isPresented: $gigi.showDraftPreview) {
             DraftMessagePreviewSheet()
         }
+        // Bug #017 — contact disambiguation sheet.
+        // Triggered when GigiActionBridge sees 2+ Contacts matches for a
+        // call/message/facetime query and needs the user to pick one.
+        // Tapping a candidate resolves the suspended CheckedContinuation in
+        // disambiguateContact(); tapping Cancel resolves with nil.
+        .confirmationDialog(
+            disambiguationTitle,
+            isPresented: Binding(
+                get: { gigi.contactDisambiguation != nil },
+                set: { if !$0 { gigi.contactDisambiguation?.completion(nil); gigi.contactDisambiguation = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: gigi.contactDisambiguation
+        ) { state in
+            ForEach(state.candidates) { candidate in
+                Button(candidate.name) {
+                    state.completion(candidate)
+                    gigi.contactDisambiguation = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                state.completion(nil)
+                gigi.contactDisambiguation = nil
+            }
+        } message: { state in
+            Text("\(state.candidates.count) matches found.")
+        }
+    }
+
+    /// Computed title for the disambiguation sheet — uses the user's spoken query.
+    private var disambiguationTitle: String {
+        guard let state = gigi.contactDisambiguation else { return "" }
+        return "Which \(state.query.capitalized)?"
     }
 
     // MARK: - Sub-views
