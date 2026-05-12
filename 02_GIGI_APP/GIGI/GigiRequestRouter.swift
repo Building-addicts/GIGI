@@ -842,18 +842,78 @@ final class GigiRequestRouter {
         return false
     }
 
-    /// Curated English overview shown when the user asks discovery queries.
-    /// Static for GATE 9 — context-aware top-3 comes in GATE 10 Layer B.
+    /// Context-aware discovery response (GATE 10.D Layer B).
+    ///
+    /// Replaces the GATE 9 static overview. Picks 3-5 suggestions that
+    /// match the current context (time-of-day, recent activity). Always
+    /// English per CLAUDE.md §Lingua hard rule.
+    ///
+    /// Context signals used:
+    ///   - Hour of day → morning / midday / afternoon / evening / night
+    ///   - Recently registered Shortcuts → reference them when present
+    ///   - Number of registered alias Shortcuts → boost meta capability
+    ///     awareness ("you have N custom Shortcuts...")
     private func discoveryOverviewResponse() -> String {
-        // Single multi-line response that surfaces the 7 categories with a
-        // concrete example for each. Kept under 60 words so TTS stays under
-        // 15 seconds. Always English per CLAUDE.md §Lingua hard rule.
-        return """
-        I can help with a few things. Try saying: 'set a timer for 5 minutes', \
-        'what's the weather', 'call mom', 'send a message to Marco on WhatsApp', \
-        'navigate home', 'play my morning playlist', or 'activate the cinema scene'. \
-        I can also run any Shortcut you've made — just say 'run' followed by its name.
-        """
+        let hour = Calendar.current.component(.hour, from: Date())
+        let registeredCount = GigiShortcutRegistry.shared.shortcuts.count
+
+        let intro: String
+        let suggestions: [String]
+
+        switch hour {
+        case 5..<10:  // Morning (5am - 10am)
+            intro = "Good morning. Try saying:"
+            suggestions = [
+                "'read my calendar for today'",
+                "'what's the weather'",
+                "'set Focus to Work'",
+                "'turn off bedroom lights'"
+            ]
+        case 10..<14:  // Late morning / lunch (10am - 2pm)
+            intro = "A few useful things you can ask me:"
+            suggestions = [
+                "'set a timer for 5 minutes'",
+                "'navigate to my next meeting'",
+                "'send a WhatsApp to Marco'",
+                "'create event lunch with Sara tomorrow at 1pm'"
+            ]
+        case 14..<18:  // Afternoon (2pm - 6pm)
+            intro = "Try saying:"
+            suggestions = [
+                "'play my afternoon playlist'",
+                "'call mom'",
+                "'add to my note ideas: <something>'",
+                "'set a reminder to take a break in 1 hour'"
+            ]
+        case 18..<22:  // Evening (6pm - 10pm)
+            intro = "Evening menu:"
+            suggestions = [
+                "'navigate home'",
+                "'activate the cinema scene'",
+                "'set alarm for 7am'",
+                "'order pizza on Deliveroo'"
+            ]
+        default:  // Night (10pm - 5am)
+            intro = "Night time. Try saying:"
+            suggestions = [
+                "'set Focus to Sleep'",
+                "'turn off all lights'",
+                "'set alarm for 7am'",
+                "'goodnight scene'"
+            ]
+        }
+
+        // Add the meta capability hint when the user has at least one
+        // registered Shortcut alias — gives credit to the power-user
+        // setup and reinforces the alias pattern.
+        let metaHint: String
+        if registeredCount > 0 {
+            metaHint = " You also have \(registeredCount) custom Shortcut\(registeredCount == 1 ? "" : "s") registered — say any of their aliases."
+        } else {
+            metaHint = " I can also run any Apple Shortcut you've made — just say 'run' followed by its name."
+        }
+
+        return "\(intro) \(suggestions.joined(separator: ", ")). Ask me anything else, too —\(metaHint)"
     }
 
     // MARK: - Debug overlay (DEBUG-only, GATE 15)
