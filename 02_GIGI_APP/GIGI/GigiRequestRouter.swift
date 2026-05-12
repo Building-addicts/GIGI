@@ -831,15 +831,20 @@ final class GigiRequestRouter {
         let leadingPrefixes: [String] = [
             // English — most specific first
             "search the web for ", "search the web ",
+            "search web for ", "search web ",
+            "search the internet for ", "search internet for ",
             "search online for ", "search online ",
-            "search google for ", "search the internet for ",
+            "search google for ", "search on google for ",
+            "search for ",
             "look up the ", "look up ",
             "find online ", "find on the web ",
             "google for ", "google ",
             // Italian
-            "cerca su web ", "cerca su internet ",
-            "cerca su google ", "cerca online ",
-            "cerca per "
+            "cerca sul web ", "cerca su web ", "cerca web ",
+            "cerca su internet ", "cerca internet ",
+            "cerca su google ", "cerca google ",
+            "cerca online ",
+            "cerca per ", "cercami "
         ]
         for prefix in leadingPrefixes {
             if t.hasPrefix(prefix), t.count > prefix.count {
