@@ -219,10 +219,31 @@ class GigiActionBridge {
             GigiSmartOrchestrator.shared.showBanner("🔓 Unlocking...")
             return await GigiHomeKit.shared.setLock(intent.params["accessory"] ?? "", locked: false)
 
-        case "homekit_scene":
-            let scene = intent.params["scene"] ?? intent.params["raw"] ?? ""
+        case "homekit_scene", "set_homekit_scene":
+            // GATE 9.B alias: Apple FM Tool exposes "set_homekit_scene" (more
+            // explicit name in the registry); legacy NLU keyword path still
+            // emits "homekit_scene". Both dispatch identically to the engine.
+            let scene = intent.params["scene"] ?? intent.params["sceneName"] ?? intent.params["raw"] ?? ""
             GigiSmartOrchestrator.shared.showBanner("🏠 Activating scene...")
             return await GigiHomeKit.shared.activateScene(scene)
+
+        case "web_search":
+            // GATE 9.C alias: matches "search_web" semantics (already
+            // implemented) but exposed via Apple FM Tool with the more
+            // natural-language tool name "web_search".
+            let q = intent.params["query"] ?? intent.params["raw"] ?? ""
+            return await searchWeb(query: q)
+
+        case "run_shortcut":
+            // GATE 9.A — universal Apple Shortcuts bridge. Opens the
+            // Shortcuts app via `shortcuts://x-callback-url/run-shortcut`.
+            // The Shortcuts app will come to the foreground for ~1-2s during
+            // execution (Apple sandbox limit — no background invocation for
+            // 3rd-party apps). All user-facing strings in English (CLAUDE.md
+            // §Lingua hard rule).
+            let name = intent.params["name"] ?? intent.params["raw"] ?? ""
+            let input = intent.params["input"] ?? ""
+            return await runAppleShortcut(name: name, input: input)
 
         case "read_news":
             let q = intent.params["query"] ?? intent.params["raw"] ?? "top news"
@@ -1128,6 +1149,45 @@ class GigiActionBridge {
             UIApplication.shared.open(url)
         }
         return "Searching for '\(query)'."
+    }
+
+    // MARK: - Run Apple Shortcut (GATE 9.A)
+
+    /// Universal bridge to Apple Shortcuts via x-callback-url scheme.
+    /// Opens the Shortcuts app and runs the named Shortcut. The Shortcuts
+    /// app comes to the foreground for ~1-2s during execution (iOS sandbox
+    /// limitation — 3rd-party apps cannot run Shortcuts in background).
+    /// All user-facing strings in English per CLAUDE.md §Lingua hard rule.
+    private func runAppleShortcut(name: String, input: String) async -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Which Shortcut should I run?" }
+
+        var cs = CharacterSet.urlQueryAllowed
+        cs.remove(charactersIn: "+&=#?")
+        let encodedName = trimmed.addingPercentEncoding(withAllowedCharacters: cs) ?? trimmed
+
+        var urlString = "shortcuts://x-callback-url/run-shortcut?name=\(encodedName)"
+        if !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let encodedInput = input.addingPercentEncoding(withAllowedCharacters: cs) ?? input
+            urlString += "&input=text&text=\(encodedInput)"
+        }
+
+        guard let url = URL(string: urlString) else {
+            return "Couldn't build the Shortcut URL."
+        }
+
+        let canOpen = await MainActor.run { UIApplication.shared.canOpenURL(url) }
+        guard canOpen else {
+            // Shortcuts app should always be present on iOS, but defensive
+            // check in case the user has somehow uninstalled it.
+            return "I couldn't open the Shortcuts app."
+        }
+
+        await MainActor.run {
+            GigiSmartOrchestrator.shared.showBanner("⚡️ Running Shortcut...")
+            UIApplication.shared.open(url)
+        }
+        return "Running '\(trimmed)'."
     }
 
     // MARK: - Email
