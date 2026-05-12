@@ -68,6 +68,23 @@ final class GigiRequestRouter {
     /// Always returns a `RouteResult` — never throws. Errors are surfaced
     /// as `.error(message)` for the orchestrator to speak.
     func route(text: String, history: String = "") async -> RouteResult {
+        // GATE 9.A short-circuit — Apple FM mis-routes "run X" / "esegui X"
+        // as homekit_on or set_timer because the description of the
+        // run_shortcut tool, although clear, doesn't outweigh the constrained
+        // decoding bias toward concrete tools (it interprets "accendi torcia"
+        // as turn-on-flashlight intent). For unambiguous trigger patterns we
+        // bypass Apple FM entirely and dispatch the tool directly.
+        if let shortcutName = detectRunShortcutPattern(in: text) {
+            GigiDebugLogger.log("GIGI Router: run_shortcut shortcut-circuit → '\(shortcutName)'")
+            let speech = await GigiActionBridge.shared.execute(GigiIntent(
+                label: "run_shortcut",
+                confidence: 1.0,
+                params: ["name": shortcutName, "raw": shortcutName, "input": ""]
+            ))
+            GigiConversationMemory.shared.addModelSpeech(speech)
+            return .actionInvoked(speech: speech, tool: "run_shortcut")
+        }
+
         // Mode gating (GATE 7) — read the selected operating mode and use
         // it to disable paths upfront. `.auto` (no mode set) keeps all paths.
         let mode = currentMode()
@@ -644,6 +661,79 @@ final class GigiRequestRouter {
     private func currentMode() -> GigiMode {
         let raw = UserDefaults.standard.string(forKey: "gigi.user.mode") ?? GigiMode.fullPower.rawValue
         return GigiMode(rawValue: raw) ?? .fullPower
+    }
+
+    // MARK: - run_shortcut pattern detection (GATE 9.A)
+
+    /// Returns the Shortcut name if `text` matches an unambiguous run-shortcut
+    /// trigger pattern; otherwise nil. Apple FM constrained decoding often
+    /// mis-routes "run accendi torcia" to homekit_on or set_timer because the
+    /// inner words bias toward those tools — we short-circuit explicit
+    /// invocations to bypass that.
+    ///
+    /// Recognized patterns (case-insensitive):
+    ///   - "run <name>"
+    ///   - "execute <name>"
+    ///   - "launch <name>"
+    ///   - "trigger <name>"
+    ///   - "esegui <name>"            (IT)
+    ///   - "lancia <name>"            (IT)
+    ///   - "<name> shortcut"          (trailing keyword)
+    ///   - "run my <name>"            (possessive variant)
+    ///
+    /// Returns the cleaned name (trailing/leading whitespace stripped, the
+    /// word "shortcut" removed if present at the start or end).
+    private func detectRunShortcutPattern(in text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return nil }
+
+        // Leading-verb patterns. Order matters: longer prefixes first.
+        let leadingPrefixes: [String] = [
+            "run my ", "execute my ", "launch my ", "trigger my ",
+            "esegui il ", "esegui la ", "esegui lo ", "esegui i ", "esegui le ",
+            "lancia il ", "lancia la ", "lancia lo ", "lancia ",
+            "run the ", "execute the ", "launch the ", "trigger the ",
+            "run ", "execute ", "launch ", "trigger ",
+            "esegui "
+        ]
+        for prefix in leadingPrefixes {
+            if t.hasPrefix(prefix) {
+                let raw = String(t.dropFirst(prefix.count))
+                return cleanShortcutName(raw)
+            }
+        }
+
+        // Trailing keyword pattern: "<name> shortcut" / "<name> scorciatoia"
+        let trailingKeywords = [" shortcut", " scorciatoia"]
+        for kw in trailingKeywords {
+            if t.hasSuffix(kw), t.count > kw.count {
+                let raw = String(t.dropLast(kw.count))
+                return cleanShortcutName(raw)
+            }
+        }
+
+        return nil
+    }
+
+    /// Normalizes a candidate Shortcut name extracted from the utterance.
+    /// Strips a leading/trailing "shortcut"/"scorciatoia" if still present,
+    /// removes filler quotes, trims whitespace. Returns nil if empty.
+    private func cleanShortcutName(_ raw: String) -> String? {
+        var s = raw
+            .replacingOccurrences(of: "\"", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip leading "shortcut " or trailing " shortcut" if present
+        let fillerLead = ["shortcut ", "scorciatoia ", "the shortcut "]
+        for f in fillerLead where s.hasPrefix(f) {
+            s = String(s.dropFirst(f.count))
+        }
+        let fillerTrail = [" shortcut", " scorciatoia"]
+        for f in fillerTrail where s.hasSuffix(f) {
+            s = String(s.dropLast(f.count))
+        }
+        s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? nil : s
     }
 }
 

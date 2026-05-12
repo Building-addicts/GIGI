@@ -437,7 +437,18 @@ struct FMWebOrderFoodTool: Tool {
 @available(iOS 26.0, *)
 struct FMRunShortcutTool: Tool {
     let name = "run_shortcut"
-    let description = "Run any user-installed Apple Shortcut by name. Use when the user explicitly asks to run a Shortcut, routine, or automation they configured themselves (e.g. 'run my morning routine', 'execute work mode', 'trigger arrive home'). NOT for first-class GIGI actions (call/message/timer/HomeKit) — use the specific tool instead."
+    let description = """
+    Open the Apple Shortcuts app and run a user-installed Shortcut by name. \
+    THIS IS THE ONLY TOOL TO USE when the utterance starts with "run", \
+    "execute", "launch", "trigger", "esegui", "lancia" OR ends with "shortcut" \
+    or "scorciatoia". Examples that REQUIRE this tool: "run accendi torcia", \
+    "execute work mode", "run accendi torcia shortcut", "trigger my morning \
+    routine", "lancia modalità lavoro", "esegui buongiorno". The body after \
+    the verb is the literal Shortcut name the user chose in the Shortcuts app \
+    — DO NOT interpret it as a HomeKit accessory or timer duration. \
+    NEVER pick set_timer, homekit_on, homekit_off, or open_app for these \
+    utterances — they are explicit Shortcut invocations.
+    """
 
     @Generable
     struct Arguments {
