@@ -1,7 +1,7 @@
-# GATE 14 — Macro Engine + Voice Authoring (closeout capability expansion)
+# GATE 14 — Macro Engine + Voice Authoring + Shortcut Alias Registry (closeout capability expansion)
 
 > **Status**: 📋 PLANNED (2026-05-12)
-> **Effort stimato**: 12-15h (~2-3 giorni full-time)
+> **Effort stimato**: 15-18h (~3 giorni full-time) — esteso con sub-gate 14.B.2 Shortcut Alias Registry per AI-assisted matching natural-language → user-installed Shortcut
 > **Bloccanti pre-gate**: GATE 13 chiuso (full ~62 tool catalog + Layer D Proactive shipped + telemetry MVP attiva)
 > **Sblocca**: nessun GATE successivo (è il closeout dell'intera capability expansion roadmap, v1.1 ready)
 > **Funzione consegnata (1 frase)**: GIGI permette all'utente di definire macro voice-triggered che compongono i ~62 tool esistenti in sequenze custom, salvate su iCloud, editabili conversazionalmente — bypassando il signing-wall di Apple Shortcuts.
@@ -269,6 +269,103 @@ if let macro = GigiMacroEngine.shared.tryMatch(text) {
 }
 // [existing Apple FM dispatch continues below]
 ```
+
+### Task 14.B.2 — Shortcut Alias Registry + AI-assisted matching (~3h, sub-gate 14.B.2)
+
+**Problema risolto**: oggi `run_shortcut` richiede al user di dire *"run X"* /
+*"esegui X"* / *"X shortcut"* (verb-trigger esplicito intercettato dal router).
+Frasi naturali come *"open torch"*, *"flashlight on"*, *"can you light it up?"*
+**non** matchano il Shortcut chiamato *"accendi torcia"* installato dall'utente
+— perché Apple non espone API pubbliche per leggere la Shortcuts library da
+3rd-party app, e Apple FM non sa che quel Shortcut esiste.
+
+**Soluzione**: user declara i suoi Shortcut + aliases in un Registry locale
+(synced iCloud), il router controlla pattern PRIMA del normal Apple FM dispatch.
+Se nessun alias esatto matcha ma c'è un Shortcut registrato, Apple FM viene
+chiamato con la lista catalog come hint per scegliere semantic match.
+
+**File: `02_GIGI_APP/GIGI/GigiShortcutRegistry.swift`** (CREATE, ~120 righe)
+
+```swift
+struct RegisteredShortcut: Codable, Identifiable {
+    var id: String { canonicalName.lowercased() }
+    let canonicalName: String      // exact name in Apple Shortcuts library
+    let aliases: [String]          // user-declared natural phrases
+    let aiSuggestedAliases: [String] // Apple FM proposed at registration
+    let description: String?       // optional what-it-does
+    let category: ShortcutCategory // .home | .work | .leisure | .utility | .other
+    let createdAt: Date
+    var useCount: Int = 0
+}
+
+@MainActor
+final class GigiShortcutRegistry {
+    static let shared = GigiShortcutRegistry()
+
+    private var registered: [String: RegisteredShortcut] = [:]
+
+    /// Exact / fuzzy alias match. Returns canonicalName if found.
+    func match(_ utterance: String) -> String? {
+        let normalized = utterance.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        for shortcut in registered.values {
+            if shortcut.canonicalName.lowercased() == normalized { return shortcut.canonicalName }
+            if shortcut.aliases.contains(where: { $0.lowercased() == normalized }) { return shortcut.canonicalName }
+            if shortcut.aiSuggestedAliases.contains(where: { $0.lowercased() == normalized }) { return shortcut.canonicalName }
+        }
+        return nil
+    }
+
+    /// AI semantic match fallback — when literal aliases miss. Asks Apple FM
+    /// "of these Shortcuts [list], which matches '<utterance>'?". Returns
+    /// canonical name + a confidence score, or nil if no match.
+    func aiMatch(_ utterance: String) async -> (name: String, confidence: Double)? {
+        // ... constructs prompt with registered.values names + asks Apple FM
+        // via a focused @Generable ShortcutMatch struct
+    }
+}
+```
+
+**Hook in `GigiRequestRouter.route()`** — esteso il short-circuit già aggiunto
+in GATE 9.A:
+
+```swift
+// GATE 9.A — explicit run_shortcut pattern (existing)
+if let shortcutName = detectRunShortcutPattern(in: text) {
+    // ... dispatch run_shortcut ...
+}
+
+// GATE 14.B.2 — alias registry literal match
+if let canonicalName = GigiShortcutRegistry.shared.match(text) {
+    // dispatch run_shortcut(canonicalName)
+}
+
+// GATE 14.B.2 — AI semantic match (slow path, only if literal miss)
+if let match = await GigiShortcutRegistry.shared.aiMatch(text),
+   match.confidence > 0.7 {
+    // confirm with user once: "Did you mean to run 'X'?" → if yes, save
+    // the utterance as a new alias, dispatch
+}
+```
+
+**UI Settings → My Shortcuts** (~80 righe SwiftUI in `MyShortcutsView.swift`):
+- List of registered Shortcut with use count + last used
+- + button → add Shortcut (manually) or scan installed (link to Shortcuts.app)
+- Edit: aliases textfield (comma-separated), AI-suggest button → Apple FM
+  propone 5 aliases basato sul nome + description
+- Delete: confirm + remove from registry
+
+**Sub-task atomici**:
+- 14.B.2.1 — `GigiShortcutRegistry.swift` core + iCloud sync via existing
+  `GigiMacroSync` infrastructure (45min)
+- 14.B.2.2 — Router intercept literal match (15min)
+- 14.B.2.3 — Router intercept AI match + user confirmation flow (45min)
+- 14.B.2.4 — `MyShortcutsView.swift` Settings UI (1h)
+- 14.B.2.5 — AI-suggest aliases via Apple FM @Generable schema (30min)
+
+**E2E target**:
+- *"open torch"* → Apple FM matcha alias registrato → run_shortcut("accendi torcia") → torcia accesa ✅
+- *"flashlight on please"* → no exact alias → AI match con confidence 0.85 → GIGI conferma una tantum → utente: yes → alias salvato + dispatch ✅
+- *"random unrelated query"* → no match → falls through to normal Apple FM dispatch ✅
 
 ### Task 14.2 — Voice authoring via `create_macro` Tool (4h, sub-gate 14.B)
 

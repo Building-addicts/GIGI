@@ -324,12 +324,16 @@ Web search inline, news, document scanning, undo/repeat.
 Tutti i tool rimanenti del catalogo (~30) + Layer D proactive suggestions.
 Implementazione **a richiesta** — non tutti hanno alto ROI per ogni utente.
 
-### 🧠 Week 6 (~12-15h): "Macro Engine + Voice Authoring" — GATE 14
+### 🧠 Week 6 (~15-18h): "Macro Engine + Voice Authoring + Shortcut Alias Registry" — GATE 14
 
-**Il moltiplicatore finale di valore.** Permette all'utente di comporre
-i 62 tool esistenti in **macro user-defined trigger-da-voce**, senza
-toccare l'app Shortcuts di Apple. Aggira il signing-wall di Apple per
-.shortcut file generati programmaticamente (vedi note tecniche §13).
+**Il moltiplicatore finale di valore.** Permette all'utente di:
+1. Comporre i 62 tool esistenti in **macro user-defined trigger-da-voce**
+2. Mappare frasi naturali ai propri **Apple Shortcuts** (es. *"open torch"*
+   → Shortcut *"accendi torcia"*) tramite Alias Registry + AI semantic match
+
+Aggira il signing-wall di Apple per .shortcut file generati programmaticamente
+(vedi note tecniche §13). Aggira anche la limitazione che Apple non espone
+le Shortcuts library a 3rd-party — l'utente declara i propri Shortcut + alias.
 
 Pattern:
 ```
@@ -349,6 +353,7 @@ User: "gym time"
 |---|---|---|
 | Macro Engine core + iCloud sync | 5h | `GigiMacroEngine.swift`, `GigiMacroSync.swift`, `GigiMacro.swift` (model) |
 | Voice authoring (`create_macro` Tool) | 4h | `GigiMacroParser.swift` + tool wrapper, `@Generable` Arguments |
+| **Shortcut Alias Registry + AI matching (sub-gate 14.B.2)** | **3h** | `GigiShortcutRegistry.swift` + `MyShortcutsView.swift` Settings UI |
 | Macro management (`list_macros`, `delete_macro`, `edit_macro`) | 3h | 3 nuovi Tool in `GigiFoundationToolRegistry` |
 | Claude Code fallback per macro condizionali | 3h | Hook in `GigiActionBridge.delegateToHarness` per request `parse_conditional_macro` |
 
@@ -360,6 +365,9 @@ User: "gym time"
   delegano a Claude Code subprocess e ritornano JSON valido
 - TTS confirmation in **inglese sempre** (regola lingua §2.6)
 - Tool count finale: ~62 + 4 (macro management) = 66 tool
+- **Shortcut Alias Registry funzionante**: *"open torch"* matcha alias registrato
+  → run_shortcut("accendi torcia"). Senza match esatto, AI semantic match con
+  confidence >0.7 propone conferma utente, salva alias se yes (one-shot learning).
 
 ### Riassunto roadmap
 
