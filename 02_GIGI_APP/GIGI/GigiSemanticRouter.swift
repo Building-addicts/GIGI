@@ -137,13 +137,26 @@ final class GigiSemanticRouter {
             "what's the weather", "weather today", "will it rain tomorrow",
             "weather in tokyo", "che tempo fa", "previsioni meteo"
         ],
+        // web_search — IMPORTANT: by GIGI design, generic research queries
+        // ("look up X", "find X online", "google X") are handled by the
+        // harness Claude subprocess with the browser MCP tool — which does
+        // actual research and synthesizes an answer. The iPhone Safari path
+        // (this tool) is reserved for EXPLICIT user requests to open Safari
+        // on the phone (e.g. "open Safari and search X", "cerca X sul
+        // telefono"). Catalog phrases below are narrowed to those explicit
+        // forms; generic research falls through to Apple FM → delegate_cloud.
+        // See ADR-0013.
         "web_search": [
-            "search the web for pasta carbonara recipe",
-            "search web for tiramisu", "look up best ramen milan online",
-            "google something", "google for pasta", "search google for milan",
-            "find recipes online", "search for news online",
-            "cerca su web pasta carbonara", "cerca online ricetta tiramisu",
-            "cercami pasta", "cerca su google milano"
+            "open safari and search for pasta carbonara",
+            "search pasta on my phone in safari",
+            "open safari", "open safari with pasta carbonara",
+            "search this on my phone", "open safari and look up tiramisu",
+            "google this in safari", "open google in safari",
+            "search in safari for ramen",
+            "apri safari e cerca pasta carbonara",
+            "apri safari", "cerca pasta sul telefono",
+            "cerca questo sul telefono in safari",
+            "apri google su safari", "cerca su safari ricetta tiramisu"
         ],
 
         // NAVIGATION
@@ -289,19 +302,25 @@ final class GigiSemanticRouter {
 
         let prefixesByTool: [String: [String]] = [
             "web_search": [
-                "search the web for ", "search the web ",
-                "search web for ", "search web ",
-                "search the internet for ", "search internet for ",
-                "search online for ", "search online ",
-                "search google for ", "search on google for ",
-                "search for ",
-                "look up the ", "look up ",
-                "find online ", "find on the web ",
-                "google for ", "google ",
-                "cerca sul web ", "cerca su web ", "cerca web ",
-                "cerca su internet ", "cerca internet ",
-                "cerca su google ", "cerca google ",
-                "cerca online ", "cerca per ", "cercami "
+                // Narrowed to "explicit Safari/phone" intents only — see
+                // ADR-0013. Generic research queries fall through to
+                // delegate_cloud (Claude harness with browser MCP).
+                "open safari and search for ", "open safari and look up ",
+                "open safari and search ", "open safari with ",
+                "open safari ",
+                "search in safari for ", "search in safari ",
+                "google this in safari with ", "google this in safari ",
+                "open google in safari for ", "open google in safari ",
+                "search this on my phone for ", "search this on my phone ",
+                "search on my phone for ", "search on my phone ",
+                // Italian
+                "apri safari e cerca per ", "apri safari e cerca ",
+                "apri safari con ", "apri safari ",
+                "cerca su safari per ", "cerca su safari ",
+                "apri google su safari per ", "apri google su safari ",
+                "cerca sul telefono per ", "cerca sul telefono ",
+                "cerca questo sul telefono in safari ",
+                "cerca questo sul telefono "
             ],
             "run_shortcut": [
                 "run my ", "execute my ", "launch my ", "trigger my ",

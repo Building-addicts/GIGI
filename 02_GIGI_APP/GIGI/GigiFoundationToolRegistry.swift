@@ -492,16 +492,33 @@ struct FMSetHomeKitSceneTool: Tool {
     }
 }
 
-// MARK: - 20. WebSearchTool (GATE 9.C — Safari + DuckDuckGo open)
+// MARK: - 20. WebSearchTool (GATE 9.C — iPhone Safari open on EXPLICIT request only)
+//
+// ADR-0013 design: generic research queries ("look up X", "find X online",
+// "google X") are NOT this tool — they delegate_cloud to the harness Claude
+// subprocess which uses the browser MCP tool to do actual research and
+// synthesize an answer inline. This tool is RESERVED for the user's explicit
+// "open Safari on my phone" intent.
 
 @available(iOS 26.0, *)
 struct FMWebSearchTool: Tool {
     let name = "web_search"
-    let description = "Open Safari with a search query (DuckDuckGo). Use when the user asks to search the web, look up something online, or find general information that GIGI does not have natively (e.g. 'search recipes for pasta', 'look up best ramen Milan', 'find news about Rome'). NOT for weather, calendar, or contact lookups — those have dedicated tools."
+    let description = """
+    Open Safari on the iPhone with a search query. Use ONLY when the user \
+    explicitly asks to open Safari, open the browser, or search on their \
+    phone (e.g. 'open Safari and search X', 'cerca X su Safari', 'apri \
+    Safari', 'open the browser with X', 'cerca questo sul telefono'). \
+    For generic research and information lookup that does NOT request the \
+    iPhone Safari (e.g. 'what is the capital of Chile', 'look up best ramen \
+    in Milan', 'find me a pasta recipe', 'google something'), DO NOT pick \
+    this tool — the harness Claude subprocess with browser MCP will \
+    research and synthesize the answer inline via delegate_cloud, keeping \
+    the user inside the GIGI chat.
+    """
 
     @Generable
     struct Arguments {
-        @Guide(description: "The search query in natural language. Examples: 'pasta carbonara recipe', 'weather Tokyo tomorrow', 'best ramen in Milan'.")
+        @Guide(description: "The search query in natural language to feed into iPhone Safari. Examples: 'pasta carbonara recipe', 'best ramen in Milan'.")
         var query: String
     }
 
