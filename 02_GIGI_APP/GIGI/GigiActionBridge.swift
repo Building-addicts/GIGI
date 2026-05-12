@@ -342,33 +342,30 @@ class GigiActionBridge {
         query: String,
         actionLabel: String
     ) async -> (phone: String, name: String)? {
-        // Step 1: check memorized alias first (zero friction after first pick)
-        if let memorized = await GigiMemory.shared.recallContactAlias(for: query) {
-            // memorized = full contact name. Use disambiguate to fetch the
-            // phone for that specific name (handles renames/edits gracefully).
-            let all = await GigiContactsEngine.shared.disambiguate(memorized)
-            if let exact = all.first(where: { $0.name.lowercased() == memorized.lowercased() }) {
-                return exact
-            }
-            // If memorized name no longer matches any contact, fall through.
-        }
-
-        // Step 2: query all matches with photo data (bug-017 v3 — show face)
+        // Step 1: query all matches with photo data
         let candidates = await GigiContactsEngine.shared.disambiguateWithPhotos(query)
 
-        // Step 3-4: standard happy paths
+        // Step 2: standard happy paths
         if candidates.isEmpty { return nil }
         if candidates.count == 1 {
             return (phone: candidates[0].phone, name: candidates[0].name)
         }
 
-        // Step 5: suspend and present disambiguation sheet
+        // Step 3: 2+ matches — always present the bubble (bug-017 v4 fix).
+        // Previously we silently used the memorized alias on subsequent
+        // "Call X" calls, but that left the user with no way to switch to
+        // a different X. Now we ALWAYS show the bubble; the memorized
+        // contact gets a visual "Last call" highlight so the user can tap
+        // it in one move or pick another.
+        let memorizedName = await GigiMemory.shared.recallContactAlias(for: query)
+
         let picked: GigiSmartOrchestrator.ContactCandidate? = await withCheckedContinuation { cont in
             Task { @MainActor in
                 GigiSmartOrchestrator.shared.presentContactDisambiguation(
                     query: query,
                     candidates: candidates,
-                    actionLabel: actionLabel
+                    actionLabel: actionLabel,
+                    lastUsedName: memorizedName
                 ) { picked in
                     cont.resume(returning: picked)
                 }
@@ -377,7 +374,8 @@ class GigiActionBridge {
 
         guard let picked else { return nil }  // user tapped Cancel
 
-        // Memorize the choice for next time. Best-effort, fire-and-forget.
+        // Memorize the choice (or overwrite). Drives the "Last call" badge
+        // next time + sorting.
         Task.detached(priority: .background) {
             await GigiMemory.shared.rememberContactAlias(query: query, name: picked.name)
         }

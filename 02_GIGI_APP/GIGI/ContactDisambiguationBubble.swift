@@ -43,13 +43,15 @@ struct ContactDisambiguationBubble: View {
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.55))
 
-                // Candidate rows
+                // Candidate rows — sorted so the previously-chosen contact
+                // (memorized in GigiMemory.contact_alias) appears FIRST,
+                // marked with a "Last call" badge for one-tap re-selection.
                 VStack(spacing: 8) {
-                    ForEach(state.candidates) { candidate in
+                    ForEach(sortedCandidates) { candidate in
                         Button {
                             choose(candidate)
                         } label: {
-                            candidateRow(candidate)
+                            candidateRow(candidate, isLastUsed: isLastUsed(candidate))
                         }
                         .buttonStyle(.plain)
                     }
@@ -87,7 +89,10 @@ struct ContactDisambiguationBubble: View {
 
     // MARK: - Sub-views
 
-    private func candidateRow(_ candidate: GigiSmartOrchestrator.ContactCandidate) -> some View {
+    private func candidateRow(
+        _ candidate: GigiSmartOrchestrator.ContactCandidate,
+        isLastUsed: Bool
+    ) -> some View {
         HStack(alignment: .center, spacing: 12) {
             // Avatar: prefer Contacts thumbnail, fall back to initials.
             // Most users who synced a WhatsApp profile photo to Contacts
@@ -95,9 +100,24 @@ struct ContactDisambiguationBubble: View {
             avatarView(for: candidate)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(candidate.name.isEmpty ? state.query : candidate.name)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
+                HStack(spacing: 6) {
+                    Text(candidate.name.isEmpty ? state.query : candidate.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                    if isLastUsed {
+                        Text("Last call")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundColor(.purple)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.purple.opacity(0.18))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(Color.purple.opacity(0.45), lineWidth: 0.5)
+                            )
+                            .cornerRadius(4)
+                    }
+                }
                 Text(prettyPhone(candidate.phone))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundColor(.white.opacity(0.6))
@@ -111,9 +131,34 @@ struct ContactDisambiguationBubble: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color.white.opacity(0.05))
+        .background(isLastUsed ? Color.purple.opacity(0.10) : Color.white.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isLastUsed ? Color.purple.opacity(0.4) : Color.clear, lineWidth: 1)
+        )
         .cornerRadius(10)
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Sorting
+
+    /// Returns candidates with the previously-chosen contact (state.lastUsedName)
+    /// moved to position 0. Stable order for the rest.
+    private var sortedCandidates: [GigiSmartOrchestrator.ContactCandidate] {
+        guard let last = state.lastUsedName?.lowercased(), !last.isEmpty else {
+            return state.candidates
+        }
+        var ordered = state.candidates
+        if let idx = ordered.firstIndex(where: { $0.name.lowercased() == last }), idx != 0 {
+            let pinned = ordered.remove(at: idx)
+            ordered.insert(pinned, at: 0)
+        }
+        return ordered
+    }
+
+    private func isLastUsed(_ candidate: GigiSmartOrchestrator.ContactCandidate) -> Bool {
+        guard let last = state.lastUsedName?.lowercased() else { return false }
+        return candidate.name.lowercased() == last
     }
 
     @ViewBuilder

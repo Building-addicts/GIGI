@@ -70,6 +70,11 @@ class GigiSmartOrchestrator: ObservableObject {
         let query: String           // user-spoken name, e.g. "Marco"
         let candidates: [ContactCandidate]
         let actionLabel: String     // "call", "message", "facetime"
+        // Bug-017 v4: previously-picked contact full name (from
+        // GigiMemory.contact_alias). When set, the bubble sorts that
+        // contact first and shows a "Last call" badge so the user can
+        // tap it in one move or override with another candidate.
+        let lastUsedName: String?
         let completion: (ContactCandidate?) -> Void
     }
 
@@ -79,6 +84,7 @@ class GigiSmartOrchestrator: ObservableObject {
         query: String,
         candidates: [(phone: String, name: String, photo: Data?)],
         actionLabel: String,
+        lastUsedName: String? = nil,
         completion: @escaping (ContactCandidate?) -> Void
     ) {
         let mapped = candidates.map {
@@ -88,6 +94,7 @@ class GigiSmartOrchestrator: ObservableObject {
             query: query,
             candidates: mapped,
             actionLabel: actionLabel,
+            lastUsedName: lastUsedName,
             completion: completion
         )
     }
