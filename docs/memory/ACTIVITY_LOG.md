@@ -361,3 +361,4 @@
 - `2026-05-12T16:21:14+0200` · local · session ended on `armando-rework` (last commit: feat(bug-017-v3): contact thumbnail photos in disambiguation bubble)
 - `2026-05-12T16:27:51+0200` · local · session ended on `armando-rework` (last commit: feat(bug-017-v4): always show disambiguation + 'Last call' badge on previously-c)
 - `2026-05-12T16:41:23+0200` · local · session ended on `armando-rework` (last commit: docs(plan): voice-aware contact disambiguation — design doc before code)
+- `2026-05-12T16:49:21+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: docs(plan): voice-aw)
