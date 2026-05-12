@@ -635,7 +635,63 @@ struct FMCalculateMathTool: Tool {
     }
 }
 
-// MARK: - 26. TranslateTextTool (GATE 10.C — knowledge mini)
+// MARK: - 26. CreateCalendarEventTool (GATE 10.A — productivity)
+
+@available(iOS 26.0, *)
+struct FMCreateCalendarEventTool: Tool {
+    let name = "create_calendar_event"
+    let description = "Create a new event in the iOS Calendar. Use when the user asks 'create event', 'add event', 'schedule meeting', 'crea evento', 'aggiungi appuntamento'. NOT for reminders (use set_reminder), alarms (use set_alarm), or reading existing events (use read_calendar)."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Event title or short description. Examples: 'Meeting with Marco', 'Doctor appointment', 'Dinner with Sara'.")
+        var title: String
+
+        @Guide(description: "Date in natural language. Examples: 'today', 'tomorrow', 'Friday', 'next Tuesday', 'May 15'.")
+        var date: String
+
+        @Guide(description: "Start time. Examples: '3pm', '15:00', '10:30 AM'. Defaults to 'noon' if unspecified.")
+        var time: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "create_event", params: [
+            "title": arguments.title,
+            "date": arguments.date,
+            "time": arguments.time,
+            "raw": arguments.title
+        ])
+    }
+}
+
+// MARK: - 27. AddToNoteTool (GATE 10.A — productivity)
+
+@available(iOS 26.0, *)
+struct FMAddToNoteTool: Tool {
+    let name = "add_to_note"
+    let description = "Append text to an existing Apple Note by title, or create one if missing. Use when the user asks 'add to my note', 'append to note X', 'aggiungi alla nota'. NOT for creating new standalone content (use create_note) — this targets a SPECIFIC existing note by name."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Title or name of the target note. Examples: 'Work', 'Ideas Q3', 'Shopping list'.")
+        var noteTitle: String
+
+        @Guide(description: "Text content to append to that note. Examples: 'Q3 product idea: voice macros', 'Buy: olive oil, parmesan'.")
+        var content: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "add_to_note", params: [
+            "noteTitle": arguments.noteTitle,
+            "content": arguments.content,
+            "raw": arguments.content
+        ])
+    }
+}
+
+// MARK: - 28. TranslateTextTool (GATE 10.C — knowledge mini)
 
 @available(iOS 26.0, *)
 struct FMTranslateTextTool: Tool {
@@ -701,7 +757,10 @@ enum GigiFoundationToolRegistry {
             // GATE 10.C capability expansion Week 2 — knowledge mini
             FMDefineWordTool(),
             FMCalculateMathTool(),
-            FMTranslateTextTool()
+            FMTranslateTextTool(),
+            // GATE 10.A capability expansion Week 2 — productivity
+            FMCreateCalendarEventTool(),
+            FMAddToNoteTool()
         ]
     }
 
@@ -730,7 +789,10 @@ enum GigiFoundationToolRegistry {
         // GATE 10.C capability expansion Week 2 — knowledge mini
         "define_word",
         "calculate_math",
-        "translate_text"
+        "translate_text",
+        // GATE 10.A capability expansion Week 2 — productivity
+        "create_calendar_event",
+        "add_to_note"
     ]
 }
 

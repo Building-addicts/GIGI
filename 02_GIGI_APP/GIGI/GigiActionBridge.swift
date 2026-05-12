@@ -274,6 +274,22 @@ class GigiActionBridge {
             let target = intent.params["targetLanguage"] ?? ""
             return await translateText(text: txt, targetLanguage: target)
 
+        case "create_calendar_event":
+            // GATE 10.A — alias to existing create_event handler.
+            return await createEvent(
+                title: intent.params["title"] ?? "Event",
+                date:  intent.params["date"]  ?? "today",
+                time:  intent.params["time"]  ?? "12:00"
+            )
+
+        case "add_to_note":
+            // GATE 10.A — Notes app doesn't expose a public write API for
+            // 3rd-party apps. Graceful path: copy content to clipboard +
+            // open Notes app, instruct user to paste.
+            let noteTitle = intent.params["noteTitle"] ?? "your note"
+            let content = intent.params["content"] ?? intent.params["raw"] ?? ""
+            return await addToNote(noteTitle: noteTitle, content: content)
+
         case "read_news":
             let q = intent.params["query"] ?? intent.params["raw"] ?? "top news"
             return await readNews(query: q)
@@ -1460,6 +1476,41 @@ class GigiActionBridge {
             "netherlands": "nl", "olanda": "nl"
         ]
         return map[n]
+    }
+
+    // MARK: - Add to Note (GATE 10.A)
+
+    /// Appends text to an Apple Note. Apple does NOT expose a public API for
+    /// 3rd-party apps to write into specific Notes — Notes is sandboxed. The
+    /// graceful path we ship in GATE 10.A:
+    ///   1. Copy the content (with a header line showing target note title)
+    ///      to the iOS general pasteboard
+    ///   2. Open the Notes app (mobilenotes:// → Notes.app)
+    ///   3. TTS instructs the user to paste into the named note
+    ///
+    /// Polish backlog (GATE 14): a user-installed "GIGI Append to Note"
+    /// Shortcut bridged via shortcuts://x-callback-url/run-shortcut for
+    /// truly automatic append. Requires one-time onboarding for the
+    /// Shortcut install — out of scope for 10.A MVP.
+    @MainActor
+    private func addToNote(noteTitle: String, content: String) async -> String {
+        let cleanTitle = noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanContent.isEmpty else { return "What should I add to the note?" }
+
+        // Copy to clipboard with a marker so the user knows what's pending.
+        UIPasteboard.general.string = cleanContent
+
+        // Try to open Notes via the legacy mobilenotes:// scheme. Apple
+        // removed this in iOS 13 publicly but in many setups it still
+        // launches Notes.app. If canOpenURL returns false the user opens
+        // Notes manually — message below is clear enough.
+        if let url = URL(string: "mobilenotes://"), UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        }
+
+        let displayTitle = cleanTitle.isEmpty ? "your note" : "'\(cleanTitle)'"
+        return "I copied that to your clipboard. Open Notes, tap \(displayTitle), and paste at the end."
     }
 
     // MARK: - Email

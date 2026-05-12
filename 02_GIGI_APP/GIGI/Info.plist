@@ -91,29 +91,29 @@
     <key>NSLocalNetworkUsageDescription</key>
     <string>We need to connect to the local debug server.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>GIGI ha bisogno del microfono per ascoltare i tuoi comandi vocali e la wake word.</string>
+    <string>GIGI needs the microphone to hear your voice commands and the wake word.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>GIGI usa il riconoscimento vocale per capire i tuoi comandi quando non c'è connessione internet.</string>
+    <string>GIGI uses speech recognition to understand your commands when offline.</string>
     <key>NSContactsUsageDescription</key>
-    <string>GIGI ha bisogno di accedere ai contatti per poter effettuare chiamate e inviare messaggi per te.</string>
+    <string>GIGI needs Contacts access to make calls and send messages for you.</string>
     <key>NSCalendarsUsageDescription</key>
-    <string>GIGI ha bisogno di accedere al calendario per leggere i tuoi impegni e creare nuovi eventi.</string>
+    <string>GIGI needs Calendar access to read your events and create new ones.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>GIGI ha bisogno di accesso completo al calendario per gestire i tuoi eventi e trovare slot liberi.</string>
+    <string>GIGI needs full Calendar access to manage your events and find free slots.</string>
     <key>NSRemindersFullAccessUsageDescription</key>
-    <string>GIGI ha bisogno di accesso ai promemoria per creare le tue sveglie e routine.</string>
+    <string>GIGI needs Reminders access to create your alarms and routines.</string>
     <key>NSRemindersUsageDescription</key>
-    <string>GIGI ha bisogno di accesso ai promemoria per creare le tue sveglie e routine.</string>
+    <string>GIGI needs Reminders access to create your alarms and routines.</string>
     <key>NSHomeKitUsageDescription</key>
-    <string>GIGI ha bisogno di accedere a HomeKit per controllare le luci, il termostato e gli altri accessori smart della tua casa.</string>
+    <string>GIGI needs HomeKit access to control lights, thermostat, and other smart accessories in your home.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>GIGI usa la tua posizione per fornirti il meteo e indicazioni stradali precise.</string>
+    <string>GIGI uses your location to provide accurate weather and directions.</string>
     <key>NSSiriUsageDescription</key>
-    <string>GIGI si integra con Siri per permetterti di usare i comandi vocali anche quando l'app è chiusa.</string>
+    <string>GIGI integrates with Siri so you can use voice commands even when the app is closed.</string>
     <key>NSAppleMusicUsageDescription</key>
-    <string>GIGI ha bisogno di accedere ad Apple Music per riprodurre la musica richiesta.</string>
+    <string>GIGI needs Apple Music access to play the music you request.</string>
     <key>NSCameraUsageDescription</key>
-    <string>GIGI usa la fotocamera per leggere il QR code del tuo Harness backend (pairing una-tantum).</string>
+    <string>GIGI uses the camera to scan the QR code of your Harness backend (one-time pairing).</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_gigi._tcp</string>

@@ -910,6 +910,21 @@ final class GigiRequestRouter {
             // IT ("buongiorno in giapponese") variants.
             let (txt, lang) = parseTranslateSlot(slot)
             return ["text": txt, "targetLanguage": lang, "raw": slot]
+        case "create_calendar_event":
+            // Semantic match path: pass the full slot as title; defer date/
+            // time parsing to the bridge's parseDateTime which already
+            // handles natural-language temporal references ("today",
+            // "tomorrow", "Friday at 3pm"). Apple FM @Generable Arguments
+            // schema does cleaner splits but semantic matches reach here
+            // with the catalog phrases (already meaningful titles).
+            return ["title": slot, "date": "today", "time": "12:00", "raw": slot]
+        case "add_to_note":
+            // Semantic slot extraction can't reliably split "<note_title> +
+            // <content>" without a clear separator. Fallback: put the
+            // whole slot as content + leave noteTitle empty so the bridge
+            // surfaces "your note" — user pastes into the right one
+            // manually after the clipboard prefill.
+            return ["noteTitle": "", "content": slot, "raw": slot]
         default:
             return ["raw": slot]
         }

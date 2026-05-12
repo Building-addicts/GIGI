@@ -196,6 +196,28 @@ final class GigiSemanticRouter {
             "ordina pizza", "voglio sushi", "ordina cibo"
         ],
 
+        // PRODUCTIVITY — calendar event / note append (GATE 10.A)
+        "create_calendar_event": [
+            "create event meeting with marco friday at 3pm",
+            "schedule meeting tomorrow at 10",
+            "add event lunch with sara monday",
+            "book event dentist tuesday at 9",
+            "put event coffee with leo on calendar",
+            "crea evento riunione con marco venerdì alle 15",
+            "metti in calendario pranzo con sara",
+            "aggiungi evento dentista martedì alle 9",
+            "schedule a meeting", "create event"
+        ],
+        "add_to_note": [
+            "add to my note work idea Q3 macros",
+            "append to note shopping buy milk and eggs",
+            "save to note ideas meeting takeaways",
+            "add this to my work note",
+            "aggiungi alla nota lavoro idea Q3",
+            "salva nella nota idee meeting takeaways",
+            "appendi alla nota spesa latte e uova"
+        ],
+
         // KNOWLEDGE MINI — define / calculate / translate (GATE 10.C)
         "define_word": [
             "define serendipity", "what does ephemeral mean",
