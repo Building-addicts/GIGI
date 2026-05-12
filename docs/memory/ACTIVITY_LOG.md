@@ -354,3 +354,4 @@
 - `2026-05-12T14:58:41+0200` · local · session ended on `armando-rework` (last commit: fix(bug-006-v3): switch from whatsapp://send to whatsapp://call for direct VoIP )
 - `2026-05-12T15:13:21+0200` · local · session ended on `armando-rework` (last commit: fix(bug-006-v4): final — revert to tel:// (WhatsApp call scheme rejected by ap)
 - `2026-05-12T15:15:28+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(bug-006-v4): fin)
+- `2026-05-12T15:27:43+0200` · local · session ended on `armando-rework` (last commit: fix(bug-006-v5): tel:+ international format — was tel://digits, didn't dial)
