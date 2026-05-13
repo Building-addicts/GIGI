@@ -24,7 +24,7 @@
 // Authentication: same Bearer middleware as other ios-router endpoints.
 
 import { spawn } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -74,13 +74,30 @@ function macCherriBin() {
 // MARK: - Shell helpers
 
 /**
+ * Resolve ssh/scp binary. On Windows, prefer the System32 OpenSSH binaries
+ * over Git Bash's MSYS port — the MSYS port mangles `host:/path` arguments
+ * via its path-conversion layer (turns the remote path into a local one).
+ * Windows OpenSSH handles the syntax correctly. Returns absolute path on
+ * Windows when present, else the bare command (PATH lookup).
+ */
+function resolveSshBinary(cmd) {
+  if (process.platform !== 'win32') return cmd;
+  const win = `C:\\Windows\\System32\\OpenSSH\\${cmd}.exe`;
+  try { if (existsSync(win)) return win; } catch {}
+  return cmd;
+}
+
+/**
  * Run a command, return stdout (Buffer). Rejects with stderr on non-zero
  * exit. Times out after 30s by default (cherri compile + signing typically
  * 2-8 seconds).
  */
 function runCommand(cmd, args, timeoutMs = 30000) {
+  // On Windows, redirect ssh/scp to System32 OpenSSH to avoid MSYS path
+  // mangling. No-op on macOS/Linux.
+  const exe = (cmd === 'ssh' || cmd === 'scp') ? resolveSshBinary(cmd) : cmd;
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(exe, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     const out = [];
     const err = [];
     child.stdout.on('data', (chunk) => out.push(chunk));
