@@ -23,11 +23,11 @@
 //
 // Authentication: same Bearer middleware as other ios-router endpoints.
 
-import { spawn } from 'node:child_process';
-import { promises as fs, existsSync } from 'node:fs';
+import { promises as fs, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { Client as SSHClient } from 'ssh2';
 import { log } from '../logger.js';
 import { spawnClaude } from '../claude-runner.js';
 
@@ -71,57 +71,136 @@ function macCherriBin() {
   return process.env.HARNESS_MAC_CHERRI_BIN || '~/bin/cherri';
 }
 
-// MARK: - Shell helpers
+// MARK: - SSH/SFTP via ssh2 (pure JS, cross-platform)
+//
+// We don't shell out to ssh/scp because that path is fragile on Windows:
+// MSYS scp from Git Bash mangles `host:/path` via path conversion, Windows
+// OpenSSH cares about strict permissions on ~/.ssh/config, PATH may resolve
+// to either binary depending on shell, etc. ssh2 talks the SSH protocol
+// directly in Node — identical behavior on Win/Mac/Linux, zero subprocess.
+//
+// Connection config — three env vars, that's it:
+//   HARNESS_MAC_SIGN_HOST     "user@host[:port]"  (e.g. user297422@FF125.macincloud.com)
+//   HARNESS_MAC_SIGN_KEY      path to private key (default: ~/.ssh/id_ed25519, fallback ~/.ssh/id_rsa)
+//   HARNESS_MAC_SIGN_KEY_PASSPHRASE   optional passphrase if the key is encrypted
+//
+// No SSH config parsing, no host aliases — full target in one env var.
 
 /**
- * Resolve ssh/scp binary. On Windows, prefer the System32 OpenSSH binaries
- * over Git Bash's MSYS port — the MSYS port mangles `host:/path` arguments
- * via its path-conversion layer (turns the remote path into a local one).
- * Windows OpenSSH handles the syntax correctly. Returns absolute path on
- * Windows when present, else the bare command (PATH lookup).
+ * Parse "[user@]host[:port]" into { user, host, port }. user defaults to
+ * current OS username; port defaults to 22.
  */
-function resolveSshBinary(cmd) {
-  if (process.platform !== 'win32') return cmd;
-  const win = `C:\\Windows\\System32\\OpenSSH\\${cmd}.exe`;
-  try { if (existsSync(win)) return win; } catch {}
-  return cmd;
+function parseSshTarget(target) {
+  const m = String(target || '').trim().match(/^(?:([^@]+)@)?([^:]+)(?::(\d+))?$/);
+  if (!m) throw new Error(`HARNESS_MAC_SIGN_HOST invalid: '${target}'. Expected user@host[:port].`);
+  return {
+    user: m[1] || os.userInfo().username,
+    host: m[2],
+    port: m[3] ? parseInt(m[3], 10) : 22,
+  };
+}
+
+function expandHome(p) {
+  if (!p) return p;
+  if (p.startsWith('~')) return path.join(os.homedir(), p.slice(1));
+  return p;
 }
 
 /**
- * Run a command, return stdout (Buffer). Rejects with stderr on non-zero
- * exit. Times out after 30s by default (cherri compile + signing typically
- * 2-8 seconds).
+ * Locate the SSH private key. Honor env override; otherwise try the two
+ * common defaults (ed25519, rsa) in user's ~/.ssh dir.
  */
-function runCommand(cmd, args, timeoutMs = 30000) {
-  // On Windows, redirect ssh/scp to System32 OpenSSH to avoid MSYS path
-  // mangling. No-op on macOS/Linux.
-  const exe = (cmd === 'ssh' || cmd === 'scp') ? resolveSshBinary(cmd) : cmd;
-  logger.info(`[debug] spawn exe=${exe} args=${JSON.stringify(args)}`);
+function findPrivateKey() {
+  const explicit = process.env.HARNESS_MAC_SIGN_KEY;
+  if (explicit) {
+    const resolved = expandHome(explicit);
+    if (!existsSync(resolved)) {
+      throw new Error(`HARNESS_MAC_SIGN_KEY points to a missing file: ${resolved}`);
+    }
+    return resolved;
+  }
+  const candidates = [
+    path.join(os.homedir(), '.ssh', 'id_ed25519'),
+    path.join(os.homedir(), '.ssh', 'id_rsa'),
+  ];
+  for (const c of candidates) if (existsSync(c)) return c;
+  throw new Error('No SSH private key found. Set HARNESS_MAC_SIGN_KEY or place a key at ~/.ssh/id_ed25519 (or id_rsa).');
+}
+
+/**
+ * Open an SSH connection to the configured Mac signer. Resolves with a
+ * connected ssh2 Client; reject with descriptive Error otherwise. Caller
+ * must conn.end() when done.
+ */
+function openSshConnection() {
+  const target = macSignHost();
+  if (!target) {
+    return Promise.reject(new Error('HARNESS_MAC_SIGN_HOST not configured. Set it to user@host[:port] to enable AI-generated Shortcuts.'));
+  }
+  const { user, host, port } = parseSshTarget(target);
+  const keyPath = findPrivateKey();
+  const privateKey = readFileSync(keyPath);
+  const passphrase = process.env.HARNESS_MAC_SIGN_KEY_PASSPHRASE || undefined;
+
+  logger.info(`ssh connect ${user}@${host}:${port} (key=${path.basename(keyPath)})`);
+
   return new Promise((resolve, reject) => {
-    const child = spawn(exe, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    const out = [];
-    const err = [];
-    child.stdout.on('data', (chunk) => out.push(chunk));
-    child.stderr.on('data', (chunk) => err.push(chunk));
-
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      reject(new Error(`Command timed out: ${cmd} ${args.join(' ')}`));
-    }, timeoutMs);
-
-    child.on('exit', (code) => {
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve(Buffer.concat(out));
-      } else {
-        const stderrText = Buffer.concat(err).toString('utf8');
-        reject(new Error(`Command failed (exit ${code}): ${stderrText.slice(0, 500)}`));
-      }
+    const conn = new SSHClient();
+    const cleanup = (err) => { try { conn.end(); } catch {} reject(err); };
+    const timer = setTimeout(() => cleanup(new Error('SSH connect timed out after 15s')), 15000);
+    conn.on('ready', () => { clearTimeout(timer); resolve(conn); });
+    conn.on('error', (e) => { clearTimeout(timer); cleanup(new Error(`SSH connect failed: ${e.message}`)); });
+    conn.connect({
+      host, port, username: user,
+      privateKey, passphrase,
+      readyTimeout: 15000,
+      keepaliveInterval: 5000,
+      // We trust the configured host. For multi-tenant production, switch to
+      // hostVerifier with a pinned fingerprint from env.
     });
+  });
+}
 
-    child.on('error', (e) => {
-      clearTimeout(timer);
-      reject(e);
+/** Promise wrapper for conn.sftp(). */
+function getSftp(conn) {
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => err ? reject(err) : resolve(sftp));
+  });
+}
+
+/** Promise wrapper for sftp.fastPut(local, remote). */
+function sftpPut(sftp, local, remote) {
+  return new Promise((resolve, reject) => {
+    sftp.fastPut(local, remote, (err) => err ? reject(err) : resolve());
+  });
+}
+
+/** Promise wrapper for sftp.fastGet(remote, local). */
+function sftpGet(sftp, remote, local) {
+  return new Promise((resolve, reject) => {
+    sftp.fastGet(remote, local, (err) => err ? reject(err) : resolve());
+  });
+}
+
+/**
+ * Run a remote command. Resolves with { code, stdout, stderr }. Never
+ * rejects on non-zero exit — caller decides what to do.
+ */
+function sshExec(conn, command, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    conn.exec(command, (err, stream) => {
+      if (err) return reject(err);
+      let stdout = '', stderr = '';
+      const timer = setTimeout(() => {
+        try { stream.signal('KILL'); } catch {}
+        reject(new Error(`Remote command timed out: ${command}`));
+      }, timeoutMs);
+      stream.on('data', (d) => stdout += d.toString('utf8'));
+      stream.stderr.on('data', (d) => stderr += d.toString('utf8'));
+      stream.on('close', (code, signal) => {
+        clearTimeout(timer);
+        resolve({ code: code ?? -1, stdout, stderr, signal });
+      });
     });
   });
 }
@@ -143,11 +222,6 @@ function runCommand(cmd, args, timeoutMs = 30000) {
  * Each step's failure surfaces as Error → caller turns into 5xx response.
  */
 async function compileAndSignOnMac(id, dsl) {
-  const host = macSignHost();
-  if (!host) {
-    throw new Error('HARNESS_MAC_SIGN_HOST not configured. Set it to user@your.mac.example to enable AI-generated Shortcuts.');
-  }
-
   const localDir = path.join(os.tmpdir(), 'gigi-shortcuts');
   await fs.mkdir(localDir, { recursive: true });
   const localDsl = path.join(localDir, `${id}.cherri`);
@@ -157,24 +231,33 @@ async function compileAndSignOnMac(id, dsl) {
 
   logger.info(`compiling ${id} — DSL ${dsl.length} bytes`);
 
-  // 1. local DSL file
   await fs.writeFile(localDsl, dsl, 'utf8');
 
-  // 2. SCP to Mac
-  await runCommand('scp', ['-o', 'StrictHostKeyChecking=accept-new', localDsl, `${host}:${macDsl}`]);
+  const conn = await openSshConnection();
+  try {
+    const sftp = await getSftp(conn);
 
-  // 3. SSH compile + sign
-  const cherriCmd = `${macCherriBin()} ${macDsl} -s anyone 2>&1`;
-  await runCommand('ssh', ['-o', 'StrictHostKeyChecking=accept-new', host, cherriCmd]);
+    // 1. Upload DSL
+    await sftpPut(sftp, localDsl, macDsl);
 
-  // 4. SCP signed file back
-  await runCommand('scp', ['-o', 'StrictHostKeyChecking=accept-new', `${host}:${macShortcut}`, localShortcut]);
+    // 2. Compile + sign on Mac. cherri writes the signed .shortcut next to
+    //    the DSL. 2>&1 ensures we capture any signing warnings/errors.
+    const cherriCmd = `${macCherriBin()} ${macDsl} -s anyone 2>&1`;
+    const exec1 = await sshExec(conn, cherriCmd, 45000);
+    if (exec1.code !== 0) {
+      throw new Error(`cherri failed (exit ${exec1.code}): ${(exec1.stdout + exec1.stderr).slice(0, 500)}`);
+    }
 
-  // Clean up Mac tmp
-  runCommand('ssh', ['-o', 'StrictHostKeyChecking=accept-new', host, `rm -f ${macDsl} ${macShortcut}`])
-    .catch((e) => logger.warn(`mac cleanup failed: ${e.message}`));
+    // 3. Download signed file
+    await sftpGet(sftp, macShortcut, localShortcut);
 
-  // 5. Read bytes
+    // 4. Cleanup Mac tmp (fire-and-forget — non-fatal if it fails)
+    sshExec(conn, `rm -f ${macDsl} ${macShortcut}`, 5000)
+      .catch((e) => logger.warn(`mac cleanup failed: ${e.message}`));
+  } finally {
+    try { conn.end(); } catch {}
+  }
+
   const buf = await fs.readFile(localShortcut);
   logger.info(`compiled ${id} — signed ${buf.length} bytes`);
   return { path: localShortcut, bytes: buf };
