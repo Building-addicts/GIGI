@@ -635,6 +635,60 @@ struct FMCalculateMathTool: Tool {
     }
 }
 
+// MARK: - 29. BuildShortcutTool (Phase 2 — AI-generated Shortcuts)
+//
+// Apple FM generates a Cherri DSL specification from a natural-language
+// request. The harness compiles + signs on a Mac and returns a signed
+// .shortcut URL that iOS opens for the user's 1-tap install.
+//
+// IMPORTANT: actions array is constrained to the CHERRI_VOCABULARY in
+// GigiCherriDSL.swift — Apple FM picks from a known-good list rather
+// than free-form generating Cherri code.
+
+@available(iOS 26.0, *)
+struct FMBuildShortcutTool: Tool {
+    let name = "build_shortcut"
+    let description = """
+    Build a new iOS Shortcut from natural language. Use ONLY when the user \
+    explicitly asks GIGI to BUILD, CREATE, MAKE, or COMPOSE a new Shortcut \
+    (e.g. 'build me a shortcut that turns off all lights', 'make a goodnight \
+    shortcut', 'create a focus session shortcut', 'fammi uno shortcut che...'). \
+    NOT for running existing Shortcuts (use run_shortcut). NOT for tools \
+    already in the registry — pick the dedicated tool instead.
+
+    The Apple FM model generates a sequence of actions from a fixed \
+    vocabulary; the harness compiles + signs via a Mac and returns a signed \
+    .shortcut file. The user gets a 1-tap install preview in Shortcuts.app.
+    """
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Short Shortcut name, 2-4 words. Examples: 'Goodnight Routine', 'Focus Session', 'Gym Time', 'Quick Note'.")
+        var title: String
+
+        @Guide(description: """
+        JSON array of action objects, each {action: <verb>, params: {<name>: <value>}}. \
+        Available actions (action names — MUST match exactly): showResult (params: text), \
+        showNotification (text), speakText (text), waitSeconds (seconds), setClipboard (text), \
+        getClipboard, torchOn, torchOff, playMusic, pauseMusic, skipForward, skipBackward, \
+        homeKitScene (scene), setFocus (mode: Work/Sleep/Personal/DoNotDisturb), turnOffFocus, \
+        openApp (appName), setVolume (level: 0-100). \
+        Example for 'turn on torch and wait 5 seconds and turn off': \
+        [{"action":"torchOn","params":{}},{"action":"waitSeconds","params":{"seconds":"5"}},{"action":"torchOff","params":{}}]
+        """)
+        var actionsJSON: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        await dispatchAction(label: "build_shortcut", params: [
+            "title": arguments.title,
+            "actionsJSON": arguments.actionsJSON,
+            "raw": arguments.title
+        ])
+    }
+}
+
 // MARK: - 26. CreateCalendarEventTool (GATE 10.A — productivity)
 
 @available(iOS 26.0, *)
@@ -760,7 +814,9 @@ enum GigiFoundationToolRegistry {
             FMTranslateTextTool(),
             // GATE 10.A capability expansion Week 2 — productivity
             FMCreateCalendarEventTool(),
-            FMAddToNoteTool()
+            FMAddToNoteTool(),
+            // Phase 2 — AI-generated Shortcuts (Cherri pipeline)
+            FMBuildShortcutTool()
         ]
     }
 
@@ -792,7 +848,9 @@ enum GigiFoundationToolRegistry {
         "translate_text",
         // GATE 10.A capability expansion Week 2 — productivity
         "create_calendar_event",
-        "add_to_note"
+        "add_to_note",
+        // Phase 2 — AI-generated Shortcuts
+        "build_shortcut"
     ]
 }
 

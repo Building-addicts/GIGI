@@ -290,6 +290,14 @@ class GigiActionBridge {
             let content = intent.params["content"] ?? intent.params["raw"] ?? ""
             return await addToNote(noteTitle: noteTitle, content: content)
 
+        case "build_shortcut":
+            // Phase 2 — AI-generated Shortcut via Cherri pipeline.
+            // Apple FM provides title + JSON of actions; bridge translates
+            // to Cherri DSL, POSTs to harness, opens returned signed URL.
+            let title = intent.params["title"] ?? "GIGI Shortcut"
+            let actionsJSON = intent.params["actionsJSON"] ?? "[]"
+            return await buildShortcut(title: title, actionsJSON: actionsJSON)
+
         case "read_news":
             let q = intent.params["query"] ?? intent.params["raw"] ?? "top news"
             return await readNews(query: q)
@@ -1671,6 +1679,71 @@ class GigiActionBridge {
 
         let displayTitle = cleanTitle.isEmpty ? "Notes" : "your '\(cleanTitle)' note"
         return "Tap Notes in the share sheet, then pick \(displayTitle)."
+    }
+
+    // MARK: - Build Shortcut (Phase 2 — Cherri pipeline)
+    //
+    // Translates Apple FM Arguments → Cherri DSL → harness → signed file URL
+    // → iOS open → user 1-tap install in Shortcuts.app.
+    //
+    // Flow:
+    //   1. Banner '🔧 Building Shortcut...'
+    //   2. Parse actionsJSON → [CherriActionSpec]
+    //   3. GigiCherriDSL.translate(title:actions:) → Cherri source code
+    //   4. POST harness /api/ios/build-shortcut { title, dsl }
+    //   5. Harness: SSH Mac → cherri compile + sign → hosts signed file
+    //   6. Harness returns: { url: "https://...tunnel.../sc/<id>.shortcut" }
+    //   7. UIApplication.open(url) → iOS Shortcuts preview → user tap Add
+    //
+    // Errors at each step surface in the chat with clear messages so the
+    // user can rephrase the request or check the harness pairing.
+
+    @MainActor
+    private func buildShortcut(title: String, actionsJSON: String) async -> String {
+        GigiSmartOrchestrator.shared.showBanner("🔧 Building Shortcut...")
+
+        // 1. Parse actions from Apple FM JSON output
+        let decoder = JSONDecoder()
+        guard let jsonData = actionsJSON.data(using: .utf8),
+              let actions = try? decoder.decode([CherriActionSpec].self, from: jsonData),
+              !actions.isEmpty else {
+            return "I couldn't parse the Shortcut actions. Try rephrasing — for example 'build me a shortcut that turns on the torch and waits 5 seconds'."
+        }
+
+        // 2. Translate to Cherri DSL via vocabulary lookup
+        guard let dsl = GigiCherriDSL.translate(title: title, actions: actions) else {
+            return "I tried to build that Shortcut but one of the actions isn't in my vocabulary yet. Try a simpler request like 'turn on torch' or 'show a notification'."
+        }
+
+        GigiDebugLogger.log("BuildShortcut DSL:\n\(dsl)")
+
+        // 3. POST to harness with the DSL
+        let harness = GigiHarnessClient.shared
+        guard harness.pairingState.isConfigured else {
+            return "I need the GIGI harness to compile Shortcuts. Pair it in Settings first."
+        }
+
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let payload: [String: Any] = [
+            "title": cleanTitle.isEmpty ? "GIGI Shortcut" : cleanTitle,
+            "dsl": dsl
+        ]
+
+        do {
+            let result = try await harness.postBuildShortcut(payload: payload)
+            guard let urlString = result["url"] as? String, let url = URL(string: urlString) else {
+                let errMsg = (result["error"] as? String) ?? "unknown harness error"
+                return "Couldn't build that Shortcut: \(errMsg)."
+            }
+
+            // 4. Open the signed file URL — iOS Shortcuts handles preview + install
+            GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add Shortcut")
+            await UIApplication.shared.open(url)
+            return "Built '\(cleanTitle)'. Tap 'Add Shortcut' to install."
+        } catch {
+            GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't build Shortcut")
+            return "Harness error building the Shortcut: \(error.localizedDescription)."
+        }
     }
 
     // MARK: - Email

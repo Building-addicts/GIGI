@@ -11,6 +11,7 @@ import { handlePushTest } from './ios-push-test.js';
 import { handleStatus, recordRequest } from './ios-status.js';
 import * as localLLM from './ios-local-llm.js';
 import * as claudeAgent from './ios-claude-agent.js';
+import * as buildShortcut from './ios-build-shortcut.js';
 import { log } from '../logger.js';
 
 function json(res, code, obj) {
@@ -114,6 +115,16 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/agent/claude-status' && m === 'GET')  { await claudeAgent.handleStatus(req, res, deps); return true; }
   if (p === '/api/ios/agent/confirm'       && m === 'POST') { await claudeAgent.handleConfirm(req, res, deps); return true; }
   if (p === '/api/ios/agent/claude/cancel' && m === 'POST') { await claudeAgent.handleCancel(req, res, deps); return true; }
+
+  // Phase 2 — AI-generated Shortcuts via Cherri pipeline
+  if (p === '/api/ios/build-shortcut' && m === 'POST') {
+    await buildShortcut.handleBuildShortcut(req, res, ctx);
+    return true;
+  }
+  if (p.startsWith('/api/ios/build-shortcut/') && p.endsWith('.shortcut') && m === 'GET') {
+    await buildShortcut.handleShortcutFile(req, res, ctx);
+    return true;
+  }
 
   // 2026-05-12 — telemetry endpoint (bug-012 visibility).
   // iOS fires events for native_tool actions (which otherwise don't reach

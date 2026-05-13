@@ -73,6 +73,66 @@ extension GigiHarnessClient {
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
 
+    // MARK: - Phase 2 — Build Shortcut (Cherri pipeline)
+
+    /// POST a Cherri DSL spec to the harness for compilation + signing on
+    /// the Mac. Returns the signed .shortcut URL (hosted by harness with
+    /// short TTL) ready to be opened via UIApplication.open(_:). Throws
+    /// if harness is unreachable, the Mac signing failed, or the response
+    /// is malformed.
+    ///
+    /// Payload: { title: String, dsl: String }
+    /// Response: { url: String } on success, { error: String } on failure
+    func postBuildShortcut(payload: [String: Any]) async throws -> [String: Any] {
+        guard let cfg = Self.harnessConfigSnapshot() else {
+            throw NSError(
+                domain: "GigiHarnessClient",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Harness not paired"]
+            )
+        }
+        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + "/api/ios/build-shortcut"
+        guard let url = URL(string: urlString) else {
+            throw NSError(
+                domain: "GigiHarnessClient",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid harness URL"]
+            )
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
+        req.setValue(cfg.deviceId, forHTTPHeaderField: "X-Device-Id")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 30.0  // Cherri compile + sign can take 5-10s
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw NSError(
+                domain: "GigiHarnessClient",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Non-HTTP response"]
+            )
+        }
+        guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(
+                domain: "GigiHarnessClient",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid JSON response"]
+            )
+        }
+        if http.statusCode >= 400 {
+            let detail = (parsed["error"] as? String) ?? "HTTP \(http.statusCode)"
+            throw NSError(
+                domain: "GigiHarnessClient",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: detail]
+            )
+        }
+        return parsed
+    }
+
     // MARK: - Path 3 — Ollama SSE consumer
 
     /// Streams chunks from the harness Ollama bridge (Path 3).
