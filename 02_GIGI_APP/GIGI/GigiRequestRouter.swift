@@ -135,49 +135,25 @@ final class GigiRequestRouter {
 
         // Phase 2 tier-0 — Explicit "build/create/make a shortcut" pattern.
         //
-        // Apple FM mis-routes "Build me a shortcut that turns on the torch"
-        // to homekit_on (the inner "turns on torch" dominates). Tier-0
-        // regex catches the explicit authoring intent and short-circuits
-        // to build_shortcut. The actual Cherri DSL generation still needs
-        // Apple FM (the regex extracts the natural-language description but
-        // doesn't try to parse out the actions — Apple FM does that via
-        // FMBuildShortcutTool.Arguments).
-        //
-        // Because regex tier-0 dispatches WITHOUT going through Apple FM
-        // tool selection, we need to STILL invoke Apple FM in a focused
-        // mode to extract the actions[] for the captured description.
-        // detectBuildShortcutPattern returns the description; we delegate
-        // to Apple FM to flesh out actionsJSON via the tool, then dispatch.
+        // Option A (ADR-0014 follow-up): route DIRECTLY to the harness
+        // Claude composer (bypass Apple FM). Apple FM on-device is
+        // unreliable at structured JSON synthesis for multi-step shortcuts —
+        // it frequently returns conversational apologies ("I'm sorry, but
+        // I couldn't build the shortcut...") instead of invoking the tool.
+        // Claude in the harness produces correct {title, actions[]} JSON
+        // on the first try, then translates to Cherri DSL, signs, and
+        // returns a URL. Trade-off: ~3-12s harness round-trip.
         if let description = detectBuildShortcutPattern(in: text) {
-            GigiDebugLogger.log("GIGI Router: regex tier-0 build_shortcut → '\(description)'")
-            #if canImport(FoundationModels)
-            if #available(iOS 26.0, *) {
-                if let tool = GigiFoundationToolRegistry.tool(for: "build_shortcut") {
-                    do {
-                        let result = try await GigiFoundationSession.shared.respondWithTools(
-                            text: description,
-                            tools: [tool],
-                            history: history
-                        )
-                        let speech = result.directSpeech?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        let final = speech.isEmpty
-                            ? "I'm building that Shortcut for you."
-                            : speech
-                        let withPrefix = debugPrefix(
-                            routerSource: "regex+appleFM",
-                            tool: "build_shortcut",
-                            confidence: 1.0,
-                            slot: description
-                        ) + final
-                        GigiConversationMemory.shared.addModelSpeech(withPrefix)
-                        return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
-                    } catch {
-                        GigiDebugLogger.log("GIGI Router: build_shortcut Apple FM failed (\(error.localizedDescription))")
-                        // Fall through to general dispatch below.
-                    }
-                }
-            }
-            #endif
+            GigiDebugLogger.log("GIGI Router: regex tier-0 build_shortcut → '\(description)' (via harness composer)")
+            let speech = await GigiActionBridge.shared.composeShortcut(rawText: text)
+            let withPrefix = debugPrefix(
+                routerSource: "regex+claude",
+                tool: "build_shortcut",
+                confidence: 1.0,
+                slot: description
+            ) + speech
+            GigiConversationMemory.shared.addModelSpeech(withPrefix)
+            return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
         }
 
         // GATE 9.A + GATE 15 fix — Explicit verb regex tier-0 fast-path.
@@ -225,38 +201,20 @@ final class GigiRequestRouter {
         // ADR-0012 — Smart Router Architecture.
         if let match = GigiSemanticRouter.shared.match(text) {
 
-            // Special case Phase 2: build_shortcut requires Apple FM
-            // @Generable extraction of (title, actionsJSON) — the bridge
-            // can't accept empty actionsJSON. Redirect semantic match to
-            // the same Apple FM focused-tool flow as tier-0 regex.
+            // Special case Phase 2 (option A): semantic build_shortcut
+            // routes to the harness Claude composer, same as tier-0 regex.
+            // Apple FM is skipped — see comment above the tier-0 block.
             if match.toolName == "build_shortcut" {
-                GigiDebugLogger.log("GIGI Router: semantic build_shortcut → redirect to Apple FM focused")
-                #if canImport(FoundationModels)
-                if #available(iOS 26.0, *) {
-                    if let tool = GigiFoundationToolRegistry.tool(for: "build_shortcut") {
-                        do {
-                            let result = try await GigiFoundationSession.shared.respondWithTools(
-                                text: match.slot.isEmpty ? text : match.slot,
-                                tools: [tool],
-                                history: history
-                            )
-                            let speech = result.directSpeech?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                            let final = speech.isEmpty ? "I'm building that Shortcut for you." : speech
-                            let withPrefix = debugPrefix(
-                                routerSource: "semantic+appleFM",
-                                tool: "build_shortcut",
-                                confidence: match.confidence,
-                                slot: match.slot
-                            ) + final
-                            GigiConversationMemory.shared.addModelSpeech(withPrefix)
-                            return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
-                        } catch {
-                            GigiDebugLogger.log("GIGI Router: semantic build_shortcut Apple FM failed (\(error.localizedDescription))")
-                            // Fall through to general dispatch
-                        }
-                    }
-                }
-                #endif
+                GigiDebugLogger.log("GIGI Router: semantic build_shortcut → harness composer (slot='\(match.slot)')")
+                let speech = await GigiActionBridge.shared.composeShortcut(rawText: text)
+                let withPrefix = debugPrefix(
+                    routerSource: "semantic+claude",
+                    tool: "build_shortcut",
+                    confidence: match.confidence,
+                    slot: match.slot
+                ) + speech
+                GigiConversationMemory.shared.addModelSpeech(withPrefix)
+                return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
             } else {
                 let params = buildSemanticParams(for: match)
                 let speech = await GigiActionBridge.shared.execute(GigiIntent(

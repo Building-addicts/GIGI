@@ -291,12 +291,19 @@ class GigiActionBridge {
             return await addToNote(noteTitle: noteTitle, content: content)
 
         case "build_shortcut":
-            // Phase 2 — AI-generated Shortcut via Cherri pipeline.
-            // Apple FM provides title + JSON of actions; bridge translates
-            // to Cherri DSL, POSTs to harness, opens returned signed URL.
+            // Phase 2 (option A) — Claude-composed Shortcut.
+            // When Apple FM produced structured actionsJSON, use the
+            // on-device buildShortcut() path. When actionsJSON is empty
+            // (semantic/regex match, or Apple FM tool-call without args),
+            // fall back to the harness composer with raw text.
             let title = intent.params["title"] ?? "GIGI Shortcut"
-            let actionsJSON = intent.params["actionsJSON"] ?? "[]"
-            return await buildShortcut(title: title, actionsJSON: actionsJSON)
+            let actionsJSON = intent.params["actionsJSON"] ?? ""
+            let trimmedJSON = actionsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedJSON.isEmpty && trimmedJSON != "[]" {
+                return await buildShortcut(title: title, actionsJSON: actionsJSON)
+            }
+            let raw = intent.params["raw"] ?? intent.params["input"] ?? title
+            return await composeShortcut(rawText: raw)
 
         case "read_news":
             let q = intent.params["query"] ?? intent.params["raw"] ?? "top news"
@@ -1697,6 +1704,46 @@ class GigiActionBridge {
     //
     // Errors at each step surface in the chat with clear messages so the
     // user can rephrase the request or check the harness pairing.
+
+    /// Phase 2 (option A) — Claude-composed Shortcut.
+    ///
+    /// Skips Apple FM entirely. iOS sends the raw user text to the harness,
+    /// Claude generates {title, actions[]} JSON, harness translates to
+    /// Cherri DSL, signs on the Mac, and returns a hosted URL. iOS opens
+    /// the URL — Shortcuts.app shows preview → user 1-tap installs.
+    ///
+    /// Why this exists alongside buildShortcut():
+    ///   Apple FM on-device is unreliable at producing structured JSON for
+    ///   multi-step shortcuts — it frequently returns conversational
+    ///   apologies instead of invoking the tool. Claude in the harness is
+    ///   far more reliable for the composition step. Trade-off: harness
+    ///   round-trip adds ~3-12s vs purely on-device.
+    @MainActor
+    func composeShortcut(rawText: String) async -> String {
+        GigiSmartOrchestrator.shared.showBanner("🔧 Building Shortcut...")
+        let harness = GigiHarnessClient.shared
+        guard harness.pairingState.isConfigured else {
+            return "I need the GIGI harness to build Shortcuts. Pair it in Settings first."
+        }
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "Tell me what the Shortcut should do, e.g. 'build a shortcut that turns on the torch and waits 5 seconds'."
+        }
+        do {
+            let result = try await harness.postComposeShortcut(payload: ["rawText": trimmed])
+            guard let urlString = result["url"] as? String, let url = URL(string: urlString) else {
+                let errMsg = (result["error"] as? String) ?? "unknown harness error"
+                return "Couldn't build that Shortcut: \(errMsg)."
+            }
+            let title = (result["title"] as? String) ?? "GIGI Shortcut"
+            GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add Shortcut")
+            await UIApplication.shared.open(url)
+            return "Built '\(title)'. Tap 'Add Shortcut' to install."
+        } catch {
+            GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't build Shortcut")
+            return "Harness error building the Shortcut: \(error.localizedDescription)."
+        }
+    }
 
     @MainActor
     private func buildShortcut(title: String, actionsJSON: String) async -> String {

@@ -121,6 +121,13 @@ export async function handleIosRequest(req, res, ctx) {
     await buildShortcut.handleBuildShortcut(req, res, ctx);
     return true;
   }
+  // Phase 2 (option A) — Claude-composed Shortcuts: iOS sends raw user text,
+  // harness runs Claude → {title, actions[]} → Cherri DSL → sign → URL.
+  // Bypasses Apple FM on-device (which hallucinates apologies under load).
+  if (p === '/api/ios/compose-shortcut' && m === 'POST') {
+    await buildShortcut.handleComposeShortcut(req, res, ctx);
+    return true;
+  }
   if (p.startsWith('/api/ios/build-shortcut/') && p.endsWith('.shortcut') && m === 'GET') {
     await buildShortcut.handleShortcutFile(req, res, ctx);
     return true;

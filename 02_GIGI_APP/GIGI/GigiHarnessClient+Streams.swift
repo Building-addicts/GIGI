@@ -84,6 +84,21 @@ extension GigiHarnessClient {
     /// Payload: { title: String, dsl: String }
     /// Response: { url: String } on success, { error: String } on failure
     func postBuildShortcut(payload: [String: Any]) async throws -> [String: Any] {
+        return try await postShortcutEndpoint(payload: payload, path: "/api/ios/build-shortcut")
+    }
+
+    /// Phase 2 (option A): asks the harness to COMPOSE a Shortcut from raw
+    /// user text. Harness runs Claude → {title, actions[]} → Cherri DSL →
+    /// signs on Mac → returns hosted URL. iOS opens the URL with
+    /// UIApplication.open(_:) and Shortcuts.app shows the preview.
+    ///
+    /// Payload: { rawText: String, title?: String }
+    /// Response: { ok: true, url: String, id: String, title: String, actionsCount: Int }
+    func postComposeShortcut(payload: [String: Any]) async throws -> [String: Any] {
+        return try await postShortcutEndpoint(payload: payload, path: "/api/ios/compose-shortcut")
+    }
+
+    private func postShortcutEndpoint(payload: [String: Any], path: String) async throws -> [String: Any] {
         guard let cfg = Self.harnessConfigSnapshot() else {
             throw NSError(
                 domain: "GigiHarnessClient",
@@ -91,7 +106,7 @@ extension GigiHarnessClient {
                 userInfo: [NSLocalizedDescriptionKey: "Harness not paired"]
             )
         }
-        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + "/api/ios/build-shortcut"
+        let urlString = cfg.baseURL.absoluteString.trimmingTrailingSlash + path
         guard let url = URL(string: urlString) else {
             throw NSError(
                 domain: "GigiHarnessClient",
@@ -104,7 +119,10 @@ extension GigiHarnessClient {
         req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
         req.setValue(cfg.deviceId, forHTTPHeaderField: "X-Device-Id")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.timeoutInterval = 30.0  // Cherri compile + sign can take 5-10s
+        // compose-shortcut needs longer: Claude composition (3-12s) + Mac
+        // sign (2-8s) can push close to 25s end-to-end. build-shortcut is
+        // sign-only (3-10s). Use a single generous budget for both.
+        req.timeoutInterval = 60.0
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
