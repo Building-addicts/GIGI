@@ -608,43 +608,26 @@ async function composeWithClaude(cfg, rawText) {
   return { title, summary, actions, aliases, systemPurpose };
 }
 
-// MARK: - Plan + Job pools (GATE 15 Smart Action Loop)
+// MARK: - Unified job state machine (GATE 15 Smart Action Loop)
 //
-// Why two pools:
-//   - plans: holds Claude-composed proposals (Step 2). Cheap to recompute,
-//     5-min TTL is generous. iOS shows them as proposal cards; if the user
-//     never confirms, the plan evaporates with no cost on the Mac signer.
-//   - jobs: holds sign+host operations (Step 3). Triggered only after the
-//     user taps "Build Shortcut" on a card. 10-min TTL covers the polling
-//     window between sign completion and iOS download.
+// One job, one id, walked through phases. EVERY phase boundary is short
+// (POST returns immediately, client polls /job/<id> for progress) — so no
+// HTTP call stays idle long enough for cellular NAT / Cloudflare tunnels
+// to drop it (the -1005 NSURLErrorNetworkConnectionLost class of bug).
 //
-// Why TWO endpoints (plan + build) instead of one (start):
-//   - PR review: iOS shows the user the proposed title/summary/actions
-//     BEFORE we burn cherri+HubSign cycles on the Mac.
-//   - Latency: plan is ~3-5s, build is ~5-15s. Splitting lets iOS render
-//     the proposal card immediately and only spend the long tail on
-//     user confirm.
-//   - Cancellation: if the user cancels mid-plan, no Mac-side work happened.
+//   planning           ← Claude is composing the plan
+//      ↓ Claude returns
+//   awaiting_confirm   ← plan ready, iOS shows the proposal card
+//      ↓ POST /build      ↓ POST /cancel
+//   building           cancelled (terminal)
+//      ↓ Mac signs
+//   done (terminal)
 //
-// Why short HTTP calls everywhere:
-//   - cellular NAT + Cloudflare quick tunnels close idle TCP connections
-//     before our long server processing completes. Every endpoint here
-//     returns in <2s; clients poll /job/<id> for the long-running parts.
-//   - iOS sees -1005 (NSURLErrorNetworkConnectionLost) if any single call
-//     idles too long. Plan/Build/Job split is immune.
-
-const plans = new Map();
-const PLAN_TTL_MS = 5 * 60 * 1000;
+// At any phase, an error transitions the job to `error` (terminal). 10-min
+// TTL caps memory; we expect a job lifecycle to be well under 60s in practice.
 
 const jobs = new Map();
 const JOB_TTL_MS = 10 * 60 * 1000;
-
-function prunePlans() {
-  const now = Date.now();
-  for (const [id, p] of plans.entries()) {
-    if (p.expiresAt < now) plans.delete(id);
-  }
-}
 
 function pruneJobs() {
   const now = Date.now();
@@ -654,47 +637,71 @@ function pruneJobs() {
 }
 
 /**
- * Background runner — picks up a stored plan, compiles its DSL on the Mac,
- * and writes the result back into the job map. Pulls aliases + purpose +
- * summary from the stored plan so the /job/<id> response can carry the
- * full Learn Phase metadata to iOS.
+ * Phase 1 (background) — Claude composes the plan, writes it onto the job.
+ * Client polls /job/<id> until phase transitions to `awaiting_confirm`.
  */
-async function runComposeJobFromPlan(jobId, ctx, req, planId) {
+async function runPlanPhase(jobId, ctx, rawText) {
   const job = jobs.get(jobId);
-  const plan = plans.get(planId);
   if (!job) return;
-  if (!plan) {
-    job.status = 'error';
-    job.error = 'Plan expired or not found.';
-    return;
-  }
   try {
-    job.status = 'signing';
-    const dsl = translateActionsToCherri(plan.title, plan.actions);
+    const composed = await composeWithClaude(ctx.cfg, rawText);
+    // Validate vocabulary BEFORE handing the plan to iOS. If translation
+    // fails we surface the error now, not after the user taps Build.
+    const probeDsl = translateActionsToCherri(composed.title, composed.actions);
+    if (!probeDsl) {
+      job.phase = 'error';
+      job.error = 'I can sketch this but one of the actions is outside my vocabulary. Try rephrasing.';
+      return;
+    }
+    // job may have been cancelled while Claude was running — respect that
+    if (jobs.get(jobId)?.phase === 'cancelled') return;
+    job.title = composed.title;
+    job.summary = composed.summary;
+    job.actions = composed.actions;
+    job.aliases = composed.aliases;
+    job.systemPurpose = composed.systemPurpose;
+    job.phase = 'awaiting_confirm';
+    logger.info(`plan ${jobId} — title="${composed.title}" actions=${composed.actions.length} purpose=${composed.systemPurpose}`);
+  } catch (e) {
+    logger.error(`plan ${jobId} failed: ${e.message}`);
+    job.phase = 'error';
+    job.error = e.message;
+  }
+}
+
+/**
+ * Phase 2 (background) — User confirmed; compile + sign on the Mac.
+ * Client keeps polling /job/<id> until phase transitions to `done`.
+ */
+async function runBuildPhase(jobId, ctx, req) {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  try {
+    if (!Array.isArray(job.actions) || job.actions.length === 0) {
+      job.phase = 'error';
+      job.error = 'Internal: no plan attached to this job.';
+      return;
+    }
+    const dsl = translateActionsToCherri(job.title, job.actions);
     if (!dsl) {
-      job.status = 'error';
+      job.phase = 'error';
       job.error = 'One of the generated actions is outside the Cherri vocabulary. Try rephrasing.';
       return;
     }
-    logger.info(`build ${jobId} — using plan ${planId} (${plan.actions.length} actions, DSL ${dsl.length} bytes)`);
+    logger.info(`build ${jobId} — ${job.actions.length} actions, DSL ${dsl.length} bytes`);
     const compiled = await compileAndSignOnMac(jobId, dsl);
+    if (jobs.get(jobId)?.phase === 'cancelled') return;
     hostedFiles.set(jobId, {
       filePath: compiled.path,
-      title: plan.title,
+      title: job.title,
       expiresAt: Date.now() + FILE_TTL_MS,
     });
-    job.status = 'done';
-    job.title = plan.title;
-    job.summary = plan.summary;
-    job.aliases = plan.aliases;
-    job.systemPurpose = plan.systemPurpose;
     job.url = buildPublicShortcutURL(ctx, req, jobId);
-    job.actionsCount = plan.actions.length;
-    // One-shot plan: consume it so the same planId can't be rebuilt twice.
-    plans.delete(planId);
+    job.actionsCount = job.actions.length;
+    job.phase = 'done';
   } catch (e) {
-    logger.error(`job ${jobId} failed: ${e.message}`);
-    job.status = 'error';
+    logger.error(`build ${jobId} failed: ${e.message}`);
+    job.phase = 'error';
     job.error = e.message;
   }
 }
@@ -760,14 +767,16 @@ async function readJsonBody(req, res, maxLen = 4096) {
 /**
  * POST /api/ios/compose-shortcut/plan          (GATE 15 Step 2 — Plan Phase)
  *   Body: { rawText: String }
- *   Response 200: { ok, planId, title, summary, actions, aliases, systemPurpose }
+ *   Response 202: { ok, jobId }
  *
- * Runs the Claude composer SYNCHRONOUSLY (3-5s on average — well within
- * the cellular/CDN idle-timeout window). Stores the result in the plans
- * pool with a 5-min TTL. iOS renders the response as a proposal card.
+ * Returns IMMEDIATELY with a jobId; Claude composer runs in the
+ * background. Client polls /job/<id> until phase becomes
+ * `awaiting_confirm` (with the plan body) or `error`.
  *
- * No Mac signing here — that happens only if the user taps "Build Shortcut"
- * on the card, which fires POST /build with the planId.
+ * Why this is async (and not the original sync version we shipped first):
+ * Claude CLI takes 5-15s. A single sync POST that long gets dropped by
+ * cellular NAT / Cloudflare quick tunnels (-1005 on iOS). The /job poll
+ * keeps every HTTP call <2s.
  */
 export async function handleComposeShortcutPlan(req, res, ctx) {
   const payload = await readJsonBody(req, res);
@@ -785,94 +794,56 @@ export async function handleComposeShortcutPlan(req, res, ctx) {
     return;
   }
 
-  prunePlans();
-  let composed;
-  try {
-    composed = await composeWithClaude(ctx.cfg, rawText);
-  } catch (e) {
-    logger.error(`plan failed: ${e.message}`);
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: false, error: `Planner failed: ${e.message}` }));
-    return;
-  }
-
-  // Validate that the actions can actually be translated to Cherri DSL
-  // BEFORE giving the user a confirm button — if vocabulary is missing
-  // we want to surface it now, not after they tap Build.
-  const probeDsl = translateActionsToCherri(composed.title, composed.actions);
-  if (!probeDsl) {
-    res.writeHead(422, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      ok: false,
-      error: 'I can sketch this but one of the actions is outside my vocabulary. Try rephrasing.',
-    }));
-    return;
-  }
-
-  const planId = crypto.randomBytes(8).toString('hex');
-  plans.set(planId, {
-    id: planId,
-    title: composed.title,
-    summary: composed.summary,
-    actions: composed.actions,
-    aliases: composed.aliases,
-    systemPurpose: composed.systemPurpose,
+  pruneJobs();
+  const jobId = crypto.randomBytes(8).toString('hex');
+  jobs.set(jobId, {
+    id: jobId,
+    phase: 'planning',
+    rawText,
     createdAt: Date.now(),
-    expiresAt: Date.now() + PLAN_TTL_MS,
+    expiresAt: Date.now() + JOB_TTL_MS,
   });
-  logger.info(`plan ${planId} — title="${composed.title}" actions=${composed.actions.length} purpose=${composed.systemPurpose}`);
+  runPlanPhase(jobId, ctx, rawText).catch(() => {});
 
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({
-    ok: true,
-    planId,
-    title: composed.title,
-    summary: composed.summary,
-    actions: composed.actions,
-    aliases: composed.aliases,
-    systemPurpose: composed.systemPurpose,
-    expiresAt: plans.get(planId).expiresAt,
-  }));
+  res.writeHead(202, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true, jobId }));
 }
 
 /**
  * POST /api/ios/compose-shortcut/build         (GATE 15 Step 3 — Build Phase)
- *   Body: { planId: String }
- *   Response 202: { ok, jobId }
+ *   Body: { jobId: String }
+ *   Response 202: { ok, jobId }   (echoes back the same id)
  *
- * Triggered by iOS when the user taps "Build Shortcut" on the proposal
- * card. Spawns the cherri compile + Mac sign pipeline in the background;
- * client polls /job/<id> for completion.
- *
- * The plan is consumed (deleted) on success — a single planId can't be
- * rebuilt twice. To regenerate, call /plan again.
+ * Transitions a job from `awaiting_confirm` to `building`. Triggered when
+ * the user taps "Build Shortcut" on the proposal card. cherri compile +
+ * Mac sign run in the background; client keeps polling /job/<id> until
+ * `done`.
  */
 export async function handleComposeShortcutBuild(req, res, ctx) {
   const payload = await readJsonBody(req, res);
   if (!payload) return;
 
-  const planId = String(payload.planId || '').trim();
-  if (!/^[a-f0-9]{8,64}$/.test(planId)) {
+  const jobId = String(payload.jobId || payload.planId || '').trim();
+  if (!/^[a-f0-9]{8,64}$/.test(jobId)) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: false, error: 'Missing or malformed planId' }));
+    res.end(JSON.stringify({ ok: false, error: 'Missing or malformed jobId' }));
     return;
   }
-  prunePlans();
-  const plan = plans.get(planId);
-  if (!plan) {
+  pruneJobs();
+  const job = jobs.get(jobId);
+  if (!job) {
     res.writeHead(410, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: false, error: 'Plan expired. Ask me again to start over.' }));
     return;
   }
+  if (job.phase !== 'awaiting_confirm') {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: `Cannot build in phase '${job.phase}'.` }));
+    return;
+  }
 
-  pruneJobs();
-  const jobId = crypto.randomBytes(8).toString('hex');
-  jobs.set(jobId, {
-    id: jobId,
-    status: 'pending',
-    expiresAt: Date.now() + JOB_TTL_MS,
-  });
-  runComposeJobFromPlan(jobId, ctx, req, planId).catch(() => {});
+  job.phase = 'building';
+  runBuildPhase(jobId, ctx, req).catch(() => {});
 
   res.writeHead(202, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ ok: true, jobId }));
@@ -880,19 +851,22 @@ export async function handleComposeShortcutBuild(req, res, ctx) {
 
 /**
  * POST /api/ios/compose-shortcut/cancel
- *   Body: { planId: String }
+ *   Body: { jobId: String }
  *   Response 200: { ok: true }
  *
- * Optional housekeeping — lets iOS evict a plan immediately when the user
- * taps Cancel on the proposal card, instead of waiting for the 5-min TTL.
+ * Marks the job as cancelled (terminal). Any in-flight Claude or cherri
+ * call finishes naturally but its result is discarded by the runners.
  */
 export async function handleComposeShortcutCancel(req, res, _ctx) {
   const payload = await readJsonBody(req, res);
   if (!payload) return;
-  const planId = String(payload.planId || '').trim();
-  if (planId && plans.has(planId)) {
-    plans.delete(planId);
-    logger.info(`plan ${planId} cancelled by client`);
+  const jobId = String(payload.jobId || payload.planId || '').trim();
+  const job = jobId ? jobs.get(jobId) : null;
+  if (job) {
+    job.phase = 'cancelled';
+    // Keep the entry around briefly so a final poll sees the terminal
+    // state, then let pruneJobs clean it up at TTL.
+    logger.info(`job ${jobId} cancelled by client`);
   }
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ ok: true }));
@@ -937,12 +911,19 @@ export async function handleComposeShortcutStart(req, res, ctx) {
 
 /**
  * GET /api/ios/compose-shortcut/job/<id>
- *   Response 200: { ok: true, status, ...result }
+ *   Response 200: { ok: true, status, phase, ...payload }
  *
- * status ∈ { pending, composing, signing, done, error }.
- * On `done` the body carries the Learn Phase metadata (aliases +
- * systemPurpose + summary) so the iOS Bridge can auto-register the
- * installed Shortcut in GigiShortcutRegistry.
+ * Unified poll endpoint. `phase` is the new GATE 15 state machine name
+ * (planning | awaiting_confirm | building | done | cancelled | error);
+ * `status` is the legacy field kept for backward-compat with older IPAs
+ * that still understand pending|composing|signing|done|error.
+ *
+ * Payload depends on phase:
+ *   - awaiting_confirm: { title, summary, actions, aliases, systemPurpose }
+ *     iOS shows the proposal card from this payload.
+ *   - done: { url, title, summary, aliases, systemPurpose, actionsCount }
+ *     iOS downloads the signed file and auto-registers (Learn Phase).
+ *   - cancelled | error: { error? }
  */
 export async function handleComposeShortcutJob(req, res, _ctx) {
   pruneJobs();
@@ -955,15 +936,25 @@ export async function handleComposeShortcutJob(req, res, _ctx) {
     res.end(JSON.stringify({ ok: false, error: 'Job not found or expired' }));
     return;
   }
-  const body = { ok: true, jobId: job.id, status: job.status };
-  if (job.status === 'done') {
+  // New flow uses `phase`; legacy /start runner uses `status`. Read both.
+  const phase = job.phase || job.status || 'pending';
+  const body = { ok: true, jobId: job.id, phase, status: phase };
+  if (phase === 'awaiting_confirm') {
+    body.title = job.title || '';
+    body.summary = job.summary || '';
+    body.actions = job.actions || [];
+    body.aliases = job.aliases || [];
+    body.systemPurpose = job.systemPurpose || '';
+  } else if (phase === 'done') {
     body.url = job.url;
     body.title = job.title;
     body.summary = job.summary;
     body.aliases = job.aliases || [];
     body.systemPurpose = job.systemPurpose || '';
     body.actionsCount = job.actionsCount;
-  } else if (job.status === 'error') {
+  } else if (phase === 'cancelled') {
+    body.cancelled = true;
+  } else if (phase === 'error') {
     body.error = job.error;
   }
   res.writeHead(200, { 'Content-Type': 'application/json' });

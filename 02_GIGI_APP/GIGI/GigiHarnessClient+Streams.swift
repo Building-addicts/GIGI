@@ -120,51 +120,57 @@ extension GigiHarnessClient {
 
     // MARK: - GATE 15 Smart Action Loop
 
-    /// Step 2 — Plan Phase. Ask the harness to compose a proposal WITHOUT
-    /// signing anything on the Mac. Returns the plan payload that the iOS
-    /// chat layer renders as a `ShortcutProposalCard`.
-    ///
-    /// Plan TTL is 5 minutes server-side; after that `postBuildShortcutFromPlan`
-    /// returns 410 Gone.
+    /// Step 2 — Plan Phase. POSTs `/plan` (returns immediately with a
+    /// jobId), then polls `/job/<id>` until phase becomes
+    /// `awaiting_confirm` and the plan body is attached. Same async +
+    /// poll pattern as the build phase to keep every HTTP call short.
     func postPlanShortcut(rawText: String) async throws -> [String: Any] {
-        return try await postShortcutEndpoint(
+        let start = try await postShortcutEndpoint(
             payload: ["rawText": rawText],
             path: "/api/ios/compose-shortcut/plan"
-        )
-    }
-
-    /// Step 3 — Build Phase. Triggered when the user taps "Build Shortcut"
-    /// on a proposal card. Kicks off cherri compile + Mac sign in the
-    /// background; we poll `/job/<id>` until done. The returned dictionary
-    /// is the final `done` body and carries the Learn Phase metadata
-    /// (aliases / systemPurpose / summary) that the bridge uses to
-    /// auto-register the installed Shortcut.
-    func postBuildShortcutFromPlan(planId: String) async throws -> [String: Any] {
-        let start = try await postShortcutEndpoint(
-            payload: ["planId": planId],
-            path: "/api/ios/compose-shortcut/build"
         )
         guard let jobId = start["jobId"] as? String, !jobId.isEmpty else {
             throw NSError(domain: "GigiHarnessClient", code: -10,
                           userInfo: [NSLocalizedDescriptionKey: "Harness didn't return jobId"])
         }
-        return try await pollShortcutJob(jobId: jobId)
+        var plan = try await pollShortcutJob(jobId: jobId, terminalPhases: ["awaiting_confirm", "error", "cancelled"])
+        // Echo the jobId on the plan dictionary so the bridge can pass it
+        // back unchanged to /build and /cancel.
+        plan["jobId"] = jobId
+        plan["planId"] = jobId  // alias for clarity; same identifier
+        return plan
+    }
+
+    /// Step 3 — Build Phase. Triggered when the user taps "Build Shortcut"
+    /// on a proposal card. POSTs `/build` (transitions job to `building`,
+    /// kicks off cherri+sign in background); polls `/job/<id>` until
+    /// `done`. Returned dict carries the Learn Phase metadata.
+    func postBuildShortcutFromPlan(planId: String) async throws -> [String: Any] {
+        _ = try await postShortcutEndpoint(
+            payload: ["jobId": planId, "planId": planId],
+            path: "/api/ios/compose-shortcut/build"
+        )
+        return try await pollShortcutJob(jobId: planId, terminalPhases: ["done", "error", "cancelled"])
     }
 
     /// Best-effort housekeeping when the user taps "Cancel" on a proposal
-    /// card. Server-side the plan would evaporate on its 5-min TTL anyway;
-    /// this just lets us free the slot immediately. Errors are swallowed.
+    /// card. Marks the job as cancelled server-side; in-flight runners
+    /// finish naturally but discard their result. Errors swallowed.
     func cancelShortcutPlan(planId: String) async {
         _ = try? await postShortcutEndpoint(
-            payload: ["planId": planId],
+            payload: ["jobId": planId, "planId": planId],
             path: "/api/ios/compose-shortcut/cancel"
         )
     }
 
     /// Shared 1.5s-interval poller for `/api/ios/compose-shortcut/job/<id>`.
-    /// 90-second overall budget; each poll has its own 8s timeout so a
-    /// transient network blip doesn't fail the whole flow.
-    private func pollShortcutJob(jobId: String) async throws -> [String: Any] {
+    /// Stops on any of `terminalPhases`. 90-second overall budget; each
+    /// poll has its own 8s timeout so a transient network blip doesn't
+    /// fail the whole flow.
+    private func pollShortcutJob(
+        jobId: String,
+        terminalPhases: Set<String> = ["done", "error"]
+    ) async throws -> [String: Any] {
         guard let cfg = Self.harnessConfigSnapshot() else {
             throw NSError(domain: "GigiHarnessClient", code: -1,
                           userInfo: [NSLocalizedDescriptionKey: "Harness not paired"])
@@ -194,19 +200,23 @@ extension GigiHarnessClient {
                 throw NSError(domain: "GigiHarnessClient", code: http.statusCode,
                               userInfo: [NSLocalizedDescriptionKey: detail])
             }
-            switch (parsed["status"] as? String) ?? "pending" {
-            case "done":
-                return parsed
-            case "error":
-                let msg = (parsed["error"] as? String) ?? "unknown harness error"
-                throw NSError(domain: "GigiHarnessClient", code: 500,
-                              userInfo: [NSLocalizedDescriptionKey: msg])
-            default:
-                continue
+            // GATE 15 server emits both `phase` (new) and `status` (legacy alias).
+            let phase = (parsed["phase"] as? String) ?? (parsed["status"] as? String) ?? "pending"
+            if terminalPhases.contains(phase) {
+                if phase == "error" {
+                    let msg = (parsed["error"] as? String) ?? "unknown harness error"
+                    throw NSError(domain: "GigiHarnessClient", code: 500,
+                                  userInfo: [NSLocalizedDescriptionKey: msg])
+                }
+                if phase == "cancelled" {
+                    throw NSError(domain: "GigiHarnessClient", code: -12,
+                                  userInfo: [NSLocalizedDescriptionKey: "Plan cancelled."])
+                }
+                return parsed  // awaiting_confirm or done
             }
         }
         throw NSError(domain: "GigiHarnessClient", code: -11,
-                      userInfo: [NSLocalizedDescriptionKey: "Timeout waiting for Shortcut build (90s)"])
+                      userInfo: [NSLocalizedDescriptionKey: "Timeout waiting for Shortcut job (90s)"])
     }
 
     private func postShortcutEndpoint(payload: [String: Any], path: String) async throws -> [String: Any] {
