@@ -98,6 +98,69 @@ extension GigiHarnessClient {
         return try await postShortcutEndpoint(payload: payload, path: "/api/ios/compose-shortcut")
     }
 
+    /// Phase 2.1 — async start/poll variant that dodges cellular + Cloudflare
+    /// idle-TCP timeouts. The single-POST variant left the connection open
+    /// for the full compose+sign cycle (~15-25s), which gets cut by NATs and
+    /// quick-tunnel proxies even though the harness finishes successfully.
+    ///
+    /// Flow:
+    ///   1. POST /compose-shortcut/start with { rawText, title? } → { jobId }
+    ///   2. Poll GET /compose-shortcut/job/<jobId> every 1.5s
+    ///      until status == "done" or "error" (or our 90s cap is hit)
+    func composeShortcutAsync(payload: [String: Any]) async throws -> [String: Any] {
+        let start = try await postShortcutEndpoint(
+            payload: payload, path: "/api/ios/compose-shortcut/start"
+        )
+        guard let jobId = start["jobId"] as? String, !jobId.isEmpty else {
+            throw NSError(domain: "GigiHarnessClient", code: -10,
+                          userInfo: [NSLocalizedDescriptionKey: "Harness didn't return jobId"])
+        }
+
+        guard let cfg = Self.harnessConfigSnapshot() else {
+            throw NSError(domain: "GigiHarnessClient", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Harness not paired"])
+        }
+        let pollURLString = cfg.baseURL.absoluteString.trimmingTrailingSlash
+            + "/api/ios/compose-shortcut/job/\(jobId)"
+        guard let pollURL = URL(string: pollURLString) else {
+            throw NSError(domain: "GigiHarnessClient", code: -2,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid poll URL"])
+        }
+
+        let deadline = Date().addingTimeInterval(90)  // overall budget
+        while Date() < deadline {
+            try await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s
+            var req = URLRequest(url: pollURL)
+            req.httpMethod = "GET"
+            req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
+            req.setValue(cfg.deviceId, forHTTPHeaderField: "X-Device-Id")
+            req.timeoutInterval = 8.0  // each poll short and snappy
+
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let http = resp as? HTTPURLResponse else { continue }
+            guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+
+            if http.statusCode >= 400 {
+                let detail = (parsed["error"] as? String) ?? "HTTP \(http.statusCode)"
+                throw NSError(domain: "GigiHarnessClient", code: http.statusCode,
+                              userInfo: [NSLocalizedDescriptionKey: detail])
+            }
+            let status = (parsed["status"] as? String) ?? "pending"
+            switch status {
+            case "done":
+                return parsed
+            case "error":
+                let msg = (parsed["error"] as? String) ?? "unknown harness error"
+                throw NSError(domain: "GigiHarnessClient", code: 500,
+                              userInfo: [NSLocalizedDescriptionKey: msg])
+            default:
+                continue  // pending, composing, signing — keep polling
+            }
+        }
+        throw NSError(domain: "GigiHarnessClient", code: -11,
+                      userInfo: [NSLocalizedDescriptionKey: "Timeout waiting for Shortcut build (90s)"])
+    }
+
     private func postShortcutEndpoint(payload: [String: Any], path: String) async throws -> [String: Any] {
         guard let cfg = Self.harnessConfigSnapshot() else {
             throw NSError(

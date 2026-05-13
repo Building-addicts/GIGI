@@ -543,19 +543,152 @@ async function composeWithClaude(cfg, rawText) {
   return { title, actions };
 }
 
+// MARK: - Job pool (compose-shortcut/start + poll)
+//
+// Why: cellular NAT + Cloudflare quick tunnels close idle TCP connections
+// before our 15-25s server processing completes. iOS sees -1005 even though
+// the harness finished successfully (compile + sign produced 21KB AEA1).
+// Splitting into start+poll keeps every HTTP call short (<2s), avoiding
+// any intermediate idle-timeout. Same pattern used by every long-running
+// cloud API (Vercel build, OpenAI fine-tune, Stripe webhook retry, etc.).
+//
+// Job lifecycle: pending → done | error. Auto-pruned after 10 min so the
+// map doesn't grow unbounded.
+
+const jobs = new Map();
+const JOB_TTL_MS = 10 * 60 * 1000;
+
+function pruneJobs() {
+  const now = Date.now();
+  for (const [id, j] of jobs.entries()) {
+    if (j.expiresAt < now) jobs.delete(id);
+  }
+}
+
+/**
+ * Background runner — exact same pipeline as the old synchronous
+ * handleComposeShortcut, but writes its result into the job map instead
+ * of an HTTP response.
+ */
+async function runComposeJob(jobId, ctx, req, rawText, overrideTitle) {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  try {
+    job.status = 'composing';
+    const composed = await composeWithClaude(ctx.cfg, rawText);
+
+    const title = (overrideTitle || composed.title || 'GIGI Shortcut').slice(0, 80);
+    const dsl = translateActionsToCherri(title, composed.actions);
+    if (!dsl) {
+      job.status = 'error';
+      job.error = 'One of the generated actions is outside the Cherri vocabulary. Try rephrasing.';
+      return;
+    }
+    logger.info(`composed ${jobId} — ${composed.actions.length} actions, DSL ${dsl.length} bytes`);
+
+    job.status = 'signing';
+    const compiled = await compileAndSignOnMac(jobId, dsl);
+    hostedFiles.set(jobId, {
+      filePath: compiled.path,
+      title,
+      expiresAt: Date.now() + FILE_TTL_MS,
+    });
+
+    job.status = 'done';
+    job.title = title;
+    job.url = buildPublicShortcutURL(ctx, req, jobId);
+    job.actionsCount = composed.actions.length;
+  } catch (e) {
+    logger.error(`job ${jobId} failed: ${e.message}`);
+    job.status = 'error';
+    job.error = e.message;
+  }
+}
+
 // MARK: - Endpoint handlers
 
 /**
+ * POST /api/ios/compose-shortcut/start
+ *   Body: { rawText: String, title?: String }
+ *   Response 202: { ok: true, jobId }
+ *
+ * Returns immediately with a job id. Client polls /job/<id> for result.
+ */
+export async function handleComposeShortcutStart(req, res, ctx) {
+  let raw = '';
+  for await (const chunk of req) raw += chunk;
+
+  let payload;
+  try { payload = JSON.parse(raw); }
+  catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }));
+    return;
+  }
+
+  const rawText = String(payload.rawText || '').trim();
+  if (!rawText) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Missing rawText' }));
+    return;
+  }
+  if (rawText.length > 2000) {
+    res.writeHead(413, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'rawText too large (max 2 KB)' }));
+    return;
+  }
+
+  pruneJobs();
+  const jobId = crypto.randomBytes(8).toString('hex');
+  jobs.set(jobId, {
+    id: jobId,
+    status: 'pending',
+    expiresAt: Date.now() + JOB_TTL_MS,
+  });
+  // Fire-and-forget — runner writes back into the map
+  runComposeJob(jobId, ctx, req, rawText, String(payload.title || '').trim()).catch(() => {});
+
+  res.writeHead(202, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true, jobId }));
+}
+
+/**
+ * GET /api/ios/compose-shortcut/job/<id>
+ *   Response 200: { ok: true, status, ...result }
+ *
+ * status ∈ { pending, composing, signing, done, error }.
+ */
+export async function handleComposeShortcutJob(req, res, _ctx) {
+  pruneJobs();
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const m = url.pathname.match(/^\/api\/ios\/compose-shortcut\/job\/([a-f0-9]+)$/);
+  if (!m) { res.writeHead(404); res.end(); return; }
+  const job = jobs.get(m[1]);
+  if (!job) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Job not found or expired' }));
+    return;
+  }
+  const body = { ok: true, jobId: job.id, status: job.status };
+  if (job.status === 'done') {
+    body.url = job.url;
+    body.title = job.title;
+    body.actionsCount = job.actionsCount;
+  } else if (job.status === 'error') {
+    body.error = job.error;
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
+/**
+ * Legacy synchronous endpoint — kept for backward compat with the iOS
+ * a810eee build that doesn't yet know about /start + /job/<id>. Same
+ * behavior as before, just routes through the same job runner inline.
+ *
  * POST /api/ios/compose-shortcut
  *   Body: { rawText: String, title?: String }
  *   Response 200: { ok: true, url, id, title }
- *   Response 4xx/5xx: { ok: false, error }
- *
- * Pipeline (option A — bypass Apple FM):
- *   1. Spawn Claude CLI with composer system prompt → JSON {title, actions[]}
- *   2. Translate actions[] → Cherri DSL via local CHERRI_VOCABULARY
- *   3. Same compile + sign on Mac as /build-shortcut
- *   4. Host 5-min TTL, return URL
  */
 export async function handleComposeShortcut(req, res, ctx) {
   let raw = '';

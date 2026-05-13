@@ -138,6 +138,16 @@ export async function handleIosRequest(req, res, ctx) {
     await buildShortcut.handleComposeShortcut(req, res, ctx);
     return true;
   }
+  // Phase 2.1 — async job pattern to dodge cellular/CDN idle-TCP timeouts.
+  // POST start returns jobId immediately; client polls GET job/<id>.
+  if (p === '/api/ios/compose-shortcut/start' && m === 'POST') {
+    await buildShortcut.handleComposeShortcutStart(req, res, ctx);
+    return true;
+  }
+  if (/^\/api\/ios\/compose-shortcut\/job\/[a-f0-9]+$/.test(p) && m === 'GET') {
+    await buildShortcut.handleComposeShortcutJob(req, res, ctx);
+    return true;
+  }
   if (p.startsWith('/api/ios/build-shortcut/') && p.endsWith('.shortcut') && m === 'GET') {
     await buildShortcut.handleShortcutFile(req, res, ctx);
     return true;

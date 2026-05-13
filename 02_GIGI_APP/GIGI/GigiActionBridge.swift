@@ -1730,7 +1730,9 @@ class GigiActionBridge {
             return "Tell me what the Shortcut should do, e.g. 'build a shortcut that turns on the torch and waits 5 seconds'."
         }
         do {
-            let result = try await harness.postComposeShortcut(payload: ["rawText": trimmed])
+            // Async start/poll: keeps every HTTP call short so cellular/CDN
+            // NATs don't kill the connection mid-build. See harness comment.
+            let result = try await harness.composeShortcutAsync(payload: ["rawText": trimmed])
             guard let urlString = result["url"] as? String, let url = URL(string: urlString) else {
                 let errMsg = (result["error"] as? String) ?? "unknown harness error"
                 return "Couldn't build that Shortcut: \(errMsg)."
