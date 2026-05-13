@@ -25,11 +25,54 @@
 
 import { promises as fs, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { Client as SSHClient } from 'ssh2';
 import { log } from '../logger.js';
 import { spawnClaude } from '../claude-runner.js';
+
+// MARK: - .env loader (bypass Git Bash MSYS path translation)
+//
+// On Windows + Git Bash, `set -a; source .env; set +a` mangles POSIX paths
+// inside .env values: `HARNESS_MAC_SIGN_TMPDIR=/tmp` becomes
+// `C:/Users/arman/AppData/Local/Temp` by the time Node sees it. This breaks
+// SFTP because the "remote" path is now a Windows local path.
+//
+// Fix: read .env directly in Node with a tiny parser. Real env wins over
+// the file (so production deploys can override via real env). Idempotent.
+
+(function loadEnvFromFileOnce() {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const envPath = path.resolve(here, '..', '.env');
+    if (!existsSync(envPath)) return;
+    const text = readFileSync(envPath, 'utf8');
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.replace(/^\s*export\s+/, '');
+      if (!line || line.startsWith('#')) continue;
+      const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/i);
+      if (!m) continue;
+      const key = m[1];
+      let value = m[2];
+      if ((value.startsWith('"') && value.endsWith('"'))
+          || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      // Only set HARNESS_MAC_* path-shaped vars from file IF the current
+      // env value looks bash-mangled (Windows abs path) OR is missing.
+      // Real env vars from a clean shell win.
+      const cur = process.env[key];
+      const isPathShaped = key.startsWith('HARNESS_MAC_') && /(?:_HOST$|_TMPDIR$|_BIN$|_KEY$|_PATH$)/i.test(key);
+      const looksMangled = typeof cur === 'string' && /^[A-Z]:[\\/]/i.test(cur);
+      if (cur == null || (isPathShaped && looksMangled)) {
+        process.env[key] = value;
+      }
+    }
+  } catch (e) {
+    log(`[build-shortcut][warn] .env load failed: ${e.message}`);
+  }
+})();
 
 const logger = {
   info: (msg, meta) => log(`[build-shortcut] ${msg}`, meta || ''),
@@ -232,24 +275,37 @@ async function compileAndSignOnMac(id, dsl) {
   logger.info(`compiling ${id} — DSL ${dsl.length} bytes`);
 
   await fs.writeFile(localDsl, dsl, 'utf8');
+  logger.info(`${id} wrote local DSL at ${localDsl} (exists=${existsSync(localDsl)}, ${dsl.length}B)`);
 
   const conn = await openSshConnection();
   try {
     const sftp = await getSftp(conn);
+    logger.info(`${id} sftp opened`);
 
     // 1. Upload DSL
-    await sftpPut(sftp, localDsl, macDsl);
+    try {
+      await sftpPut(sftp, localDsl, macDsl);
+      logger.info(`${id} sftp put ok: ${localDsl} -> ${macDsl}`);
+    } catch (e) {
+      throw new Error(`SFTP upload failed (local=${localDsl} remote=${macDsl}): ${e.message}`);
+    }
 
     // 2. Compile + sign on Mac. cherri writes the signed .shortcut next to
     //    the DSL. 2>&1 ensures we capture any signing warnings/errors.
     const cherriCmd = `${macCherriBin()} ${macDsl} -s anyone 2>&1`;
     const exec1 = await sshExec(conn, cherriCmd, 45000);
+    logger.info(`${id} cherri exit=${exec1.code} stdout=${exec1.stdout.slice(0,200).replace(/\s+/g,' ')}`);
     if (exec1.code !== 0) {
       throw new Error(`cherri failed (exit ${exec1.code}): ${(exec1.stdout + exec1.stderr).slice(0, 500)}`);
     }
 
     // 3. Download signed file
-    await sftpGet(sftp, macShortcut, localShortcut);
+    try {
+      await sftpGet(sftp, macShortcut, localShortcut);
+      logger.info(`${id} sftp get ok: ${macShortcut} -> ${localShortcut}`);
+    } catch (e) {
+      throw new Error(`SFTP download failed (remote=${macShortcut} local=${localShortcut}): ${e.message}`);
+    }
 
     // 4. Cleanup Mac tmp (fire-and-forget — non-fatal if it fails)
     sshExec(conn, `rm -f ${macDsl} ${macShortcut}`, 5000)
@@ -263,35 +319,58 @@ async function compileAndSignOnMac(id, dsl) {
   return { path: localShortcut, bytes: buf };
 }
 
-// MARK: - Cherri vocabulary (mirror of 02_GIGI_APP/GIGI/GigiCherriDSL.swift)
+// MARK: - Cherri vocabulary
 //
-// JS port of CHERRI_VOCABULARY so the harness can synthesize Cherri DSL
-// when Claude provides {action, params} pairs. Keep in sync with Swift side.
+// Each entry maps a logical action name to:
+//   - template:  Cherri DSL source with ${param} placeholders
+//   - include:   Cherri `#include 'actions/X'` directive required for this
+//                action (null = basic, auto-included by cherri)
+//
+// Discovered empirically by compiling single-action DSLs against cherri
+// v2.2.0 and reading the "requires include" diagnostics. Keep this map as
+// the SINGLE SOURCE OF TRUTH — the iOS side does not duplicate it.
 
 const CHERRI_VOCABULARY = {
-  showResult:       'show(${text})',
-  showNotification: 'showNotification(${text})',
-  speakText:        'speakText(${text})',
-  waitSeconds:      'wait(${seconds})',
-  setClipboard:     'setClipboard(${text})',
-  getClipboard:     'getClipboard()',
-  torchOn:          'setBrightness(1)\ntorch()',
-  torchOff:         'torch()',
-  playMusic:        'playMusic()',
-  pauseMusic:       'pauseMusic()',
-  skipForward:      'skipForward()',
-  skipBackward:     'skipBackward()',
-  homeKitScene:     'runScene(${scene})',
-  setFocus:         'setFocus(${mode})',
-  turnOffFocus:     'turnOffFocus()',
-  openApp:          'openApp(${appName})',
-  setVolume:        'setVolume(${level})'
+  // Basic — no include required
+  showResult:       { template: 'show(${text})',                include: null },
+  showNotification: { template: 'showNotification(${text})',    include: null },
+  waitSeconds:      { template: 'wait(${seconds})',             include: null },
+  openApp:          { template: 'openApp(${appID})',            include: null },
+
+  // Settings (brightness/volume) — 0..1 floats
+  setBrightness:    { template: 'setBrightness(${brightness})', include: 'settings' },
+  setVolume:        { template: 'setVolume(${level})',          include: 'settings' },
+
+  // A11y (LED torch)
+  torchOn:          { template: 'setLEDFlash(true)',            include: 'a11y' },
+  torchOff:         { template: 'setLEDFlash(false)',           include: 'a11y' },
+
+  // Sharing
+  setClipboard:     { template: 'setClipboard(${text})',        include: 'sharing' },
+
+  // Music — pause/resume/skip without a specific track
+  playMusic:        { template: 'play()',                       include: 'music' },
+  pauseMusic:       { template: 'pause()',                      include: 'music' },
+  skipForward:      { template: 'skipFwd()',                    include: 'music' },
+  skipBackward:     { template: 'skipBack()',                   include: 'music' },
+
+  // Text → speech
+  speakText:        { template: 'speak(${text})',               include: 'text' },
 };
 
-const CHERRI_NUMERIC_PARAMS = new Set(['seconds', 'level', 'brightness', 'minutes']);
+// Float [0..1] placeholders vs. integer/bare numeric placeholders.
+const CHERRI_FLOAT01_PARAMS  = new Set(['brightness', 'level']);
+const CHERRI_NUMERIC_PARAMS  = new Set(['seconds', 'minutes']);
 
 function cherriFormatValue(raw, placeholderName) {
   const trimmed = String(raw ?? '').trim();
+  if (CHERRI_FLOAT01_PARAMS.has(placeholderName)) {
+    let n = Number(trimmed);
+    if (!Number.isFinite(n)) n = 0.5;
+    if (n > 1) n = n / 100;                 // accept 0-100 input gracefully
+    n = Math.max(0, Math.min(1, n));
+    return n.toString();
+  }
   if (CHERRI_NUMERIC_PARAMS.has(placeholderName)) {
     return Number.isFinite(Number(trimmed)) && trimmed !== '' ? trimmed : '0';
   }
@@ -305,27 +384,42 @@ function cherriSubstitute(template, params) {
 }
 
 /**
- * Translates a Claude-produced JSON action list into a Cherri DSL source
- * string. Returns null if any action is outside the vocabulary — caller
- * surfaces an error to iOS so the user can rephrase.
+ * Translates a Claude-produced JSON action list into a complete Cherri
+ * DSL source file (with the required #include directives prepended).
+ * Returns null if any action is outside the vocabulary — caller surfaces
+ * an error to iOS so the user can rephrase.
  */
 function translateActionsToCherri(title, actions) {
   if (!Array.isArray(actions) || actions.length === 0) return null;
+
+  // First pass — validate + collect unique includes (order doesn't matter
+  // to cherri).
+  const includes = new Set();
+  for (const spec of actions) {
+    const entry = CHERRI_VOCABULARY[spec?.action];
+    if (!entry) {
+      logger.warn(`unknown cherri action '${spec?.action}' — abort translation`);
+      return null;
+    }
+    if (entry.include) includes.add(entry.include);
+  }
+
   const lines = [];
+  for (const cat of includes) {
+    lines.push(`#include 'actions/${cat}'`);
+  }
+  if (includes.size) lines.push('');
+
   const cleanTitle = String(title || '').trim();
   if (cleanTitle) {
     lines.push(`// ${cleanTitle}`);
     lines.push(`// Generated by GIGI via Claude ${new Date().toISOString()}`);
     lines.push('');
   }
+
   for (const spec of actions) {
-    const action = spec?.action;
-    const template = CHERRI_VOCABULARY[action];
-    if (!template) {
-      logger.warn(`unknown cherri action '${action}' — abort translation`);
-      return null;
-    }
-    lines.push(cherriSubstitute(template, spec.params || {}));
+    const entry = CHERRI_VOCABULARY[spec.action];
+    lines.push(cherriSubstitute(entry.template, spec.params || {}));
   }
   return lines.join('\n');
 }
@@ -343,28 +437,32 @@ const COMPOSER_SYSTEM_PROMPT = `You are GIGI's Shortcut composer. The user wants
 Available actions (use EXACTLY these names, no others):
 - showResult { text }                — show a message on screen
 - showNotification { text }          — system notification
-- speakText { text }                 — text to speech
-- waitSeconds { seconds }            — pause N seconds
+- speakText { text }                 — speak the text out loud
+- waitSeconds { seconds }            — pause N seconds (integer)
 - setClipboard { text }              — copy text to clipboard
-- getClipboard {}                    — read clipboard
 - torchOn {}                         — turn flashlight on
 - torchOff {}                        — turn flashlight off
-- playMusic {}                       — start playback
-- pauseMusic {}                      — pause playback
+- setBrightness { brightness }       — screen brightness 0..1 (e.g. "0.8")
+- setVolume { level }                — system volume 0..1 (e.g. "0.5")
+- playMusic {}                       — resume music playback
+- pauseMusic {}                      — pause music playback
 - skipForward {}                     — next track
 - skipBackward {}                    — previous track
-- homeKitScene { scene }             — run a HomeKit scene (scene = scene name)
-- setFocus { mode }                  — enable focus mode by name
-- turnOffFocus {}                    — turn focus off
-- openApp { appName }                — open an app by name
-- setVolume { level }                — set volume 0-100
+- openApp { appID }                  — open an app by BUNDLE ID
+                                       (e.g. "com.spotify.client",
+                                        "com.apple.mobilesafari",
+                                        "com.apple.MobileSMS",
+                                        "com.apple.Maps",
+                                        "com.google.chrome.ios",
+                                        "com.instagram.app")
 
 Rules:
 1. Output ONLY a JSON object. No prose, no markdown, no code fences. Just JSON.
 2. Schema: {"title": "<short title 3-5 words>", "actions": [{"action": "<name>", "params": {...}}, ...]}
-3. Use only the action names above. If the user asks for something outside the vocabulary, do your best to approximate using available actions (e.g., "remind me" → showNotification).
+3. Use only the action names above. If the user asks for something outside the vocabulary (HomeKit scenes, Focus modes, calling, messaging, etc.), do your best to approximate; if impossible, return an empty actions array.
 4. Keep it minimal: 1-6 actions usually. Don't over-engineer.
 5. Title should describe the shortcut succinctly, suitable as an iOS Shortcut name.
+6. For openApp, ALWAYS use the bundle ID, not the friendly name.
 
 Examples:
 
@@ -375,7 +473,10 @@ User: make a shortcut that plays music and shows a notification saying "enjoy"
 Output: {"title":"Play & Notify","actions":[{"action":"playMusic","params":{}},{"action":"showNotification","params":{"text":"enjoy"}}]}
 
 User: shortcut to open spotify and skip to next track
-Output: {"title":"Spotify Next","actions":[{"action":"openApp","params":{"appName":"Spotify"}},{"action":"waitSeconds","params":{"seconds":"2"}},{"action":"skipForward","params":{}}]}
+Output: {"title":"Spotify Next","actions":[{"action":"openApp","params":{"appID":"com.spotify.client"}},{"action":"waitSeconds","params":{"seconds":"2"}},{"action":"skipForward","params":{}}]}
+
+User: a shortcut that dims the screen to 30% and tells me good night
+Output: {"title":"Good Night","actions":[{"action":"setBrightness","params":{"brightness":"0.3"}},{"action":"speakText","params":{"text":"Good night, sleep well"}}]}
 
 OUTPUT JSON ONLY.`;
 

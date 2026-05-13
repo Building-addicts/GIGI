@@ -1737,7 +1737,19 @@ class GigiActionBridge {
             }
             let title = (result["title"] as? String) ?? "GIGI Shortcut"
             GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add Shortcut")
-            await UIApplication.shared.open(url)
+            // Use the shortcuts:// import scheme so iOS opens Shortcuts.app
+            // directly with the install preview, instead of letting Safari
+            // download the file to the Files app. The signed .shortcut URL
+            // is passed as the `url` query param; Shortcuts.app fetches it
+            // and shows the standard import sheet.
+            // Reference: shortcuts://import-shortcut/?url=URL&name=NAME
+            let encoded = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? url.absoluteString
+            let nameEnc = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title
+            if let importURL = URL(string: "shortcuts://import-shortcut/?url=\(encoded)&name=\(nameEnc)") {
+                await UIApplication.shared.open(importURL)
+            } else {
+                await UIApplication.shared.open(url)
+            }
             return "Built '\(title)'. Tap 'Add Shortcut' to install."
         } catch {
             GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't build Shortcut")

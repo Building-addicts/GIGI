@@ -40,8 +40,18 @@ export async function handleIosRequest(req, res, ctx) {
 
   if (!p.startsWith('/api/ios/')) return false;
 
-  const auth = checkBearer(ctx.cfg, req);
-  if (!auth.ok) { json(res, auth.code, { ok: false, error: { code: 'UNAUTHORIZED', message: auth.error } }); return true; }
+  // Phase 2 — Signed Shortcut file is opened by iOS Safari/Shortcuts.app
+  // via UIApplication.open(url), which CANNOT include our Bearer header.
+  // Auth model for this endpoint: 16-hex-char unguessable id + 5-min TTL
+  // (file is purged on every GET after expiry). Treat it as a one-shot
+  // signed URL — same security model as cloud presigned download links.
+  const isPublicShortcutDownload =
+    m === 'GET' && /^\/api\/ios\/build-shortcut\/[a-f0-9]{8,64}\.shortcut$/.test(p);
+
+  if (!isPublicShortcutDownload) {
+    const auth = checkBearer(ctx.cfg, req);
+    if (!auth.ok) { json(res, auth.code, { ok: false, error: { code: 'UNAUTHORIZED', message: auth.error } }); return true; }
+  }
 
   // Blocked-device check (Phase 6B revoke action). Best-effort deviceId
   // extraction from URL query or X-Device-Id header. Body-only deviceIds
