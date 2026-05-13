@@ -450,3 +450,4 @@
 - `2026-05-13T19:05:59+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-13T19:15:46+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): async start+poll for compose-shortcut (kill idle-TCP -1005))
 - `2026-05-13T19:26:34+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(phase-2): async )
+- `2026-05-13T19:35:20+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): revert to direct https open + attachment disposition)
