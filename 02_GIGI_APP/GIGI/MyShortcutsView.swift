@@ -195,6 +195,7 @@ struct MyShortcutsView: View {
         switch raw {
         case "append_to_note":  return "Append to Note"
         case "create_reminder": return "Create Reminder"
+        case "set_alarm":       return "Set Clock Alarm"
         case "log_health":      return "Log Health Entry"
         case "control_torch":   return "Control Torch"
         default:                return raw
@@ -206,9 +207,16 @@ struct MyShortcutsView: View {
             RegisteredShortcut(
                 name: "GIGI Append to Note",
                 aliases: [],
-                description: "Receives 'title|content' text input, finds your Note with that title, and appends the content. Used by GIGI's add_to_note tool.",
+                description: "Receives 'title|content' text input, finds your Note with that title, and appends the content. Used by GIGI's add_to_note tool to bypass Apple's closed Notes write API.",
                 enabled: true,
                 systemPurpose: "append_to_note"
+            ),
+            RegisteredShortcut(
+                name: "GIGI Set Alarm",
+                aliases: [],
+                description: "Receives 'HH:mm' text input and creates a REAL Clock alarm (not just a notification). Used by GIGI's set_alarm tool to bypass Apple's closed Clock.app API.",
+                enabled: true,
+                systemPurpose: "set_alarm"
             ),
             RegisteredShortcut(
                 name: "GIGI Quick Reminder",
@@ -264,6 +272,7 @@ private struct ShortcutEditorSheet: View {
                     Picker("Purpose", selection: $systemPurpose) {
                         Text("None (alias only)").tag("")
                         Text("Append to Note").tag("append_to_note")
+                        Text("Set Clock Alarm").tag("set_alarm")
                         Text("Create Reminder").tag("create_reminder")
                         Text("Log Health Entry").tag("log_health")
                         Text("Control Torch").tag("control_torch")

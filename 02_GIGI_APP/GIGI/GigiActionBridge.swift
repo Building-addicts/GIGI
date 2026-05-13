@@ -741,18 +741,73 @@ class GigiActionBridge {
         }
     }
 
-    // MARK: - Alarm
+    // MARK: - Alarm (tier 1/2 — same pattern as addToNote)
+    //
+    // Apple's Clock.app alarms are SANDBOXED — 3rd-party apps cannot create
+    // native Clock alarms via any public SDK API. The historical setAlarm
+    // behavior here uses UNUserNotificationCenter to schedule a local
+    // notification at the requested time. This is NOT a real Clock alarm:
+    // it doesn't appear in the Sveglie list, doesn't honor alarm volume,
+    // can't be snoozed natively. Users were misled by the "Alarm set"
+    // response when checking Clock.app and finding nothing.
+    //
+    // Fix (mirrors addToNote architectural pattern):
+    //   Tier 1: if GigiShortcutRegistry has a Shortcut tagged
+    //           systemPurpose="set_alarm", invoke it via shortcuts:// —
+    //           the Shortcut uses Shortcuts.app's privileged "Create Alarm"
+    //           action which DOES create a real Clock alarm.
+    //   Tier 2: fallback to local notification (current MVP) with a
+    //           response that clearly says it's a notification not a
+    //           Clock alarm, and points to the Shortcut path for real one.
 
     private func setAlarm(time: String, date: String) async -> String {
         guard !time.isEmpty else {
             return "What time should I set the alarm for?"
         }
-        let granted = await requestNotificationPermission()
-        guard granted else { return "Enable Notifications in Settings so I can set alarms." }
-
         guard let fireDate = parseAlarmDateTime(time: time, date: date) else {
             return "Couldn't parse that time. Try something like '7:30 AM'."
         }
+
+        // Tier 1: Shortcut bridge for real Clock alarm.
+        if let shortcut = GigiShortcutRegistry.shared.find(byPurpose: "set_alarm") {
+            return await invokeAlarmShortcut(shortcut: shortcut, fireDate: fireDate)
+        }
+
+        // Tier 2: local notification fallback (honest about being notification).
+        return await scheduleAlarmNotification(fireDate: fireDate)
+    }
+
+    @MainActor
+    private func invokeAlarmShortcut(
+        shortcut: RegisteredShortcut,
+        fireDate: Date
+    ) async -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en-US")
+        f.dateFormat = "HH:mm"
+        let timeInput = f.string(from: fireDate)
+
+        var cs = CharacterSet.urlQueryAllowed
+        cs.remove(charactersIn: "+&=#?")
+        let encodedName = shortcut.name.addingPercentEncoding(withAllowedCharacters: cs) ?? shortcut.name
+        let encodedInput = timeInput.addingPercentEncoding(withAllowedCharacters: cs) ?? timeInput
+
+        let urlString = "shortcuts://x-callback-url/run-shortcut?name=\(encodedName)&input=text&text=\(encodedInput)"
+        guard let url = URL(string: urlString) else {
+            return "Couldn't build the Shortcut URL."
+        }
+
+        GigiShortcutRegistry.shared.recordUse(name: shortcut.name)
+        GigiSmartOrchestrator.shared.showBanner("⏰ Setting Clock alarm via \(shortcut.name)...")
+        await UIApplication.shared.open(url)
+
+        let label = displayLabel(for: fireDate)
+        return "Setting Clock alarm for \(label) via Shortcuts."
+    }
+
+    private func scheduleAlarmNotification(fireDate: Date) async -> String {
+        let granted = await requestNotificationPermission()
+        guard granted else { return "Enable Notifications in Settings so I can set alarms." }
 
         let content = UNMutableNotificationContent()
         content.title = "GIGI Alarm"
@@ -769,12 +824,22 @@ class GigiActionBridge {
         )
         try? await UNUserNotificationCenter.current().add(request)
 
-        let f = DateFormatter(); f.locale = Locale(identifier: "en-US"); f.dateFormat = "h:mm a"
-        let label = f.string(from: fireDate)
+        let label = displayLabel(for: fireDate)
         await MainActor.run {
-            GigiSmartOrchestrator.shared.showBanner("⏰ Alarm · \(label)")
+            GigiSmartOrchestrator.shared.showBanner("⏰ Notification · \(label)")
         }
-        return "Alarm set for \(label)."
+        // Honest about the limitation — Apple sandbox prevents real Clock alarms
+        // for 3rd-party. Notification at the right time is the best we can do
+        // without a Shortcut bridge.
+        return "Notification scheduled for \(label) (Apple doesn't allow 3rd-party Clock alarms — register a 'GIGI Set Alarm' Shortcut in Settings → My Shortcuts for the real thing)."
+    }
+
+    /// Formats a fire date as a short user-friendly label in en-US: "7:30 AM"
+    private func displayLabel(for date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en-US")
+        f.dateFormat = "h:mm a"
+        return f.string(from: date)
     }
 
     /// Repeating local notification every day at `hour`:`minute` (replaces any previous GIGI daily routine alarm).
