@@ -437,3 +437,4 @@
 - `2026-05-13T16:05:20+0200` · local · session ended on `armando-rework` (last commit: feat(phase-2): Claude composer for AI Shortcuts (bypass Apple FM))
 - `2026-05-13T16:58:23+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: feat(phase-2): Claud)
 - `2026-05-13T17:05:19+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): use Windows OpenSSH for scp/ssh on win32)
+- `2026-05-13T17:15:40+0200` · local · session ended on `armando-rework` (last commit: debug(phase-2): log spawn exe+args for ssh/scp diagnostics)
