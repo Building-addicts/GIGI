@@ -1060,7 +1060,8 @@ final class GigiRequestRouter {
 
         let mathOperators: [String] = [
             "+", "-", "*", "/", "%", "^", "**",
-            " plus ", " minus ", " times ", " divided by ", " over ", " x ",
+            " plus ", " minus ", " times ", " time ", " divided by ", " over ", " x ",
+            " multiplied by ", " moltiplicato per ",
             " più ", " meno ", " per ", " diviso ", " mod "
         ]
         let hasOperator = mathOperators.contains { stripped.contains($0) }
