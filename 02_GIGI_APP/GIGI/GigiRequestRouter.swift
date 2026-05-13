@@ -133,6 +133,53 @@ final class GigiRequestRouter {
             return .actionInvoked(speech: finalSpeech, tool: "calculate_math")
         }
 
+        // Phase 2 tier-0 — Explicit "build/create/make a shortcut" pattern.
+        //
+        // Apple FM mis-routes "Build me a shortcut that turns on the torch"
+        // to homekit_on (the inner "turns on torch" dominates). Tier-0
+        // regex catches the explicit authoring intent and short-circuits
+        // to build_shortcut. The actual Cherri DSL generation still needs
+        // Apple FM (the regex extracts the natural-language description but
+        // doesn't try to parse out the actions — Apple FM does that via
+        // FMBuildShortcutTool.Arguments).
+        //
+        // Because regex tier-0 dispatches WITHOUT going through Apple FM
+        // tool selection, we need to STILL invoke Apple FM in a focused
+        // mode to extract the actions[] for the captured description.
+        // detectBuildShortcutPattern returns the description; we delegate
+        // to Apple FM to flesh out actionsJSON via the tool, then dispatch.
+        if let description = detectBuildShortcutPattern(in: text) {
+            GigiDebugLogger.log("GIGI Router: regex tier-0 build_shortcut → '\(description)'")
+            #if canImport(FoundationModels)
+            if #available(iOS 26.0, *) {
+                if let tool = GigiFoundationToolRegistry.tool(for: "build_shortcut") {
+                    do {
+                        let result = try await GigiFoundationSession.shared.respondWithTools(
+                            text: description,
+                            tools: [tool],
+                            history: history
+                        )
+                        let speech = result.directSpeech?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        let final = speech.isEmpty
+                            ? "I'm building that Shortcut for you."
+                            : speech
+                        let withPrefix = debugPrefix(
+                            routerSource: "regex+appleFM",
+                            tool: "build_shortcut",
+                            confidence: 1.0,
+                            slot: description
+                        ) + final
+                        GigiConversationMemory.shared.addModelSpeech(withPrefix)
+                        return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
+                    } catch {
+                        GigiDebugLogger.log("GIGI Router: build_shortcut Apple FM failed (\(error.localizedDescription))")
+                        // Fall through to general dispatch below.
+                    }
+                }
+            }
+            #endif
+        }
+
         // GATE 9.A + GATE 15 fix — Explicit verb regex tier-0 fast-path.
         //
         // Restored after GATE 15 device test showed semantic router fails
@@ -1151,6 +1198,65 @@ final class GigiRequestRouter {
             return (trimmed, "")
         }
         return (textPart, langPart)
+    }
+
+    // MARK: - build_shortcut explicit-authoring pattern detection (Phase 2)
+
+    /// Returns the natural-language description of the Shortcut the user
+    /// wants to build, when `text` matches an unambiguous build-shortcut
+    /// pattern. Returns nil otherwise.
+    ///
+    /// Apple FM constrained decoding biases toward concrete tools when the
+    /// inner description contains tool-like keywords ("turn on torch" →
+    /// homekit_on; "create event" → create_calendar_event; etc.). The
+    /// regex short-circuits these.
+    ///
+    /// Recognized patterns (case-insensitive, leading verbs):
+    ///   - "build me a shortcut that <description>"
+    ///   - "build a shortcut that <description>"
+    ///   - "make me a shortcut that <description>"
+    ///   - "create a shortcut that <description>"
+    ///   - "compose a shortcut that <description>"
+    ///   - "design a shortcut that <description>"
+    ///   - Italian: "fammi uno shortcut che <description>"
+    ///   - Italian: "crea uno shortcut che <description>"
+    ///   - Italian: "componi uno shortcut che <description>"
+    ///
+    /// Returns the description portion (e.g. "turns on the torch and waits
+    /// 5 seconds"), with leading "that/which/who/who" filler stripped.
+    private func detectBuildShortcutPattern(in text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return nil }
+
+        let prefixes: [String] = [
+            // English
+            "build me a shortcut that ", "build me a shortcut ",
+            "build a shortcut that ", "build a shortcut ",
+            "make me a shortcut that ", "make me a shortcut ",
+            "make a shortcut that ", "make a shortcut ",
+            "create me a shortcut that ", "create me a shortcut ",
+            "create a shortcut that ", "create a shortcut ",
+            "compose me a shortcut that ", "compose a shortcut that ",
+            "design me a shortcut that ", "design a shortcut that ",
+            "generate me a shortcut that ", "generate a shortcut that ",
+            // Italian
+            "fammi uno shortcut che ", "fammi una shortcut che ",
+            "fammi uno shortcut ", "fammi una shortcut ",
+            "crea uno shortcut che ", "crea una shortcut che ",
+            "crea uno shortcut ", "crea una shortcut ",
+            "componi uno shortcut che ", "componi una shortcut che ",
+            "genera uno shortcut che ", "genera una shortcut che ",
+            "costruisci uno shortcut che ", "costruisci una shortcut che "
+        ]
+
+        for prefix in prefixes {
+            if t.hasPrefix(prefix) {
+                let desc = String(t.dropFirst(prefix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return desc.isEmpty ? nil : desc
+            }
+        }
+        return nil
     }
 
     // MARK: - Tier-0 regex intercepts (HYBRID with GigiSemanticRouter — GATE 15 fix)
