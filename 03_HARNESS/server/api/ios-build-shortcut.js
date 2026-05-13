@@ -613,9 +613,7 @@ export async function handleComposeShortcut(req, res, ctx) {
       expiresAt: Date.now() + FILE_TTL_MS
     });
 
-    const baseURL = ctx.cfg?.publicBaseURL
-      || `http://${req.headers.host || 'localhost:7779'}`;
-    const url = `${baseURL.replace(/\/$/, '')}/api/ios/build-shortcut/${id}.shortcut`;
+    const url = buildPublicShortcutURL(ctx, req, id);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, url, id, title, actionsCount: composed.actions.length }));
@@ -624,6 +622,34 @@ export async function handleComposeShortcut(req, res, ctx) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: false, error: `Sign failed: ${e.message}` }));
   }
+}
+
+/**
+ * Build the public URL the iOS app will hand to Shortcuts.app.
+ *
+ * Must be HTTPS — iOS App Transport Security blocks HTTP fetches inside
+ * Shortcuts.app, and `shortcuts://import-shortcut/?url=` rejects non-https
+ * URLs silently with "URL not valid".
+ *
+ * Precedence:
+ *   1. cfg.publicBaseURL (operator-supplied, e.g. an https://*.com domain)
+ *   2. x-forwarded-proto + Host (Cloudflare Tunnel sets these on inbound)
+ *   3. Default to https://<host> — only falls to http if Host is a literal
+ *      127.0.0.1/localhost (where iOS would never reach anyway)
+ */
+function buildPublicShortcutURL(ctx, req, id) {
+  if (ctx.cfg?.publicBaseURL) {
+    const base = String(ctx.cfg.publicBaseURL).replace(/\/$/, '');
+    return `${base}/api/ios/build-shortcut/${id}.shortcut`;
+  }
+  const host = String(req.headers.host || 'localhost:7779');
+  const fwdProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const isLocal = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host);
+  let proto;
+  if (fwdProto) proto = fwdProto;
+  else if (isLocal) proto = 'http';
+  else proto = 'https';                 // Cloudflare tunnel, public domain, etc.
+  return `${proto}://${host}/api/ios/build-shortcut/${id}.shortcut`;
 }
 
 export async function handleBuildShortcut(req, res, ctx) {
@@ -663,11 +689,7 @@ export async function handleBuildShortcut(req, res, ctx) {
       expiresAt: Date.now() + FILE_TTL_MS
     });
 
-    // Build the public URL using the harness public base URL if configured,
-    // else fall back to the request Host header.
-    const baseURL = ctx.cfg?.publicBaseURL
-      || `http://${req.headers.host || 'localhost:7779'}`;
-    const url = `${baseURL.replace(/\/$/, '')}/api/ios/build-shortcut/${id}.shortcut`;
+    const url = buildPublicShortcutURL(ctx, req, id);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, url, id, title }));
@@ -713,7 +735,12 @@ export async function handleShortcutFile(req, res, _ctx) {
 
   const niceName = entry.title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').slice(0, 40) || 'GIGI-Shortcut';
   res.writeHead(200, {
-    'Content-Type': 'application/x-apple-aspen-config',
+    // Apple Shortcuts file MIME. Was 'application/x-apple-aspen-config'
+    // (MDM profile MIME) which caused Shortcuts.app to reject the URL with
+    // "Import failed — URL not valid". Generic octet-stream + .shortcut
+    // extension is what Apple's iCloud gallery + community signing servers
+    // use, and Shortcuts.app accepts it via the shortcuts:// import scheme.
+    'Content-Type': 'application/octet-stream',
     'Content-Disposition': `inline; filename="${niceName}.shortcut"`,
     'Cache-Control': 'no-store, no-cache, must-revalidate',
     'Content-Length': bytes.length
