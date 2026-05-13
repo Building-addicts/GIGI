@@ -68,6 +68,39 @@ final class GigiRequestRouter {
     /// Always returns a `RouteResult` — never throws. Errors are surfaced
     /// as `.error(message)` for the orchestrator to speak.
     func route(text: String, history: String = "") async -> RouteResult {
+        // GATE 15 Step 0.5 — Conversational consent for active proposal card.
+        //
+        // When a ShortcutProposalCard is on screen, intercept simple
+        // YES/NO confirmations BEFORE the normal routing fires. This lets
+        // the user accept or dismiss the proposal by voice or chat without
+        // tapping the card buttons — same UX pattern as the contact
+        // disambiguation listener (ContactDisambiguationBubble).
+        //
+        // Guard against false positives: a long utterance that happens to
+        // contain "yes" (e.g. "yes call mom from spotify") is NOT a consent —
+        // fall through so the normal router can dispatch the actual intent.
+        if let proposal = await MainActor.run(body: { GigiSmartOrchestrator.shared.shortcutProposal }) {
+            let utterance = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let wordCount = utterance.split { $0.isWhitespace }.count
+            if wordCount > 0 && wordCount <= 4 {
+                if Self.detectAffirmative(in: utterance) {
+                    GigiDebugLogger.log("GIGI Router: proposal consent → CONFIRM via '\(utterance)'")
+                    await MainActor.run { proposal.onConfirm() }
+                    let speech = "Building '\(proposal.title)'..."
+                    GigiConversationMemory.shared.addModelSpeech(speech)
+                    return .actionInvoked(speech: speech, tool: "shortcut_proposal_confirm")
+                }
+                if Self.detectNegative(in: utterance) {
+                    GigiDebugLogger.log("GIGI Router: proposal consent → CANCEL via '\(utterance)'")
+                    await MainActor.run { proposal.onCancel() }
+                    let speech = "Cancelled."
+                    GigiConversationMemory.shared.addModelSpeech(speech)
+                    return .actionInvoked(speech: speech, tool: "shortcut_proposal_cancel")
+                }
+            }
+            // Card stays visible; user can still issue other intents.
+        }
+
         // GATE 9 polish — discovery intercept (Layer B preview, full impl GATE 10).
         // Discovery queries ("what can you do?", "cosa sai fare?", "help") are
         // handled BEFORE the semantic router because they need a curated
@@ -329,6 +362,43 @@ final class GigiRequestRouter {
     /// Internal helper — re-wraps a RouteResult with the given debug prefix
     /// prepended to the speech, preserving the case (.spoken / .actionInvoked /
     /// .error). No-op when prefix is empty (release build).
+    // MARK: - GATE 15 Step 0.5 — Conversational consent matchers
+
+    /// Whole-word match for affirmative consent on a pending Shortcut
+    /// proposal card. EN + IT. Case-insensitive. Whole-word so "yes I
+    /// want to call mom" still matches — caller gates by ≤4 word length
+    /// to keep false positives down.
+    static func detectAffirmative(in text: String) -> Bool {
+        let lowered = text.lowercased()
+        let words = [
+            "yes", "yeah", "yep", "yup", "sure", "ok", "okay",
+            "go", "do it", "build", "build it", "make it", "let's go",
+            "sì", "si", "vai", "fallo", "crealo", "certo", "dai",
+            "facciamolo", "procedi", "ok vai", "vai vai"
+        ]
+        for w in words {
+            let pattern = "\\b" + NSRegularExpression.escapedPattern(for: w) + "\\b"
+            if lowered.range(of: pattern, options: .regularExpression) != nil { return true }
+        }
+        return false
+    }
+
+    /// Whole-word match for negative consent (dismiss / cancel) on a
+    /// pending Shortcut proposal card. Mirror of `detectAffirmative`.
+    static func detectNegative(in text: String) -> Bool {
+        let lowered = text.lowercased()
+        let words = [
+            "no", "nope", "nah", "cancel", "abort", "dismiss", "skip", "stop",
+            "annulla", "lascia stare", "non importa", "fermati", "non farlo",
+            "lascia perdere", "non ora"
+        ]
+        for w in words {
+            let pattern = "\\b" + NSRegularExpression.escapedPattern(for: w) + "\\b"
+            if lowered.range(of: pattern, options: .regularExpression) != nil { return true }
+        }
+        return false
+    }
+
     private func prependDebug(_ prefix: String, to result: RouteResult) -> RouteResult {
         switch result {
         case .spoken(let s):

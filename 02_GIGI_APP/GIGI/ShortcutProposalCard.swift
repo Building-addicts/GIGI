@@ -141,6 +141,15 @@ struct ShortcutProposalCard: View {
                 }
                 .disabled(isBuilding)
             }
+
+            // GATE 15 Step 0.5 — conversational consent hint.
+            if !isBuilding {
+                Text("Or say \u{201C}yes\u{201D} to build, \u{201C}no\u{201D} to cancel")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.45))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 2)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

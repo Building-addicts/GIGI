@@ -1901,14 +1901,16 @@ class GigiActionBridge {
         GigiDebugLogger.log("GIGI Registry: learned '\(cleanName)' purpose=\(cleanPurpose) aliases=\(aliasCount)")
     }
 
-    /// Downloads the signed .shortcut to the app sandbox and presents the
-    /// system share sheet. iOS recognizes the file via .shortcut extension
-    /// + AEA1 signing and offers "Add to Shortcuts" as a top action.
+    /// Downloads the signed .shortcut to the app sandbox and presents an
+    /// iOS-native "Open in…" picker. Step 0.6 — switched from
+    /// `UIActivityViewController` (large grid: AirDrop, Mail, Note,
+    /// Comandi Rapidi, …) to `UIDocumentInteractionController` filtered
+    /// by `com.apple.shortcut` UTI. iOS typically shows only "Open in
+    /// Shortcuts" → 1 tap instead of 2.
     ///
-    /// Returns once the share sheet has been DISMISSED (whether the user
-    /// completed an activity or cancelled). Return value: `true` if iOS
-    /// reported the activity completed (user picked Shortcuts.app, AirDrop,
-    /// Save to Files, etc.), `false` if the user dismissed without picking.
+    /// Returns once the picker is dismissed. `true` if iOS confirmed the
+    /// user picked an app to send the file to (Step 4 Learn Phase fires);
+    /// `false` if the picker was dismissed without picking.
     @MainActor
     @discardableResult
     private static func presentShortcutFile(remoteURL: URL, title: String) async -> Bool {
@@ -1919,8 +1921,8 @@ class GigiActionBridge {
                 await UIApplication.shared.open(remoteURL)
                 return false
             }
-            // Move to a stable URL with .shortcut extension; iOS share sheet
-            // uses the file extension to pick the right handler.
+            // Move to a stable URL with .shortcut extension; iOS routes
+            // based on extension + UTI.
             let safe = title
                 .replacingOccurrences(of: "/", with: "-")
                 .components(separatedBy: CharacterSet.alphanumerics.union(.whitespaces).inverted)
@@ -1933,7 +1935,7 @@ class GigiActionBridge {
             try? FileManager.default.removeItem(at: destURL)
             try FileManager.default.moveItem(at: tmpURL, to: destURL)
 
-            // Find the active window to anchor the activity controller.
+            // Find the active window to anchor the picker.
             guard let scene = UIApplication.shared.connectedScenes
                     .compactMap({ $0 as? UIWindowScene })
                     .first(where: { $0.activationState == .foregroundActive }),
@@ -1943,14 +1945,17 @@ class GigiActionBridge {
                 await UIApplication.shared.open(remoteURL)
                 return false
             }
-            // Walk to topmost presented controller.
             var top = rootVC
             while let presented = top.presentedViewController { top = presented }
 
-            // Suspend until iOS calls completionWithItemsHandler so the caller
-            // can fire the Learn Phase only AFTER the share sheet is gone
-            // (otherwise the banner + chat toast fire while the share sheet
-            // covers the screen and the user never sees them).
+            // Try the focused 1-tap Open-In menu first. Fall back to the
+            // broader UIActivityViewController if iOS reports no app can
+            // open the file (rare — happens only if Shortcuts.app is
+            // disabled by parental controls).
+            let didEngage = await openInShortcuts(url: destURL, anchorVC: top)
+            if didEngage != nil { return didEngage! }
+
+            GigiDebugLogger.log("presentShortcutFile: presentOpenInMenu returned false — fallback to UIActivityViewController")
             return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
                 let activity = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
                 activity.popoverPresentationController?.sourceView = top.view
@@ -1958,7 +1963,7 @@ class GigiActionBridge {
                     x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0
                 )
                 activity.completionWithItemsHandler = { activityType, completed, _, _ in
-                    GigiDebugLogger.log("presentShortcutFile: dismissed — activity=\(activityType?.rawValue ?? "<none>") completed=\(completed)")
+                    GigiDebugLogger.log("presentShortcutFile fallback: dismissed — activity=\(activityType?.rawValue ?? "<none>") completed=\(completed)")
                     cont.resume(returning: completed)
                 }
                 top.present(activity, animated: true)
@@ -1969,6 +1974,38 @@ class GigiActionBridge {
             return false
         }
     }
+
+    /// One-tap "Open in Shortcuts" via UIDocumentInteractionController.
+    /// Returns `nil` if iOS couldn't present the menu (no eligible app);
+    /// otherwise returns `true` if the user picked an app, `false` if
+    /// they dismissed without picking.
+    @MainActor
+    private static func openInShortcuts(url: URL, anchorVC: UIViewController) async -> Bool? {
+        let controller = UIDocumentInteractionController(url: url)
+        controller.uti = "com.apple.shortcut"  // hint UTI for the routing
+        let delegate = ShortcutDocDelegate.shared
+        delegate.reset()
+        controller.delegate = delegate
+        // Retain so the system can interact with the controller until the
+        // menu dismisses — UIDocumentInteractionController doesn't hold a
+        // strong reference back to the caller.
+        Self.activeDocController = controller
+
+        let presented = controller.presentOpenInMenu(
+            from: anchorVC.view.bounds, in: anchorVC.view, animated: true
+        )
+        if !presented {
+            Self.activeDocController = nil
+            return nil
+        }
+        let result = await delegate.awaitDismissal()
+        Self.activeDocController = nil
+        return result
+    }
+
+    /// Retains the active document interaction controller while iOS
+    /// drives the Open-In menu interaction.
+    private static var activeDocController: UIDocumentInteractionController?
 
     @MainActor
     private func buildShortcut(title: String, actionsJSON: String) async -> String {
@@ -2482,5 +2519,66 @@ class GigiActionBridge {
             comps.minute = Int(time[time.index(after: colon)...].prefix(2)) ?? 0
         }
         return Calendar.current.date(from: comps) ?? Date()
+    }
+}
+
+// MARK: - GATE 15 Step 0.6 — UIDocumentInteractionController delegate
+//
+// Bridges the `UIDocumentInteractionController` Open-In menu lifecycle
+// to a Swift `async` continuation so `presentShortcutFile` can await
+// dismissal before firing the Learn Phase.
+//
+// State machine:
+//   reset()                  → controller about to be presented
+//   willBeginSending(app)    → user tapped an app (Shortcuts.app, …)
+//   didDismissOpenInMenu     → menu closed, resolve continuation
+
+@MainActor
+final class ShortcutDocDelegate: NSObject, UIDocumentInteractionControllerDelegate {
+    static let shared = ShortcutDocDelegate()
+
+    private var continuation: CheckedContinuation<Bool, Never>?
+    private var didEngage: Bool = false
+
+    /// Call before presenting a new controller — clears stale state.
+    func reset() {
+        if let pending = continuation {
+            // Defensive: resolve any orphan continuation so we never leak.
+            pending.resume(returning: false)
+        }
+        continuation = nil
+        didEngage = false
+    }
+
+    /// Suspend the caller until the Open-In menu has fully dismissed.
+    /// Returns `true` if the user engaged an app, `false` otherwise.
+    func awaitDismissal() async -> Bool {
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            self.continuation = cont
+        }
+    }
+
+    // MARK: - UIDocumentInteractionControllerDelegate
+
+    nonisolated func documentInteractionController(
+        _ controller: UIDocumentInteractionController,
+        willBeginSendingToApplication application: String?
+    ) {
+        Task { @MainActor in
+            self.didEngage = true
+            GigiDebugLogger.log("ShortcutDocDelegate: willBeginSendingToApplication=\(application ?? "<unknown>")")
+        }
+    }
+
+    nonisolated func documentInteractionControllerDidDismissOpenInMenu(
+        _ controller: UIDocumentInteractionController
+    ) {
+        Task { @MainActor in
+            let engaged = self.didEngage
+            GigiDebugLogger.log("ShortcutDocDelegate: didDismissOpenInMenu engaged=\(engaged)")
+            self.continuation?.resume(returning: engaged)
+            self.continuation = nil
+            self.didEngage = false
+        }
     }
 }
