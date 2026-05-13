@@ -452,3 +452,4 @@
 - `2026-05-13T19:26:34+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(phase-2): async )
 - `2026-05-13T19:35:20+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): revert to direct https open + attachment disposition)
 - `2026-05-13T19:42:09+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): await UIApplication.open in fallback paths)
+- `2026-05-13T19:48:16+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): bypass NLU fast-path for build_shortcut intent)
