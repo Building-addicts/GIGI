@@ -627,6 +627,29 @@ class GigiActionBridge {
     // MARK: - Torch
 
     private func torchSet(on: Bool) -> String {
+        // Tier 1 — user has a registered system Shortcut for this purpose.
+        // Running it via the shortcuts:// scheme uses the real system
+        // flashlight service, so iOS Control Center reflects the state
+        // and the user can take over manually with the Control Center
+        // toggle. AVCaptureDevice (tier 2) cannot do that — the LED lights
+        // up but the system thinks it's still off.
+        let purpose = on ? "torch_on" : "torch_off"
+        if let registered = GigiShortcutRegistry.shared.find(byPurpose: purpose) {
+            let encoded = registered.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? registered.name
+            if let url = URL(string: "shortcuts://x-callback-url/run-shortcut?name=\(encoded)") {
+                Task { @MainActor in
+                    await UIApplication.shared.open(url)
+                    GigiShortcutRegistry.shared.recordUse(name: registered.name)
+                }
+                return on ? "Flashlight on." : "Flashlight off."
+            }
+        }
+
+        // Tier 2 — direct AVCaptureDevice. Works but Control Center stays
+        // desynced (iOS sandbox limit — SpringBoard owns the system torch
+        // state; third-party apps can only grab the LED via the camera
+        // subsystem). User can fix it once with: 'build me a torch
+        // shortcut' (registers the result for tier 1 next time).
         let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
         if authStatus == .denied || authStatus == .restricted {
             return "Camera access is needed for the flashlight. Enable it in Settings → Privacy → Camera."
@@ -638,7 +661,10 @@ class GigiActionBridge {
             try device.lockForConfiguration()
             device.torchMode = on ? .on : .off
             device.unlockForConfiguration()
-            return on ? "Flashlight on." : "Flashlight off."
+            let tip = on
+                ? " (Control Center won't reflect — say 'build me a torch shortcut' once to fix that permanently.)"
+                : ""
+            return on ? "Flashlight on.\(tip)" : "Flashlight off."
         } catch {
             return "Couldn't change the flashlight: \(error.localizedDescription)"
         }
