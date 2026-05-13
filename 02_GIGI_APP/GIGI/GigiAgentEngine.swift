@@ -92,12 +92,20 @@ final class GigiAgentEngine {
         }
         #endif
 
-        // === Gate 1: deterministic NLU fast-path ===
-        // 24 intent whitelist on-device (timer, call, message, navigate, etc.).
-        // Confidence ≥0.95 → direct dispatch via GigiActionDispatcher.
-        // Kept BEFORE the router to skip the Apple FM round-trip (~1-3s)
-        // for obvious intents — saves latency on "what time is it", etc.
-        if let fastPath = await deterministicFastPath(for: text) {
+        // === Gate 0.5: build_shortcut intent escape hatch ===
+        //
+        // The NLU fast-path matches "flashlight on" / "torch on" as
+        // SUBSTRINGS. So "Build me a shortcut that turns the flashlight on,
+        // waits 5 seconds, then turn it off" gets misclassified as
+        // torch_on (confidence 0.99) and dispatched to bridge BEFORE the
+        // proper router can detect the build_shortcut intent.
+        //
+        // Cheap escape: if the prompt contains an explicit build-shortcut
+        // verb + the word "shortcut", skip the fast-path and go straight
+        // to route() which has the canonical regex + composeShortcut.
+        if Self.looksLikeBuildShortcut(text) {
+            GigiDebugLogger.log("GIGI Agent: bypass fast-path — text looks like build_shortcut")
+        } else if let fastPath = await deterministicFastPath(for: text) {
             return fastPath
         }
 
@@ -143,6 +151,22 @@ final class GigiAgentEngine {
 
 
     // MARK: - Deterministic NLU fast-path
+
+    /// Cheap pre-flight check: does the user message look like an explicit
+    /// "build/create/make a shortcut that …" request? If yes, the fast-path
+    /// must be skipped because the inner description ("turns the flashlight
+    /// on", "set a 5 min timer", …) would otherwise be mis-fired as a
+    /// concrete tool by the NLU substring rules.
+    ///
+    /// Mirrors GigiRequestRouter.detectBuildShortcutPattern (same verb set)
+    /// but only returns a boolean — the router still runs the canonical
+    /// extraction afterward.
+    static func looksLikeBuildShortcut(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return false }
+        let pattern = #"^(?:build|make|create|compose|design|generate|costruisci|crea|fammi|componi|genera)\s+(?:\w+\s+){0,2}(?:short ?cut|scorciatoia)s?\b"#
+        return t.range(of: pattern, options: .regularExpression) != nil
+    }
 
     private func deterministicFastPath(for text: String) async -> AgentResult? {
         let intent = GigiNLUEngine.shared.classify(text)
