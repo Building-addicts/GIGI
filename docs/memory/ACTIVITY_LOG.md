@@ -448,3 +448,4 @@
 - `2026-05-13T18:54:14+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): force HTTPS public URL + correct Shortcuts MIME)
 - `2026-05-13T19:02:15+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(phase-2): force )
 - `2026-05-13T19:05:59+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
+- `2026-05-13T19:15:46+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): async start+poll for compose-shortcut (kill idle-TCP -1005))
