@@ -426,3 +426,4 @@
 - `2026-05-13T02:01:10+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-13T02:02:35+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-13T02:05:38+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-c): math tier-0 catches 'time' typo + 'multiplied by')
+- `2026-05-13T02:09:27+0200` · local · session ended on `armando-rework` (last commit: fix(nlu): set_alarm slot extraction — 'for X', 'X am/pm' patterns)
