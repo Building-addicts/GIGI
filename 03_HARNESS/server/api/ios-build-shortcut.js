@@ -96,6 +96,7 @@ function runCommand(cmd, args, timeoutMs = 30000) {
   // On Windows, redirect ssh/scp to System32 OpenSSH to avoid MSYS path
   // mangling. No-op on macOS/Linux.
   const exe = (cmd === 'ssh' || cmd === 'scp') ? resolveSshBinary(cmd) : cmd;
+  logger.info(`[debug] spawn exe=${exe} args=${JSON.stringify(args)}`);
   return new Promise((resolve, reject) => {
     const child = spawn(exe, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     const out = [];
