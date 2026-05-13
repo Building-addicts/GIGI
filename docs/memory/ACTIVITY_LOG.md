@@ -430,3 +430,4 @@
 - `2026-05-13T02:10:41+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(nlu): set_alarm )
 - `2026-05-13T02:14:50+0200` · local · session ended on `armando-rework` (last commit: fix(alarm): honest about iOS sandbox + tier 1/2 Shortcut bridge)
 - `2026-05-13T02:31:04+0200` · local · session ended on `armando-rework` (last commit: docs(phase-2): ADR-0014 + setup runbook for AI Shortcut authoring)
+- `2026-05-13T12:33:11+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: docs(phase-2): ADR-0)
