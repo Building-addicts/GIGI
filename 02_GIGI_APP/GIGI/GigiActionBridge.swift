@@ -1767,7 +1767,7 @@ class GigiActionBridge {
             let (tmpURL, response) = try await URLSession.shared.download(from: remoteURL)
             if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
                 GigiDebugLogger.log("presentShortcutFile: HTTP \(http.statusCode) — falling back to UIApplication.open")
-                UIApplication.shared.open(remoteURL)
+                await UIApplication.shared.open(remoteURL)
                 return
             }
             // Move to a stable URL with .shortcut extension; iOS share sheet
@@ -1791,7 +1791,7 @@ class GigiActionBridge {
                   let rootVC = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
             else {
                 GigiDebugLogger.log("presentShortcutFile: no active scene — opening remote URL as fallback")
-                UIApplication.shared.open(remoteURL)
+                await UIApplication.shared.open(remoteURL)
                 return
             }
             // Walk to topmost presented controller.
@@ -1807,7 +1807,7 @@ class GigiActionBridge {
             top.present(activity, animated: true)
         } catch {
             GigiDebugLogger.log("presentShortcutFile error: \(error.localizedDescription) — falling back to UIApplication.open")
-            UIApplication.shared.open(remoteURL)
+            await UIApplication.shared.open(remoteURL)
         }
     }
 
