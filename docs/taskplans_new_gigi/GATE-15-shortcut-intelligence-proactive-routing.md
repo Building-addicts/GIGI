@@ -1,7 +1,7 @@
 # GATE 15 — Smart Action Loop (Plan / Confirm / Build / Learn)
 
-> **Status**: 📋 PLANNED (refactored 2026-05-13)
-> **Effort stimato**: ~6-8h (era 4-6h; +2h per split endpoints + card UI)
+> **Status**: 🚧 IN PROGRESS — Step 0 (split endpoint + card UI + bridge async + state machine) ✅ + Step 4 (Learn Phase auto-register + toast) ✅ shipped 2026-05-13 (commit `9277001`, IPA `GIGI-gate15-learn-timing-9277001.ipa`). Steps 0.5 / 0.6 / 1 / 1D PLANNED.
+> **Effort stimato**: ~7-9h (era 6-8h; +1h per Step 0.5 voice/chat consent + Step 0.6 one-tap share sheet)
 > **Bloccanti pre-gate**: Phase 2 ADR-0014 AI Shortcut Authoring Pipeline IMPLEMENTED e funzionante end-to-end (loop chiuso 2026-05-13 commit `8a4f1eb` — torch tier1 via registered Shortcut → Control Center synced). `composeShortcut` produce 22KB AEA1 firmato, share sheet, install confermato sul device.
 > **Sblocca**: GIGI passa da "AI builder dumb" a "AI builder con consenso esplicito + auto-recognition". Ogni richiesta utente attraversa un **decision tree a 5 step** (Execute Try → Plan → Build → Learn → Recognize). Prepara GATE 14 (Macro Engine) con un pattern già validato (alias + routing dinamico + user consent UX).
 > **Funzione consegnata (1 frase)**: utente dice *"build a shortcut to flash the torch 10 seconds"* → GIGI mostra una **proposal card** in chat con summary + actions → utente tappa "Build Shortcut" → install + auto-register → la prossima volta che dice *"torch on"* GIGI invoca direttamente lo Shortcut via Tier 1 senza passare da `composeShortcut`.
@@ -50,7 +50,7 @@ I 4 "layer" del piano originale diventano **sotto-componenti di questo decision 
 - Vecchio Layer 3 (FM dynamic tools) → **Step 1 Layer D**
 - Vecchio Layer 4 (pattern detection) → **REMOVED da GATE 15**, spostato in **GATE 15.5 Daydream** (file separato `GATE-15.5-daydream-predictive-shortcuts.md`, post-MVP)
 
-GATE 15 ha **5 sub-gate sequenziali** (15.A → 15.E). Ognuno è shippabile in isolamento ma il GATE è COMPLETE solo quando tutti 5 sono mergeati.
+GATE 15 ha **7 sub-gate sequenziali** (15.A → 15.B → **15.B.5** → **15.B.6** → 15.C → 15.D → 15.E). Ognuno è shippabile in isolamento ma il GATE è COMPLETE solo quando tutti 7 sono mergeati. Le 2 sub-gate **15.B.5** e **15.B.6** sono **friction-reduction polish** introdotte 2026-05-13 dopo che Step 0 + Step 4 sono andati live (commit `9277001`): rispondono a feedback utente *"troppi tap manuali"*. Step 0.5 elimina il tap su "Build Shortcut" CTA (sostituito da intercept voce/chat YES/NO sul pattern `gigi.contactDisambiguation`). Step 0.6 sostituisce `UIActivityViewController` (grid generica) con `UIDocumentInteractionController.presentOpenInMenu` (filtra a sole app che possono aprire `.shortcut`, tipicamente solo Shortcuts.app → 1 tap o 0). Il tap finale "Aggiungi comando rapido" dentro Shortcuts.app resta non-negoziabile (Apple sandbox).
 
 Output concreto:
 - `03_HARNESS/server/api/ios-build-shortcut.js` MODIFY (split plan/build, plans Map con TTL 5min, ~120 righe added)
@@ -391,6 +391,215 @@ case .shortcutProposal(let plan):
 - 15.B.6 — Banner "Planning Shortcut..." during `/plan` call + "Building Shortcut..." during `/build` + polling (10min)
 
 **Riferimento**: ADR-0015 §4 "User consent UX".
+
+### Task 15.B.5 (Step 0.5 — Friction reduction) — Voice/Chat confirmation for proposal card (~45min)
+
+**Rationale**: with Step 0 shipped (commit `9277001`), the user can voice-trigger `proposeShortcut` and see the proposal card in chat — but to actually confirm the build, they must tap the card. User feedback on 2026-05-13: too many manual taps. Pattern requested mirrors the existing `gigi.contactDisambiguation` listener (GIGI intercepts YES/NO during a pending disambiguation prompt). Apple sandbox makes the final "Aggiungi comando rapido" tap inside Shortcuts.app non-negotiable, but the two taps *before* that one (Build CTA + Open in Shortcuts share-sheet pick) ARE reducible. Step 0.5 removes the first.
+
+**File modificati**:
+- `02_GIGI_APP/GIGI/GigiRequestRouter.swift` (intercept in `route()` + 2 helper functions, +30 righe)
+- `02_GIGI_APP/GIGI/ShortcutProposalCard.swift` (hint text under the buttons, +6 righe)
+
+**Pattern Swift `GigiRequestRouter.swift`** (add to TOP of `route()`, after math intercept, before build_shortcut tier-0):
+
+```swift
+// STEP 0.5 — Conversational consent for active shortcut proposal.
+// When a ShortcutProposalCard is on screen, intercept simple YES/NO
+// before the normal routing so the user can confirm by voice/chat
+// without tapping the card buttons. Same pattern as the contact
+// disambiguation listener (`gigi.contactDisambiguation`).
+if let proposal = GigiSmartOrchestrator.shared.shortcutProposal {
+    if detectAffirmative(in: text) {
+        proposal.onConfirm()
+        return .actionInvoked(speech: "Building...", tool: "shortcut_proposal_confirm")
+    }
+    if detectNegative(in: text) {
+        proposal.onCancel()
+        return .actionInvoked(speech: "Cancelled.", tool: "shortcut_proposal_cancel")
+    }
+    // Else: card stays, fall through to normal routing (user may be
+    // making a different request while the card lingers)
+}
+```
+
+**Helper functions** (private to `GigiRequestRouter.swift`):
+
+```swift
+private static let affirmativePatterns: [String] = [
+    // EN
+    "yes", "yeah", "yep", "sure", "go", "ok", "okay", "do it", "build it", "build",
+    // IT
+    "sì", "si", "vai", "fallo", "crealo", "certo", "dai"
+]
+
+private static let negativePatterns: [String] = [
+    // EN
+    "no", "nope", "cancel", "abort", "dismiss", "skip", "stop",
+    // IT
+    "annulla", "lascia stare", "non importa", "fermati"
+]
+
+private func detectAffirmative(in text: String) -> Bool {
+    let normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    // Edge case: only short utterances count as pure consent. If the
+    // user says "yes, but use 5 seconds" — that's a NEW request, not
+    // consent. Threshold: ≤4 words.
+    let wordCount = normalized.split(whereSeparator: { $0.isWhitespace }).count
+    guard wordCount > 0, wordCount <= 4 else { return false }
+    return Self.affirmativePatterns.contains { pattern in
+        // whole-word match (regex \b...\b case insensitive)
+        return normalized.range(of: "\\b\(NSRegularExpression.escapedPattern(for: pattern))\\b",
+                                 options: .regularExpression) != nil
+    }
+}
+
+private func detectNegative(in text: String) -> Bool {
+    let normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    let wordCount = normalized.split(whereSeparator: { $0.isWhitespace }).count
+    guard wordCount > 0, wordCount <= 4 else { return false }
+    return Self.negativePatterns.contains { pattern in
+        return normalized.range(of: "\\b\(NSRegularExpression.escapedPattern(for: pattern))\\b",
+                                 options: .regularExpression) != nil
+    }
+}
+```
+
+**Pattern `ShortcutProposalCard.swift`** (sub-titolo under the CTA row):
+
+```swift
+// Below the HStack with Cancel + Build buttons:
+Text("Or say \"yes\" to build, \"no\" to cancel")
+    .font(.system(size: 11))
+    .foregroundColor(.white.opacity(0.45))
+    .frame(maxWidth: .infinity, alignment: .center)
+    .padding(.top, 6)
+```
+
+**Sub-task atomici**:
+- 15.B.5.1 — Add `affirmativePatterns` + `negativePatterns` static constants + `detectAffirmative` + `detectNegative` helpers in `GigiRequestRouter.swift` (15min)
+- 15.B.5.2 — Add the Step 0.5 intercept block at the top of `route()`, after math intercept and before build_shortcut tier-0 (15min)
+- 15.B.5.3 — Add the "Or say 'yes' to build, 'no' to cancel" hint text under the CTA row in `ShortcutProposalCard.swift` (5min)
+- 15.B.5.4 — Manual test: card visible → say "yes" → build kicks off; card visible → say "no" → cancel banner; card visible → say "build me another shortcut that..." → fall-through (10min)
+
+**AC binari Step 0.5**:
+- [ ] **AC-15.S0.5.1**: Card shown, user says *"yes"* → triggers Build (banner "Building..." → share sheet flows)
+- [ ] **AC-15.S0.5.2**: Card shown, user says *"no"* → triggers Cancel (banner "Cancelled — no Shortcut built")
+- [ ] **AC-15.S0.5.3**: Card shown, user says *"vai"* (Italian) → triggers Build identically to AC-15.S0.5.1
+- [ ] **AC-15.S0.5.4**: Card shown, user says *"build me ANOTHER shortcut that ..."* (>4 words) → DOES NOT trigger confirm or cancel; falls through to normal `build_shortcut` routing
+- [ ] **AC-15.S0.5.5**: Card NOT shown, user says *"yes"* → no intercept, normal routing path taken
+- [ ] **AC-15.S0.5.6**: Hint text `"Or say "yes" to build, "no" to cancel"` is visible under the CTA buttons on the card
+
+**Test E2E pronunciabili Step 0.5**:
+- **E2E-S0.5-1**: *"build me a shortcut that turns on the torch and waits 5 seconds"* → card → *"yes"* → build starts automatically (no tap on card)
+- **E2E-S0.5-2**: same build prompt → card → *"no"* → cancel
+- **E2E-S0.5-3**: *"create a shortcut to dim screen"* → card → *"sì vai"* → build (Italian works)
+
+**Riferimento**: ADR-0015 §4 "User consent UX", pattern from `gigi.contactDisambiguation` listener.
+
+### Task 15.B.6 (Step 0.6 — Friction reduction) — One-tap share sheet via UIDocumentInteractionController (~30min)
+
+**Rationale**: `UIActivityViewController(activityItems:applicationActivities:)` (currently used by `presentShortcutFile`) shows the full system share grid (AirDrop / Comandi Rapidi / Mail / Note / Messaggi / ...). The user must scan and tap "Comandi Rapidi". Replacing with `UIDocumentInteractionController.presentOpenInMenu(from:in:animated:)` filters to ONLY apps that declare ability to OPEN a `.shortcut` file — typically just Shortcuts.app → 1 tap (or 0 taps if iOS auto-picks).
+
+**File modificati**:
+- `02_GIGI_APP/GIGI/GigiActionBridge.swift` (refactor `presentShortcutFile` + new `ShortcutDocDelegate` class, ~40 righe)
+
+**Pattern Swift `GigiActionBridge.swift`**:
+
+```swift
+@MainActor
+private static var activeDocController: UIDocumentInteractionController?
+
+@MainActor
+private func presentShortcutFile(_ destURL: URL, title: String) async -> Bool {
+    guard let top = topMostViewController() else { return false }
+
+    let docController = UIDocumentInteractionController(url: destURL)
+    docController.uti = "com.apple.shortcut"   // hint UTI for routing
+    docController.name = title
+    docController.delegate = ShortcutDocDelegate.shared
+
+    // Retain — UIDocumentInteractionController is fragile if released mid-flow
+    Self.activeDocController = docController
+
+    return await withCheckedContinuation { continuation in
+        ShortcutDocDelegate.shared.continuation = continuation
+        ShortcutDocDelegate.shared.didEngage = false
+
+        let presented = docController.presentOpenInMenu(
+            from: top.view.bounds,
+            in: top.view,
+            animated: true
+        )
+
+        if !presented {
+            // Fallback path: no app on device can open .shortcut files
+            // (Shortcuts.app missing/disabled). Fall back to legacy
+            // UIActivityViewController so the user still has a way out.
+            ShortcutDocDelegate.shared.continuation = nil
+            Task { @MainActor in
+                await self.presentShortcutFileLegacy(destURL, title: title)
+                continuation.resume(returning: true)
+            }
+        }
+    }
+}
+
+// Keep legacy implementation renamed for fallback
+@MainActor
+private func presentShortcutFileLegacy(_ destURL: URL, title: String) async {
+    // ... existing UIActivityViewController-based code, untouched ...
+}
+```
+
+**New class `ShortcutDocDelegate`** (in same file, top-level):
+
+```swift
+@MainActor
+final class ShortcutDocDelegate: NSObject, UIDocumentInteractionControllerDelegate {
+    static let shared = ShortcutDocDelegate()
+    var continuation: CheckedContinuation<Bool, Never>?
+    var didEngage: Bool = false
+
+    func documentInteractionController(_ controller: UIDocumentInteractionController,
+                                       willBeginSendingToApplication application: String?) {
+        // User picked an app (typically Shortcuts.app). We treat this as
+        // engagement — the Learn Phase will fire once the file is
+        // imported and the user taps "Add" inside Shortcuts.app.
+        didEngage = true
+    }
+
+    func documentInteractionControllerDidDismissOpenInMenu(_ controller: UIDocumentInteractionController) {
+        // Menu dismissed. didEngage tells us whether the user picked
+        // something or tapped outside.
+        continuation?.resume(returning: didEngage)
+        continuation = nil
+        didEngage = false
+        GigiActionBridge.activeDocController = nil
+    }
+}
+```
+
+**Sub-task atomici**:
+- 15.B.6.1 — Rename existing `presentShortcutFile` implementation to `presentShortcutFileLegacy` to preserve fallback (5min)
+- 15.B.6.2 — Implement new `presentShortcutFile` using `UIDocumentInteractionController.presentOpenInMenu` with continuation-based async wait (15min)
+- 15.B.6.3 — Add `ShortcutDocDelegate` class with `willBeginSendingToApplication` + `documentInteractionControllerDidDismissOpenInMenu` delegate methods (5min)
+- 15.B.6.4 — Add `activeDocController` static retain + cleanup on dismiss (3min)
+- 15.B.6.5 — Manual test: tap Build → only "Open in Shortcuts" sheet appears; tap Shortcuts → preview → Add → Learn fires; tap outside → "Dismissed" banner; if no apps available → falls back to legacy share sheet (2min)
+
+**AC binari Step 0.6**:
+- [ ] **AC-15.S0.6.1**: Tap Build → share sheet appears with ONLY "Open in Shortcuts" (or minimal list without the generic grid)
+- [ ] **AC-15.S0.6.2**: Tap "Open in Shortcuts" → Shortcuts.app preview → "Aggiungi" → Learn Phase fires (registry populated + reload semantic router + toast)
+- [ ] **AC-15.S0.6.3**: Tap outside the share sheet → dismiss → banner `"Dismissed — Shortcut not saved"`, no register, no toast
+- [ ] **AC-15.S0.6.4**: On a device where Shortcuts.app is disabled/missing (impossible to repro in normal use, but covered by code path), `presentOpenInMenu` returns `false` → automatic fall-back to `presentShortcutFileLegacy` (`UIActivityViewController`)
+- [ ] **AC-15.S0.6.5**: `activeDocController` retained as static var → no premature dealloc crash during interaction
+- [ ] **AC-15.S0.6.6**: After dismiss (engage OR cancel), `activeDocController` is set back to `nil` (no memory leak)
+
+**Test E2E pronunciabili Step 0.6**:
+- **E2E-S0.6-1**: *"build a shortcut to turn on the torch for 3 seconds"* → card → tap Build → ONLY Shortcuts.app appears in the share menu (no AirDrop / Mail / Note grid)
+- **E2E-S0.6-2**: same flow → tap Shortcuts → preview → Add → toast `"I learned 'X' — next time say <aliases>"` appears
+- **E2E-S0.6-3**: same flow → tap outside the share sheet (or swipe down) → banner `"Dismissed — Shortcut not saved"`, registry unchanged
+
+**Riferimento**: ADR-0015 §4 "User consent UX" (extend with one-tap rationale); Apple `UIDocumentInteractionController` docs.
 
 ### Task 15.C (Step 1 Layer C) — Dynamic semantic router enrichment (~30min)
 
@@ -766,6 +975,9 @@ git revert <SHA-15.A>..<SHA-15.E>
 | `02_GIGI_APP/GIGI/GigiActionBridge.swift` | MODIFY (split propose/build/cancel + Learn) | 2+3+4 | +50 |
 | `02_GIGI_APP/GIGI/ShortcutProposalCard.swift` | CREATE | 2 | ~120 |
 | `02_GIGI_APP/GIGI/ChatView.swift` | MODIFY (render `.shortcutProposal` case) | 2 | +30 |
+| `02_GIGI_APP/GIGI/GigiRequestRouter.swift` | MODIFY (Step 0.5 voice/chat consent intercept + helpers) | 0.5 | +30 |
+| `02_GIGI_APP/GIGI/ShortcutProposalCard.swift` | MODIFY (Step 0.5 hint text under CTAs) | 0.5 | +6 |
+| `02_GIGI_APP/GIGI/GigiActionBridge.swift` | MODIFY (Step 0.6 `UIDocumentInteractionController` one-tap share + `ShortcutDocDelegate` class + legacy fallback) | 0.6 | +40 |
 | `02_GIGI_APP/GIGI/GigiSemanticRouter.swift` | MODIFY (dynamicCatalog + reloadRegistry) | 1C | +60 |
 | `02_GIGI_APP/GIGI/GigiRequestRouter.swift` | MODIFY (virtual intent + dispatchRegisteredShortcut) | 1C | +30 |
 | `02_GIGI_APP/GIGI/GigiFoundationToolRegistry.swift` | MODIFY (+`FMShortcutInvokeTool` + guard) | 1D | +50 |
@@ -788,12 +1000,14 @@ git revert <SHA-15.A>..<SHA-15.E>
 
 ## 10. Note operative
 
-- **Ordine implementazione OBBLIGATORIO**: Task 15.A (backend split) → 15.B (frontend card + bridge split) → 15.C (semantic enrichment) → 15.D (Apple FM dynamic tool) → 15.E (ADR + E2E). 15.A is blocking for 15.B (frontend needs new endpoint to call). 15.C and 15.D are independent but both depend on 15.B (registry must auto-populate from Learn Phase before they have anything to enrich). 15.E is documentation + final test pass.
+- **Ordine implementazione OBBLIGATORIO**: Task 15.A (backend split) → 15.B (frontend card + bridge split) → **15.B.5 (Step 0.5 voice/chat consent)** → **15.B.6 (Step 0.6 one-tap share sheet)** → 15.C (semantic enrichment) → 15.D (Apple FM dynamic tool) → 15.E (ADR + E2E). 15.A is blocking for 15.B (frontend needs new endpoint to call). 15.B.5 and 15.B.6 are friction-reduction polish on top of 15.B and must be completed before 15.C (so user-test runs of Step 1 closure use the smooth flow). 15.C and 15.D are independent but both depend on 15.B (registry must auto-populate from Learn Phase before they have anything to enrich). 15.E is documentation + final test pass.
 
 - **Conventional Commits suggeriti**:
   ```
   feat(harness): GATE 15.A — split compose-shortcut into plan/build/job endpoints
   feat(ios): GATE 15.B — Smart Action Loop proposal card + bridge split
+  feat(ios): GATE 15.B.5 — Step 0.5 voice/chat YES/NO consent for proposal card
+  feat(ios): GATE 15.B.6 — Step 0.6 one-tap share sheet via UIDocumentInteractionController
   feat(ios): GATE 15.C — semantic router dynamicCatalog from registered shortcuts
   feat(ios): GATE 15.D — FMShortcutInvokeTool dynamic Apple FM tool
   docs(adr): GATE 15.E — accept ADR-0015 Smart Action Loop
@@ -821,6 +1035,10 @@ git revert <SHA-15.A>..<SHA-15.E>
   - `"Couldn't plan the shortcut: <err>"` (toast)
   - `"Couldn't run '<name>'."` / `"Running '<name>'."` (fallback)
   - `"I don't have a Shortcut called '<name>' registered."` (FM tool response)
+  - `"Building..."` (Step 0.5 voice-confirm speech response)
+  - `"Cancelled."` (Step 0.5 voice-cancel speech response)
+  - `"Or say \"yes\" to build, \"no\" to cancel"` (Step 0.5 hint text under CTA)
+  - `"Dismissed — Shortcut not saved"` (Step 0.6 banner on share-sheet outside-tap)
 
 - **Context budget Apple FM**: `FMShortcutInvokeTool.description` grows O(N) with registered Shortcut count. Mitigation for N > 20: emit only 10 most-recently-used (sort by `recordUse` timestamp). Document in ADR-0015 §7 "Scaling".
 
@@ -858,4 +1076,16 @@ The magic moment of GATE 15: user says X → proposal card → tap Build → ins
 
 ### Relation to GATE 15.5 (Daydream)
 
-GATE 15.5 is a separate, post-MVP plan (`GATE-15.5-daydream-predictive-shortcuts.md`). It calls the same `proposeShortcut` API but with proactive triggers (from harness watcher analyzing usage history + calendar) instead of reactive user utterance. GATE 15 must be COMPLETED + soak-tested 1 week before GATE 15.5 starts.
+GATE 15.5 is a separate, post-MVP plan (`GATE-15.5-daydream-predictive-shortcuts.md`). It calls the same `proposeShortcut` API but with proactive triggers (from harness watcher analyzing usage history + calendar) instead of reactive user utterance. GATE 15 must be COMPLETED + soak-tested 1 week before GATE 15.5 starts. **NOTE 2026-05-13**: this update (Step 0.5 + Step 0.6 added) does NOT modify GATE 15.5 — it stays out of scope.
+
+---
+
+## 11. Status update changelog
+
+- **2026-05-13 (Step 0.5 + Step 0.6 added)** — User feedback session post commit `9277001`: *"troppi tap manuali"*. Added 2 new friction-reduction sub-gate between Step 0 (committed, shipped) and Step 1 (semantic routing, planned):
+  - **Step 0.5** Voice/Chat consent for proposal card (~45min) — `GigiRequestRouter.route()` intercept on `GigiSmartOrchestrator.shared.shortcutProposal` non-nil; YES/NO whole-word regex EN+IT; ≤4 word guard against accidental match on new requests. Subtitle hint on `ShortcutProposalCard.swift`.
+  - **Step 0.6** One-tap share sheet (~30min) — Replace `UIActivityViewController` with `UIDocumentInteractionController.presentOpenInMenu(uti: "com.apple.shortcut")`. New `ShortcutDocDelegate` class. Static retain. Fallback to legacy `UIActivityViewController` if `presentOpenInMenu` returns false (Shortcuts.app missing/disabled).
+  - Effort revised: 6-8h → 7-9h (+1h)
+  - GATE 15.5 Daydream NOT modified — out of scope.
+- **2026-05-13 (Step 0 + Step 4 shipped, commit `9277001`, IPA `GIGI-gate15-learn-timing-9277001.ipa`)** — Server split (`/compose-shortcut/plan` + `/build` + `/job`) + plans Map TTL 5min ✅. iOS proposal card (`ShortcutProposalCard.swift`) renders in chat with title + summary + numbered emoji actions + Build/Cancel CTAs ✅. `GigiActionBridge` split into `proposeShortcut` / `buildShortcutFromPlan` / `cancelShortcutPlan` ✅. Async bridge state machine via `GigiSmartOrchestrator.shortcutProposal` ✅. End-to-end E2E-15.2 confirmed on device: user says *"build me a shortcut that..."* → harness Claude compose → card in chat → tap Build → cherri sign → share sheet → "Aggiungi comando rapido" in Shortcuts.app → toast *"I learned 'X' — next time say <aliases>"* + auto-register in `GigiShortcutRegistry` ✅. Steps 1 (Layer C semantic) + 1D (Apple FM dynamic tool) + 0.5 + 0.6 PLANNED.
+- **2026-05-13 (refactor)** — Original 4-layer architectural narrative refactored into 5-step user-driven decision tree (Execute Try / Plan / Build / Learn / Recognize). Endpoint split rationale + plan TTL 5min + card UX rationale documented. Old "Layer 4 pattern detection" extracted to GATE 15.5 Daydream (separate file).
