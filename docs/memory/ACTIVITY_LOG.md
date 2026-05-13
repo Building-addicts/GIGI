@@ -468,3 +468,4 @@
 - `2026-05-13T21:19:43+0200` · local · session ended on `armando-rework` (last commit: fix(gate-15): make /plan async too — unified job state machine kills -1005)
 - `2026-05-13T21:34:41+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(gate-15): make /)
 - `2026-05-13T21:42:10+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
+- `2026-05-13T21:46:31+0200` · local · session ended on `armando-rework` (last commit: fix(gate-15): fire Learn Phase AFTER share sheet dismissal)
