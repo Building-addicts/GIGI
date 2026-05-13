@@ -428,3 +428,4 @@
 - `2026-05-13T02:05:38+0200` · local · session ended on `armando-rework` (last commit: fix(gate-10-c): math tier-0 catches 'time' typo + 'multiplied by')
 - `2026-05-13T02:09:27+0200` · local · session ended on `armando-rework` (last commit: fix(nlu): set_alarm slot extraction — 'for X', 'X am/pm' patterns)
 - `2026-05-13T02:10:41+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(nlu): set_alarm )
+- `2026-05-13T02:14:50+0200` · local · session ended on `armando-rework` (last commit: fix(alarm): honest about iOS sandbox + tier 1/2 Shortcut bridge)
