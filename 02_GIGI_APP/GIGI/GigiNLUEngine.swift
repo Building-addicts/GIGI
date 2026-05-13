@@ -251,12 +251,33 @@ class GigiNLUEngine {
         if ["set an alarm", "set alarm", "wake me up", "alarm at ", "alarm for "]
             .contains(where: { text.contains($0) }) {
             var params: [String: String] = ["raw": original]
-            if let t = extractAfter("at ", from: text) {
-                let candidate = t.components(separatedBy: " ").prefix(2).joined(separator: " ")
-                if candidate.range(of: "\\d", options: .regularExpression) != nil {
-                    params["time"] = candidate
+
+            // Try 3 extraction patterns in priority order:
+            // 1. "at <time>" — canonical English ("set alarm at 7 am")
+            // 2. "for <time>" — common variant ("set alarm for 7 am")
+            // 3. Regex fallback — any HH(:MM)? AM/PM in the text
+            //
+            // Each prefix-extraction takes the next 2 words and validates
+            // they contain at least one digit. The regex fallback is the
+            // catch-all for utterances that skip the preposition.
+            var timeCandidate: String?
+            for prefix in ["at ", "for "] {
+                if let t = extractAfter(prefix, from: text) {
+                    let candidate = t.components(separatedBy: " ").prefix(2).joined(separator: " ")
+                    if candidate.range(of: "\\d", options: .regularExpression) != nil {
+                        timeCandidate = candidate
+                        break
+                    }
                 }
             }
+            if timeCandidate == nil,
+               let r = text.range(of: #"\d{1,2}(?::\d{2})?\s*(?:am|pm)?"#, options: .regularExpression) {
+                timeCandidate = String(text[r]).trimmingCharacters(in: .whitespaces)
+            }
+            if let time = timeCandidate, !time.isEmpty {
+                params["time"] = time
+            }
+
             return GigiIntent(label: "set_alarm", confidence: 0.97, params: params)
         }
 
