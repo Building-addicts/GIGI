@@ -259,6 +259,26 @@ final class GigiSemanticRouter {
             "torcia spenta"
         ],
 
+        // META — Shortcut AUTHORING via Cherri (Phase 2)
+        // Note: tier-0 regex `detectBuildShortcutPattern` is the primary path
+        // for these queries. Semantic catalog is the fallback when regex
+        // doesn't match (e.g. heavy paraphrase). Keep phrases diverse enough
+        // to outscore run_shortcut/homekit_on bias on intent verbs.
+        "build_shortcut": [
+            "build me a shortcut that turns on the torch",
+            "make a shortcut that plays music when I arrive home",
+            "create a shortcut for goodnight routine",
+            "compose a shortcut to wake me up gently",
+            "design a shortcut that mutes notifications",
+            "generate a shortcut that sets focus mode",
+            "build a new shortcut", "make a new shortcut",
+            "fammi uno shortcut che spegne tutto",
+            "crea uno shortcut per buongiorno",
+            "componi uno shortcut che attiva focus lavoro",
+            "costruisci uno shortcut nuovo",
+            "genera uno shortcut che riproduce musica"
+        ],
+
         // META — automation
         "run_shortcut": [
             "run my morning routine", "execute work mode",
@@ -428,6 +448,21 @@ final class GigiSemanticRouter {
             "translate_text": [
                 "translate ", "how do you say ", "how to say ",
                 "traduci ", "come si dice "
+            ],
+            "build_shortcut": [
+                "build me a shortcut that ", "build a shortcut that ",
+                "build me a shortcut ", "build a shortcut ",
+                "build shortcut that ", "build shortcut ",
+                "make me a shortcut that ", "make a shortcut that ",
+                "make me a shortcut ", "make a shortcut ",
+                "create me a shortcut that ", "create a shortcut that ",
+                "create me a shortcut ", "create a shortcut ",
+                "compose a shortcut that ", "design a shortcut that ",
+                "generate a shortcut that ",
+                "fammi uno shortcut che ", "crea uno shortcut che ",
+                "fammi uno shortcut ", "crea uno shortcut ",
+                "componi uno shortcut che ", "costruisci uno shortcut che ",
+                "genera uno shortcut che "
             ],
             "add_to_note": [
                 "add to my note ", "add to my notes ",

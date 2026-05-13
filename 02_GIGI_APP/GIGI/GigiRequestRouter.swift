@@ -224,20 +224,55 @@ final class GigiRequestRouter {
         //
         // ADR-0012 — Smart Router Architecture.
         if let match = GigiSemanticRouter.shared.match(text) {
-            let params = buildSemanticParams(for: match)
-            let speech = await GigiActionBridge.shared.execute(GigiIntent(
-                label: match.toolName,
-                confidence: Double(match.confidence),
-                params: params
-            ))
-            let finalSpeech = debugPrefix(
-                routerSource: "semantic",
-                tool: match.toolName,
-                confidence: match.confidence,
-                slot: match.slot
-            ) + speech
-            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-            return .actionInvoked(speech: finalSpeech, tool: match.toolName)
+
+            // Special case Phase 2: build_shortcut requires Apple FM
+            // @Generable extraction of (title, actionsJSON) — the bridge
+            // can't accept empty actionsJSON. Redirect semantic match to
+            // the same Apple FM focused-tool flow as tier-0 regex.
+            if match.toolName == "build_shortcut" {
+                GigiDebugLogger.log("GIGI Router: semantic build_shortcut → redirect to Apple FM focused")
+                #if canImport(FoundationModels)
+                if #available(iOS 26.0, *) {
+                    if let tool = GigiFoundationToolRegistry.tool(for: "build_shortcut") {
+                        do {
+                            let result = try await GigiFoundationSession.shared.respondWithTools(
+                                text: match.slot.isEmpty ? text : match.slot,
+                                tools: [tool],
+                                history: history
+                            )
+                            let speech = result.directSpeech?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            let final = speech.isEmpty ? "I'm building that Shortcut for you." : speech
+                            let withPrefix = debugPrefix(
+                                routerSource: "semantic+appleFM",
+                                tool: "build_shortcut",
+                                confidence: match.confidence,
+                                slot: match.slot
+                            ) + final
+                            GigiConversationMemory.shared.addModelSpeech(withPrefix)
+                            return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
+                        } catch {
+                            GigiDebugLogger.log("GIGI Router: semantic build_shortcut Apple FM failed (\(error.localizedDescription))")
+                            // Fall through to general dispatch
+                        }
+                    }
+                }
+                #endif
+            } else {
+                let params = buildSemanticParams(for: match)
+                let speech = await GigiActionBridge.shared.execute(GigiIntent(
+                    label: match.toolName,
+                    confidence: Double(match.confidence),
+                    params: params
+                ))
+                let finalSpeech = debugPrefix(
+                    routerSource: "semantic",
+                    tool: match.toolName,
+                    confidence: match.confidence,
+                    slot: match.slot
+                ) + speech
+                GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+                return .actionInvoked(speech: finalSpeech, tool: match.toolName)
+            }
         }
 
         // Mode gating (GATE 7) — read the selected operating mode and use
@@ -1058,6 +1093,18 @@ final class GigiRequestRouter {
             // slot as content) when no separator present.
             let (title, content) = parseAddToNoteSlot(slot)
             return ["noteTitle": title, "content": content, "raw": slot]
+        case "build_shortcut":
+            // Semantic-path fallback. The proper path is tier-0
+            // detectBuildShortcutPattern which delegates to Apple FM with
+            // FMBuildShortcutTool for structured Arguments extraction.
+            // If we end up here it means the regex didn't match but the
+            // semantic centroid did. Best-effort: pass the slot as the
+            // description and an empty actionsJSON; the bridge will return
+            // a parse error and the user will rephrase. (Apple FM via
+            // tool dispatch is preferred but unreachable from this code
+            // path — buildSemanticParams is called for direct bridge
+            // execution, not for Apple FM tool calling.)
+            return ["title": "GIGI Shortcut", "actionsJSON": "[]", "raw": slot]
         default:
             return ["raw": slot]
         }
@@ -1228,35 +1275,29 @@ final class GigiRequestRouter {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !t.isEmpty else { return nil }
 
-        let prefixes: [String] = [
-            // English
-            "build me a shortcut that ", "build me a shortcut ",
-            "build a shortcut that ", "build a shortcut ",
-            "make me a shortcut that ", "make me a shortcut ",
-            "make a shortcut that ", "make a shortcut ",
-            "create me a shortcut that ", "create me a shortcut ",
-            "create a shortcut that ", "create a shortcut ",
-            "compose me a shortcut that ", "compose a shortcut that ",
-            "design me a shortcut that ", "design a shortcut that ",
-            "generate me a shortcut that ", "generate a shortcut that ",
-            // Italian
-            "fammi uno shortcut che ", "fammi una shortcut che ",
-            "fammi uno shortcut ", "fammi una shortcut ",
-            "crea uno shortcut che ", "crea una shortcut che ",
-            "crea uno shortcut ", "crea una shortcut ",
-            "componi uno shortcut che ", "componi una shortcut che ",
-            "genera uno shortcut che ", "genera una shortcut che ",
-            "costruisci uno shortcut che ", "costruisci una shortcut che "
-        ]
+        // PERMISSIVE regex: <build-verb> [optional 1-2 filler words like
+        // 'me/a/the/one' or autocorrect typos] 'shortcut' [optional 'that'/
+        // 'which'/etc] <description>. Catches:
+        //   build me a shortcut that X    ← canonical
+        //   build a shortcut that X       ← skip 'me'
+        //   build be a shortcut X         ← autocorrect typo 'me' → 'be'
+        //   build the shortcut X          ← article variant
+        //   build shortcut X              ← no article
+        //   make/create/design/compose/generate/costruisci/fammi/crea/...
+        //
+        // Group 2 captures the description (rest of the utterance).
+        let pattern = #"^(?:build|make|create|compose|design|generate|costruisci|crea|fammi|componi|genera)\s+(?:\w+\s+){0,2}(?:short ?cut|scorciatoia)s?\s+(?:that\s+|which\s+|to\s+|for\s+|per\s+|che\s+)?(.+)$"#
 
-        for prefix in prefixes {
-            if t.hasPrefix(prefix) {
-                let desc = String(t.dropFirst(prefix.count))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                return desc.isEmpty ? nil : desc
-            }
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
         }
-        return nil
+        let nsRange = NSRange(t.startIndex..<t.endIndex, in: t)
+        guard let match = regex.firstMatch(in: t, options: [], range: nsRange),
+              let descRange = Range(match.range(at: 1), in: t) else {
+            return nil
+        }
+        let desc = String(t[descRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return desc.isEmpty ? nil : desc
     }
 
     // MARK: - Tier-0 regex intercepts (HYBRID with GigiSemanticRouter — GATE 15 fix)
