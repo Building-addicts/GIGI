@@ -445,3 +445,4 @@
 - `2026-05-13T18:12:02+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session ) _(modified: 03_HARNESS/server/api/ios-build-shortcut.js)_
 - `2026-05-13T18:26:35+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session ) _(modified: 03_HARNESS/server/api/ios-build-shortcut.js)_
 - `2026-05-13T18:40:57+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): correct cherri vocab + public file download + shortcuts:// scheme)
+- `2026-05-13T18:54:14+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): force HTTPS public URL + correct Shortcuts MIME)
