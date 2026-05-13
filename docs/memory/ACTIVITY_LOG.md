@@ -432,3 +432,4 @@
 - `2026-05-13T02:31:04+0200` · local · session ended on `armando-rework` (last commit: docs(phase-2): ADR-0014 + setup runbook for AI Shortcut authoring)
 - `2026-05-13T12:33:11+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: docs(phase-2): ADR-0)
 - `2026-05-13T15:02:27+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): tier-0 regex for 'build me a shortcut' — Apple FM biased to home)
+- `2026-05-13T15:14:27+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): permissive build_shortcut regex + semantic fallback)
