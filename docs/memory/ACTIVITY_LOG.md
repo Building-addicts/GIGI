@@ -454,3 +454,4 @@
 - `2026-05-13T19:42:09+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): await UIApplication.open in fallback paths)
 - `2026-05-13T19:48:16+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): bypass NLU fast-path for build_shortcut intent)
 - `2026-05-13T19:49:20+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(phase-2): bypass)
+- `2026-05-13T19:51:52+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): torch tier1 via registered Shortcut → Control Center synced)
