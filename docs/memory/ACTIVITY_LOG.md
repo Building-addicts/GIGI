@@ -434,3 +434,4 @@
 - `2026-05-13T15:02:27+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): tier-0 regex for 'build me a shortcut' — Apple FM biased to home)
 - `2026-05-13T15:14:27+0200` · local · session ended on `armando-rework` (last commit: fix(phase-2): permissive build_shortcut regex + semantic fallback)
 - `2026-05-13T15:50:22+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(phase-2): permis) _(modified: 02_GIGI_APP/GIGI/GigiRequestRouter.swift)_
+- `2026-05-13T16:05:20+0200` · local · session ended on `armando-rework` (last commit: feat(phase-2): Claude composer for AI Shortcuts (bypass Apple FM))
