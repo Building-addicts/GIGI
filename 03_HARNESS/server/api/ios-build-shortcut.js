@@ -432,7 +432,7 @@ function translateActionsToCherri(title, actions) {
 // Claude is dramatically more reliable than Apple FM on-device for this
 // structured composition task (ADR-0014 follow-up).
 
-const COMPOSER_SYSTEM_PROMPT = `You are GIGI's Shortcut composer. The user wants to build an iOS Shortcut from a natural-language request. Your ONLY job: output a single JSON object describing the title and the sequence of actions to perform.
+const COMPOSER_SYSTEM_PROMPT = `You are GIGI's Shortcut composer. The user wants to build an iOS Shortcut from a natural-language request. Your job: output a single JSON object describing the shortcut.
 
 Available actions (use EXACTLY these names, no others):
 - showResult { text }                — show a message on screen
@@ -456,27 +456,78 @@ Available actions (use EXACTLY these names, no others):
                                         "com.google.chrome.ios",
                                         "com.instagram.app")
 
+Output schema (ALL fields required):
+{
+  "title": "<short title 3-5 words, suitable as iOS Shortcut name>",
+  "summary": "<one short English sentence describing what the shortcut does, no more than 20 words>",
+  "actions": [ {"action": "<name>", "params": {...}}, ... ],
+  "aliases": [ "<5-10 short user phrases EN+IT that should trigger this shortcut>" ],
+  "systemPurpose": "<lowercase_snake_case identifier capturing the canonical intent (e.g. torch_on, torch_off, dim_screen, play_pause_music, open_spotify_skip, good_night). Pick the closest existing GIGI intent if applicable; otherwise coin a new one.>"
+}
+
 Rules:
 1. Output ONLY a JSON object. No prose, no markdown, no code fences. Just JSON.
-2. Schema: {"title": "<short title 3-5 words>", "actions": [{"action": "<name>", "params": {...}}, ...]}
-3. Use only the action names above. If the user asks for something outside the vocabulary (HomeKit scenes, Focus modes, calling, messaging, etc.), do your best to approximate; if impossible, return an empty actions array.
-4. Keep it minimal: 1-6 actions usually. Don't over-engineer.
-5. Title should describe the shortcut succinctly, suitable as an iOS Shortcut name.
+2. summary: PLAIN ENGLISH ONLY. Used directly in the iOS proposal card. Avoid technical jargon.
+3. actions: 1-6 entries, from the vocabulary above. If the request needs an action outside the vocabulary, do your best to approximate; if truly impossible, return "actions": [].
+4. aliases: 5-10 phrases. Mix English (primary) and Italian (secondary). Each alias 1-4 words. No duplicates. Match what a user would naturally say to trigger this shortcut. NEVER include the literal word "build" / "create" / "make" / "shortcut" in the aliases — those are reserved for the build flow itself.
+5. systemPurpose: canonical lowercase_snake_case identifier. If multiple shortcuts would naturally share it (e.g. two different torch-on shortcuts), still use the same purpose — the runtime registry handles dedup.
 6. For openApp, ALWAYS use the bundle ID, not the friendly name.
 
 Examples:
 
 User: build me a shortcut that turns on the torch, waits 5 seconds, turns it off
-Output: {"title":"Quick Torch","actions":[{"action":"torchOn","params":{}},{"action":"waitSeconds","params":{"seconds":"5"}},{"action":"torchOff","params":{}}]}
+Output:
+{
+  "title": "Quick Torch",
+  "summary": "Turns the flashlight on for 5 seconds then off.",
+  "actions": [
+    {"action":"torchOn","params":{}},
+    {"action":"waitSeconds","params":{"seconds":"5"}},
+    {"action":"torchOff","params":{}}
+  ],
+  "aliases": ["torch on", "flashlight", "quick torch", "light on", "torcia", "accendi torcia", "flash on"],
+  "systemPurpose": "torch_on"
+}
 
 User: make a shortcut that plays music and shows a notification saying "enjoy"
-Output: {"title":"Play & Notify","actions":[{"action":"playMusic","params":{}},{"action":"showNotification","params":{"text":"enjoy"}}]}
+Output:
+{
+  "title": "Play & Notify",
+  "summary": "Resumes music playback and shows an 'enjoy' notification.",
+  "actions": [
+    {"action":"playMusic","params":{}},
+    {"action":"showNotification","params":{"text":"enjoy"}}
+  ],
+  "aliases": ["play music notify", "enjoy music", "start music notify", "musica e notifica"],
+  "systemPurpose": "play_music_notify"
+}
 
 User: shortcut to open spotify and skip to next track
-Output: {"title":"Spotify Next","actions":[{"action":"openApp","params":{"appID":"com.spotify.client"}},{"action":"waitSeconds","params":{"seconds":"2"}},{"action":"skipForward","params":{}}]}
+Output:
+{
+  "title": "Spotify Next",
+  "summary": "Opens Spotify and skips to the next track.",
+  "actions": [
+    {"action":"openApp","params":{"appID":"com.spotify.client"}},
+    {"action":"waitSeconds","params":{"seconds":"2"}},
+    {"action":"skipForward","params":{}}
+  ],
+  "aliases": ["spotify next", "skip on spotify", "next track spotify", "salta canzone spotify"],
+  "systemPurpose": "spotify_next"
+}
 
 User: a shortcut that dims the screen to 30% and tells me good night
-Output: {"title":"Good Night","actions":[{"action":"setBrightness","params":{"brightness":"0.3"}},{"action":"speakText","params":{"text":"Good night, sleep well"}}]}
+Output:
+{
+  "title": "Good Night",
+  "summary": "Dims the screen to 30% and speaks a 'good night' greeting.",
+  "actions": [
+    {"action":"setBrightness","params":{"brightness":"0.3"}},
+    {"action":"speakText","params":{"text":"Good night, sleep well"}}
+  ],
+  "aliases": ["good night", "dim and goodnight", "buona notte", "abbassa luminosità notte"],
+  "systemPurpose": "good_night"
+}
 
 OUTPUT JSON ONLY.`;
 
@@ -540,23 +591,60 @@ async function composeWithClaude(cfg, rawText) {
   const title = String(obj.title || 'GIGI Shortcut').slice(0, 80);
   const actions = Array.isArray(obj.actions) ? obj.actions : [];
   if (actions.length === 0) throw new Error('Claude produced no actions.');
-  return { title, actions };
+  // GATE 15 Step 4 metadata — used by iOS to render the proposal card and
+  // to auto-register the installed shortcut in GigiShortcutRegistry.
+  const summary = String(obj.summary || '').trim().slice(0, 240);
+  const aliasesRaw = Array.isArray(obj.aliases) ? obj.aliases : [];
+  const aliases = aliasesRaw
+    .map((a) => String(a || '').trim())
+    .filter((a) => a.length > 0 && a.length <= 40)
+    .slice(0, 12);
+  const systemPurpose = String(obj.systemPurpose || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+  return { title, summary, actions, aliases, systemPurpose };
 }
 
-// MARK: - Job pool (compose-shortcut/start + poll)
+// MARK: - Plan + Job pools (GATE 15 Smart Action Loop)
 //
-// Why: cellular NAT + Cloudflare quick tunnels close idle TCP connections
-// before our 15-25s server processing completes. iOS sees -1005 even though
-// the harness finished successfully (compile + sign produced 21KB AEA1).
-// Splitting into start+poll keeps every HTTP call short (<2s), avoiding
-// any intermediate idle-timeout. Same pattern used by every long-running
-// cloud API (Vercel build, OpenAI fine-tune, Stripe webhook retry, etc.).
+// Why two pools:
+//   - plans: holds Claude-composed proposals (Step 2). Cheap to recompute,
+//     5-min TTL is generous. iOS shows them as proposal cards; if the user
+//     never confirms, the plan evaporates with no cost on the Mac signer.
+//   - jobs: holds sign+host operations (Step 3). Triggered only after the
+//     user taps "Build Shortcut" on a card. 10-min TTL covers the polling
+//     window between sign completion and iOS download.
 //
-// Job lifecycle: pending → done | error. Auto-pruned after 10 min so the
-// map doesn't grow unbounded.
+// Why TWO endpoints (plan + build) instead of one (start):
+//   - PR review: iOS shows the user the proposed title/summary/actions
+//     BEFORE we burn cherri+HubSign cycles on the Mac.
+//   - Latency: plan is ~3-5s, build is ~5-15s. Splitting lets iOS render
+//     the proposal card immediately and only spend the long tail on
+//     user confirm.
+//   - Cancellation: if the user cancels mid-plan, no Mac-side work happened.
+//
+// Why short HTTP calls everywhere:
+//   - cellular NAT + Cloudflare quick tunnels close idle TCP connections
+//     before our long server processing completes. Every endpoint here
+//     returns in <2s; clients poll /job/<id> for the long-running parts.
+//   - iOS sees -1005 (NSURLErrorNetworkConnectionLost) if any single call
+//     idles too long. Plan/Build/Job split is immune.
+
+const plans = new Map();
+const PLAN_TTL_MS = 5 * 60 * 1000;
 
 const jobs = new Map();
 const JOB_TTL_MS = 10 * 60 * 1000;
+
+function prunePlans() {
+  const now = Date.now();
+  for (const [id, p] of plans.entries()) {
+    if (p.expiresAt < now) plans.delete(id);
+  }
+}
 
 function pruneJobs() {
   const now = Date.now();
@@ -566,11 +654,56 @@ function pruneJobs() {
 }
 
 /**
- * Background runner — exact same pipeline as the old synchronous
- * handleComposeShortcut, but writes its result into the job map instead
- * of an HTTP response.
+ * Background runner — picks up a stored plan, compiles its DSL on the Mac,
+ * and writes the result back into the job map. Pulls aliases + purpose +
+ * summary from the stored plan so the /job/<id> response can carry the
+ * full Learn Phase metadata to iOS.
  */
-async function runComposeJob(jobId, ctx, req, rawText, overrideTitle) {
+async function runComposeJobFromPlan(jobId, ctx, req, planId) {
+  const job = jobs.get(jobId);
+  const plan = plans.get(planId);
+  if (!job) return;
+  if (!plan) {
+    job.status = 'error';
+    job.error = 'Plan expired or not found.';
+    return;
+  }
+  try {
+    job.status = 'signing';
+    const dsl = translateActionsToCherri(plan.title, plan.actions);
+    if (!dsl) {
+      job.status = 'error';
+      job.error = 'One of the generated actions is outside the Cherri vocabulary. Try rephrasing.';
+      return;
+    }
+    logger.info(`build ${jobId} — using plan ${planId} (${plan.actions.length} actions, DSL ${dsl.length} bytes)`);
+    const compiled = await compileAndSignOnMac(jobId, dsl);
+    hostedFiles.set(jobId, {
+      filePath: compiled.path,
+      title: plan.title,
+      expiresAt: Date.now() + FILE_TTL_MS,
+    });
+    job.status = 'done';
+    job.title = plan.title;
+    job.summary = plan.summary;
+    job.aliases = plan.aliases;
+    job.systemPurpose = plan.systemPurpose;
+    job.url = buildPublicShortcutURL(ctx, req, jobId);
+    job.actionsCount = plan.actions.length;
+    // One-shot plan: consume it so the same planId can't be rebuilt twice.
+    plans.delete(planId);
+  } catch (e) {
+    logger.error(`job ${jobId} failed: ${e.message}`);
+    job.status = 'error';
+    job.error = e.message;
+  }
+}
+
+/**
+ * LEGACY runner — supports the old POST /start path. Composes + builds
+ * inline so existing IPAs (pre-GATE-15) keep working without re-pairing.
+ */
+async function runComposeJobLegacy(jobId, ctx, req, rawText, overrideTitle) {
   const job = jobs.get(jobId);
   if (!job) return;
   try {
@@ -584,7 +717,7 @@ async function runComposeJob(jobId, ctx, req, rawText, overrideTitle) {
       job.error = 'One of the generated actions is outside the Cherri vocabulary. Try rephrasing.';
       return;
     }
-    logger.info(`composed ${jobId} — ${composed.actions.length} actions, DSL ${dsl.length} bytes`);
+    logger.info(`legacy composed ${jobId} — ${composed.actions.length} actions, DSL ${dsl.length} bytes`);
 
     job.status = 'signing';
     const compiled = await compileAndSignOnMac(jobId, dsl);
@@ -596,6 +729,9 @@ async function runComposeJob(jobId, ctx, req, rawText, overrideTitle) {
 
     job.status = 'done';
     job.title = title;
+    job.summary = composed.summary;
+    job.aliases = composed.aliases;
+    job.systemPurpose = composed.systemPurpose;
     job.url = buildPublicShortcutURL(ctx, req, jobId);
     job.actionsCount = composed.actions.length;
   } catch (e) {
@@ -605,26 +741,174 @@ async function runComposeJob(jobId, ctx, req, rawText, overrideTitle) {
   }
 }
 
-// MARK: - Endpoint handlers
+// MARK: - Endpoint handlers (GATE 15 Smart Action Loop)
 
-/**
- * POST /api/ios/compose-shortcut/start
- *   Body: { rawText: String, title?: String }
- *   Response 202: { ok: true, jobId }
- *
- * Returns immediately with a job id. Client polls /job/<id> for result.
- */
-export async function handleComposeShortcutStart(req, res, ctx) {
+async function readJsonBody(req, res, maxLen = 4096) {
   let raw = '';
-  for await (const chunk of req) raw += chunk;
-
-  let payload;
-  try { payload = JSON.parse(raw); }
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > maxLen * 2) break;  // bail on absurd payloads
+  }
+  try { return JSON.parse(raw); }
   catch {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }));
+    return null;
+  }
+}
+
+/**
+ * POST /api/ios/compose-shortcut/plan          (GATE 15 Step 2 — Plan Phase)
+ *   Body: { rawText: String }
+ *   Response 200: { ok, planId, title, summary, actions, aliases, systemPurpose }
+ *
+ * Runs the Claude composer SYNCHRONOUSLY (3-5s on average — well within
+ * the cellular/CDN idle-timeout window). Stores the result in the plans
+ * pool with a 5-min TTL. iOS renders the response as a proposal card.
+ *
+ * No Mac signing here — that happens only if the user taps "Build Shortcut"
+ * on the card, which fires POST /build with the planId.
+ */
+export async function handleComposeShortcutPlan(req, res, ctx) {
+  const payload = await readJsonBody(req, res);
+  if (!payload) return;
+
+  const rawText = String(payload.rawText || '').trim();
+  if (!rawText) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Missing rawText' }));
     return;
   }
+  if (rawText.length > 2000) {
+    res.writeHead(413, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'rawText too large (max 2 KB)' }));
+    return;
+  }
+
+  prunePlans();
+  let composed;
+  try {
+    composed = await composeWithClaude(ctx.cfg, rawText);
+  } catch (e) {
+    logger.error(`plan failed: ${e.message}`);
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: `Planner failed: ${e.message}` }));
+    return;
+  }
+
+  // Validate that the actions can actually be translated to Cherri DSL
+  // BEFORE giving the user a confirm button — if vocabulary is missing
+  // we want to surface it now, not after they tap Build.
+  const probeDsl = translateActionsToCherri(composed.title, composed.actions);
+  if (!probeDsl) {
+    res.writeHead(422, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: false,
+      error: 'I can sketch this but one of the actions is outside my vocabulary. Try rephrasing.',
+    }));
+    return;
+  }
+
+  const planId = crypto.randomBytes(8).toString('hex');
+  plans.set(planId, {
+    id: planId,
+    title: composed.title,
+    summary: composed.summary,
+    actions: composed.actions,
+    aliases: composed.aliases,
+    systemPurpose: composed.systemPurpose,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + PLAN_TTL_MS,
+  });
+  logger.info(`plan ${planId} — title="${composed.title}" actions=${composed.actions.length} purpose=${composed.systemPurpose}`);
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    ok: true,
+    planId,
+    title: composed.title,
+    summary: composed.summary,
+    actions: composed.actions,
+    aliases: composed.aliases,
+    systemPurpose: composed.systemPurpose,
+    expiresAt: plans.get(planId).expiresAt,
+  }));
+}
+
+/**
+ * POST /api/ios/compose-shortcut/build         (GATE 15 Step 3 — Build Phase)
+ *   Body: { planId: String }
+ *   Response 202: { ok, jobId }
+ *
+ * Triggered by iOS when the user taps "Build Shortcut" on the proposal
+ * card. Spawns the cherri compile + Mac sign pipeline in the background;
+ * client polls /job/<id> for completion.
+ *
+ * The plan is consumed (deleted) on success — a single planId can't be
+ * rebuilt twice. To regenerate, call /plan again.
+ */
+export async function handleComposeShortcutBuild(req, res, ctx) {
+  const payload = await readJsonBody(req, res);
+  if (!payload) return;
+
+  const planId = String(payload.planId || '').trim();
+  if (!/^[a-f0-9]{8,64}$/.test(planId)) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Missing or malformed planId' }));
+    return;
+  }
+  prunePlans();
+  const plan = plans.get(planId);
+  if (!plan) {
+    res.writeHead(410, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Plan expired. Ask me again to start over.' }));
+    return;
+  }
+
+  pruneJobs();
+  const jobId = crypto.randomBytes(8).toString('hex');
+  jobs.set(jobId, {
+    id: jobId,
+    status: 'pending',
+    expiresAt: Date.now() + JOB_TTL_MS,
+  });
+  runComposeJobFromPlan(jobId, ctx, req, planId).catch(() => {});
+
+  res.writeHead(202, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true, jobId }));
+}
+
+/**
+ * POST /api/ios/compose-shortcut/cancel
+ *   Body: { planId: String }
+ *   Response 200: { ok: true }
+ *
+ * Optional housekeeping — lets iOS evict a plan immediately when the user
+ * taps Cancel on the proposal card, instead of waiting for the 5-min TTL.
+ */
+export async function handleComposeShortcutCancel(req, res, _ctx) {
+  const payload = await readJsonBody(req, res);
+  if (!payload) return;
+  const planId = String(payload.planId || '').trim();
+  if (planId && plans.has(planId)) {
+    plans.delete(planId);
+    logger.info(`plan ${planId} cancelled by client`);
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true }));
+}
+
+/**
+ * POST /api/ios/compose-shortcut/start         (LEGACY — pre-GATE-15 IPAs)
+ *   Body: { rawText: String, title?: String }
+ *   Response 202: { ok: true, jobId }
+ *
+ * Composes + builds inline (no proposal card). Kept so older clients
+ * keep working without re-pairing. New IPAs should use /plan + /build.
+ */
+export async function handleComposeShortcutStart(req, res, ctx) {
+  const payload = await readJsonBody(req, res);
+  if (!payload) return;
 
   const rawText = String(payload.rawText || '').trim();
   if (!rawText) {
@@ -645,8 +929,7 @@ export async function handleComposeShortcutStart(req, res, ctx) {
     status: 'pending',
     expiresAt: Date.now() + JOB_TTL_MS,
   });
-  // Fire-and-forget — runner writes back into the map
-  runComposeJob(jobId, ctx, req, rawText, String(payload.title || '').trim()).catch(() => {});
+  runComposeJobLegacy(jobId, ctx, req, rawText, String(payload.title || '').trim()).catch(() => {});
 
   res.writeHead(202, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ ok: true, jobId }));
@@ -657,6 +940,9 @@ export async function handleComposeShortcutStart(req, res, ctx) {
  *   Response 200: { ok: true, status, ...result }
  *
  * status ∈ { pending, composing, signing, done, error }.
+ * On `done` the body carries the Learn Phase metadata (aliases +
+ * systemPurpose + summary) so the iOS Bridge can auto-register the
+ * installed Shortcut in GigiShortcutRegistry.
  */
 export async function handleComposeShortcutJob(req, res, _ctx) {
   pruneJobs();
@@ -673,6 +959,9 @@ export async function handleComposeShortcutJob(req, res, _ctx) {
   if (job.status === 'done') {
     body.url = job.url;
     body.title = job.title;
+    body.summary = job.summary;
+    body.aliases = job.aliases || [];
+    body.systemPurpose = job.systemPurpose || '';
     body.actionsCount = job.actionsCount;
   } else if (job.status === 'error') {
     body.error = job.error;

@@ -138,9 +138,25 @@ export async function handleIosRequest(req, res, ctx) {
     await buildShortcut.handleComposeShortcut(req, res, ctx);
     return true;
   }
-  // Phase 2.1 — async job pattern to dodge cellular/CDN idle-TCP timeouts.
-  // POST start returns jobId immediately; client polls GET job/<id>.
-  if (p === '/api/ios/compose-shortcut/start' && m === 'POST') {
+  // GATE 15 Smart Action Loop — plan + build + job (3 endpoints).
+  //   - /plan   → Claude composer only, returns proposal for iOS card (Step 2)
+  //   - /build  → kicks off cherri + Mac sign for an approved plan (Step 3)
+  //   - /job/X  → polls signing status (Step 3 continued)
+  //   - /cancel → housekeeping for plans the user dismissed
+  //   - /start  → LEGACY single-shot path (pre-GATE-15 IPAs only)
+  if (p === '/api/ios/compose-shortcut/plan'   && m === 'POST') {
+    await buildShortcut.handleComposeShortcutPlan(req, res, ctx);
+    return true;
+  }
+  if (p === '/api/ios/compose-shortcut/build'  && m === 'POST') {
+    await buildShortcut.handleComposeShortcutBuild(req, res, ctx);
+    return true;
+  }
+  if (p === '/api/ios/compose-shortcut/cancel' && m === 'POST') {
+    await buildShortcut.handleComposeShortcutCancel(req, res, ctx);
+    return true;
+  }
+  if (p === '/api/ios/compose-shortcut/start'  && m === 'POST') {
     await buildShortcut.handleComposeShortcutStart(req, res, ctx);
     return true;
   }
