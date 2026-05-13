@@ -1739,20 +1739,75 @@ class GigiActionBridge {
             }
             let title = (result["title"] as? String) ?? "GIGI Shortcut"
             GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add Shortcut")
-            // Open the raw HTTPS URL. iOS detects the .shortcut file by
-            // extension + signing and routes it to Shortcuts.app for the
-            // standard import preview (this is the same flow Apple uses for
-            // shared shortcut links, e.g. RoutineHub downloads).
+            // Two prior approaches failed on third-party-hosted files:
+            //   - shortcuts://import-shortcut/?url=... → "URL not valid"
+            //     (Apple gates this scheme to iCloud-hosted shortcuts).
+            //   - UIApplication.open(httpsURL) → Safari downloads silently
+            //     and lands on about:blank, no Shortcuts.app prompt.
             //
-            // We previously tried `shortcuts://import-shortcut/?url=…` but
-            // Shortcuts.app rejects that scheme for third-party-hosted
-            // files with "URL not valid" — Apple appears to gate that
-            // scheme to iCloud-hosted shortcuts only.
-            await UIApplication.shared.open(url)
-            return "Built '\(title)'. Tap 'Add Shortcut' to install."
+            // Reliable path: download the signed .shortcut into the app
+            // sandbox, then present the system share sheet anchored on the
+            // local file URL. iOS shows "Add to Shortcuts" as a top action
+            // for a properly-signed file — same UX as opening a .shortcut
+            // attachment from Mail or Files.
+            await Self.presentShortcutFile(remoteURL: url, title: title)
+            return "Built '\(title)'. Tap 'Add to Shortcuts' to install."
         } catch {
             GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't build Shortcut")
             return "Harness error building the Shortcut: \(error.localizedDescription)."
+        }
+    }
+
+    /// Downloads the signed .shortcut to the app sandbox and presents the
+    /// system share sheet. iOS recognizes the file via .shortcut extension
+    /// + AEA1 signing and offers "Add to Shortcuts" as a top action.
+    @MainActor
+    private static func presentShortcutFile(remoteURL: URL, title: String) async {
+        do {
+            let (tmpURL, response) = try await URLSession.shared.download(from: remoteURL)
+            if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                GigiDebugLogger.log("presentShortcutFile: HTTP \(http.statusCode) — falling back to UIApplication.open")
+                UIApplication.shared.open(remoteURL)
+                return
+            }
+            // Move to a stable URL with .shortcut extension; iOS share sheet
+            // uses the file extension to pick the right handler.
+            let safe = title
+                .replacingOccurrences(of: "/", with: "-")
+                .components(separatedBy: CharacterSet.alphanumerics.union(.whitespaces).inverted)
+                .joined()
+                .trimmingCharacters(in: .whitespaces)
+            let fileName = (safe.isEmpty ? "GIGI Shortcut" : safe) + ".shortcut"
+            let destDir = FileManager.default.temporaryDirectory.appendingPathComponent("gigi-shortcuts", isDirectory: true)
+            try? FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+            let destURL = destDir.appendingPathComponent(fileName)
+            try? FileManager.default.removeItem(at: destURL)
+            try FileManager.default.moveItem(at: tmpURL, to: destURL)
+
+            // Find the active window to anchor the activity controller.
+            guard let scene = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first(where: { $0.activationState == .foregroundActive }),
+                  let rootVC = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
+            else {
+                GigiDebugLogger.log("presentShortcutFile: no active scene — opening remote URL as fallback")
+                UIApplication.shared.open(remoteURL)
+                return
+            }
+            // Walk to topmost presented controller.
+            var top = rootVC
+            while let presented = top.presentedViewController { top = presented }
+
+            let activity = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
+            // On iPad we'd need a popover anchor; on iPhone it's a sheet.
+            activity.popoverPresentationController?.sourceView = top.view
+            activity.popoverPresentationController?.sourceRect = CGRect(
+                x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0
+            )
+            top.present(activity, animated: true)
+        } catch {
+            GigiDebugLogger.log("presentShortcutFile error: \(error.localizedDescription) — falling back to UIApplication.open")
+            UIApplication.shared.open(remoteURL)
         }
     }
 
