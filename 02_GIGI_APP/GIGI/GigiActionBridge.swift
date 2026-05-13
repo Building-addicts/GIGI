@@ -1739,19 +1739,16 @@ class GigiActionBridge {
             }
             let title = (result["title"] as? String) ?? "GIGI Shortcut"
             GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add Shortcut")
-            // Use the shortcuts:// import scheme so iOS opens Shortcuts.app
-            // directly with the install preview, instead of letting Safari
-            // download the file to the Files app. The signed .shortcut URL
-            // is passed as the `url` query param; Shortcuts.app fetches it
-            // and shows the standard import sheet.
-            // Reference: shortcuts://import-shortcut/?url=URL&name=NAME
-            let encoded = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? url.absoluteString
-            let nameEnc = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title
-            if let importURL = URL(string: "shortcuts://import-shortcut/?url=\(encoded)&name=\(nameEnc)") {
-                await UIApplication.shared.open(importURL)
-            } else {
-                await UIApplication.shared.open(url)
-            }
+            // Open the raw HTTPS URL. iOS detects the .shortcut file by
+            // extension + signing and routes it to Shortcuts.app for the
+            // standard import preview (this is the same flow Apple uses for
+            // shared shortcut links, e.g. RoutineHub downloads).
+            //
+            // We previously tried `shortcuts://import-shortcut/?url=…` but
+            // Shortcuts.app rejects that scheme for third-party-hosted
+            // files with "URL not valid" — Apple appears to gate that
+            // scheme to iCloud-hosted shortcuts only.
+            await UIApplication.shared.open(url)
             return "Built '\(title)'. Tap 'Add Shortcut' to install."
         } catch {
             GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't build Shortcut")

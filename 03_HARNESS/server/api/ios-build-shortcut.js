@@ -868,13 +868,13 @@ export async function handleShortcutFile(req, res, _ctx) {
 
   const niceName = entry.title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').slice(0, 40) || 'GIGI-Shortcut';
   res.writeHead(200, {
-    // Apple Shortcuts file MIME. Was 'application/x-apple-aspen-config'
-    // (MDM profile MIME) which caused Shortcuts.app to reject the URL with
-    // "Import failed — URL not valid". Generic octet-stream + .shortcut
-    // extension is what Apple's iCloud gallery + community signing servers
-    // use, and Shortcuts.app accepts it via the shortcuts:// import scheme.
+    // Apple Shortcuts signed (AEA1) file. iOS detects via .shortcut
+    // filename + magic bytes; octet-stream is the safe generic MIME used
+    // by RoutineHub and the iCloud gallery. attachment disposition tells
+    // Safari to download + invoke the system handler instead of trying
+    // to render the binary inline.
     'Content-Type': 'application/octet-stream',
-    'Content-Disposition': `inline; filename="${niceName}.shortcut"`,
+    'Content-Disposition': `attachment; filename="${niceName}.shortcut"`,
     'Cache-Control': 'no-store, no-cache, must-revalidate',
     'Content-Length': bytes.length
   });
