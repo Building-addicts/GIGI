@@ -1834,15 +1834,24 @@ class GigiActionBridge {
 
             GigiSmartOrchestrator.shared.clearShortcutProposal()
             GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add to Shortcuts")
-            await presentShortcutFile(remoteURL: url, title: finalTitle)
+            // Suspends until the share sheet is dismissed (iOS fires
+            // completionWithItemsHandler), so the Learn Phase below runs
+            // when the user is back in GIGI — not while the sheet is up.
+            let completed = await presentShortcutFile(remoteURL: url, title: finalTitle)
 
-            // GATE 15 Step 4 — Learn Phase. Register so the next time the
-            // user says any of these phrases, GIGI invokes the system
-            // Shortcut via shortcuts:// (Control Center synced) instead
-            // of asking to build again.
-            registerLearnedShortcut(
-                name: finalTitle, aliases: finalAliases, systemPurpose: finalPurpose
-            )
+            // GATE 15 Step 4 — Learn Phase. Register only if the user
+            // engaged the share sheet (tapped Shortcuts.app / AirDrop /
+            // Save to Files / …). If they swiped to dismiss without
+            // picking, assume they didn't want this shortcut and don't
+            // pollute the registry.
+            if completed {
+                registerLearnedShortcut(
+                    name: finalTitle, aliases: finalAliases, systemPurpose: finalPurpose
+                )
+            } else {
+                GigiSmartOrchestrator.shared.showBanner("Dismissed — Shortcut not saved")
+                GigiDebugLogger.log("GIGI Registry: share sheet dismissed without picking action — skip register")
+            }
         } catch {
             GigiSmartOrchestrator.shared.clearShortcutProposal()
             GigiSmartOrchestrator.shared.showBanner("⚠️ Build failed")
@@ -1886,21 +1895,29 @@ class GigiActionBridge {
             toastBody = "I learned '\(cleanName)'."
         }
         GigiConversationMemory.shared.addModelSpeech(toastBody)
-        GigiSmartOrchestrator.shared.showBanner("✅ Learned \(cleanName)", autoHideAfter: 4)
+        // 8s — banner needs to outlive the user returning from Shortcuts.app
+        // (the Apple install preview can take a few seconds to dismiss).
+        GigiSmartOrchestrator.shared.showBanner("✅ Learned \(cleanName)", autoHideAfter: 8)
         GigiDebugLogger.log("GIGI Registry: learned '\(cleanName)' purpose=\(cleanPurpose) aliases=\(aliasCount)")
     }
 
     /// Downloads the signed .shortcut to the app sandbox and presents the
     /// system share sheet. iOS recognizes the file via .shortcut extension
     /// + AEA1 signing and offers "Add to Shortcuts" as a top action.
+    ///
+    /// Returns once the share sheet has been DISMISSED (whether the user
+    /// completed an activity or cancelled). Return value: `true` if iOS
+    /// reported the activity completed (user picked Shortcuts.app, AirDrop,
+    /// Save to Files, etc.), `false` if the user dismissed without picking.
     @MainActor
-    private static func presentShortcutFile(remoteURL: URL, title: String) async {
+    @discardableResult
+    private static func presentShortcutFile(remoteURL: URL, title: String) async -> Bool {
         do {
             let (tmpURL, response) = try await URLSession.shared.download(from: remoteURL)
             if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
                 GigiDebugLogger.log("presentShortcutFile: HTTP \(http.statusCode) — falling back to UIApplication.open")
                 await UIApplication.shared.open(remoteURL)
-                return
+                return false
             }
             // Move to a stable URL with .shortcut extension; iOS share sheet
             // uses the file extension to pick the right handler.
@@ -1924,22 +1941,32 @@ class GigiActionBridge {
             else {
                 GigiDebugLogger.log("presentShortcutFile: no active scene — opening remote URL as fallback")
                 await UIApplication.shared.open(remoteURL)
-                return
+                return false
             }
             // Walk to topmost presented controller.
             var top = rootVC
             while let presented = top.presentedViewController { top = presented }
 
-            let activity = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
-            // On iPad we'd need a popover anchor; on iPhone it's a sheet.
-            activity.popoverPresentationController?.sourceView = top.view
-            activity.popoverPresentationController?.sourceRect = CGRect(
-                x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0
-            )
-            top.present(activity, animated: true)
+            // Suspend until iOS calls completionWithItemsHandler so the caller
+            // can fire the Learn Phase only AFTER the share sheet is gone
+            // (otherwise the banner + chat toast fire while the share sheet
+            // covers the screen and the user never sees them).
+            return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                let activity = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
+                activity.popoverPresentationController?.sourceView = top.view
+                activity.popoverPresentationController?.sourceRect = CGRect(
+                    x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0
+                )
+                activity.completionWithItemsHandler = { activityType, completed, _, _ in
+                    GigiDebugLogger.log("presentShortcutFile: dismissed — activity=\(activityType?.rawValue ?? "<none>") completed=\(completed)")
+                    cont.resume(returning: completed)
+                }
+                top.present(activity, animated: true)
+            }
         } catch {
             GigiDebugLogger.log("presentShortcutFile error: \(error.localizedDescription) — falling back to UIApplication.open")
             await UIApplication.shared.open(remoteURL)
+            return false
         }
     }
 
