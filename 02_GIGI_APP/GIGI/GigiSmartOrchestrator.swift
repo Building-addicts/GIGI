@@ -87,6 +87,24 @@ class GigiSmartOrchestrator: ObservableObject {
 
     @Published var contactDisambiguation: ContactDisambiguationState?
 
+    // MARK: - GATE 15 Smart Action Loop — Shortcut proposal card
+    //
+    // When GIGI can't satisfy a user request from existing capabilities,
+    // it asks the harness for a Plan (via /compose-shortcut/plan) and
+    // surfaces the proposal as an inline card in the chat. The user taps
+    // "Build Shortcut" → ChatView calls `state.confirm()`, which triggers
+    // sign + share sheet + auto-register. Cancel → `state.cancel()`.
+
+    @Published var shortcutProposal: ShortcutProposalState?
+
+    func presentShortcutProposal(_ state: ShortcutProposalState) {
+        shortcutProposal = state
+    }
+
+    func clearShortcutProposal() {
+        shortcutProposal = nil
+    }
+
     /// Counts consecutive unresolved disambig utterances. After 2 fails,
     /// auto-cancel with a graceful message. Reset on resolve or new
     /// disambiguation state. Not @Published — purely internal book-keeping.

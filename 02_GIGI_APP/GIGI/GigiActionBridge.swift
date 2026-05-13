@@ -1746,7 +1746,6 @@ class GigiActionBridge {
     ///   round-trip adds ~3-12s vs purely on-device.
     @MainActor
     func composeShortcut(rawText: String) async -> String {
-        GigiSmartOrchestrator.shared.showBanner("🔧 Building Shortcut...")
         let harness = GigiHarnessClient.shared
         guard harness.pairingState.isConfigured else {
             return "I need the GIGI harness to build Shortcuts. Pair it in Settings first."
@@ -1755,33 +1754,140 @@ class GigiActionBridge {
         guard !trimmed.isEmpty else {
             return "Tell me what the Shortcut should do, e.g. 'build a shortcut that turns on the torch and waits 5 seconds'."
         }
+
+        // GATE 15 Step 2 — Plan Phase. Ask Claude for the proposal only;
+        // no Mac signing yet. The user sees a card, decides Build or Cancel.
+        GigiSmartOrchestrator.shared.showBanner("🧠 Planning Shortcut...")
         do {
-            // Async start/poll: keeps every HTTP call short so cellular/CDN
-            // NATs don't kill the connection mid-build. See harness comment.
-            let result = try await harness.composeShortcutAsync(payload: ["rawText": trimmed])
-            guard let urlString = result["url"] as? String, let url = URL(string: urlString) else {
-                let errMsg = (result["error"] as? String) ?? "unknown harness error"
-                return "Couldn't build that Shortcut: \(errMsg)."
+            let plan = try await harness.postPlanShortcut(rawText: trimmed)
+            guard let planId = plan["planId"] as? String, !planId.isEmpty else {
+                let errMsg = (plan["error"] as? String) ?? "Harness didn't return a plan."
+                GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't plan Shortcut")
+                return "Couldn't plan that Shortcut: \(errMsg)."
             }
-            let title = (result["title"] as? String) ?? "GIGI Shortcut"
-            GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add Shortcut")
-            // Two prior approaches failed on third-party-hosted files:
-            //   - shortcuts://import-shortcut/?url=... → "URL not valid"
-            //     (Apple gates this scheme to iCloud-hosted shortcuts).
-            //   - UIApplication.open(httpsURL) → Safari downloads silently
-            //     and lands on about:blank, no Shortcuts.app prompt.
-            //
-            // Reliable path: download the signed .shortcut into the app
-            // sandbox, then present the system share sheet anchored on the
-            // local file URL. iOS shows "Add to Shortcuts" as a top action
-            // for a properly-signed file — same UX as opening a .shortcut
-            // attachment from Mail or Files.
-            await Self.presentShortcutFile(remoteURL: url, title: title)
-            return "Built '\(title)'. Tap 'Add to Shortcuts' to install."
+            let title    = (plan["title"]   as? String) ?? "GIGI Shortcut"
+            let summary  = (plan["summary"] as? String) ?? ""
+            let aliases  = (plan["aliases"] as? [String]) ?? []
+            let purpose  = (plan["systemPurpose"] as? String) ?? ""
+            let rawActs  = (plan["actions"] as? [[String: Any]]) ?? []
+            let actions  = ShortcutActionRenderer.render(actions: rawActs)
+
+            let state = ShortcutProposalState(
+                planId: planId,
+                title: title,
+                summary: summary,
+                actions: actions,
+                aliases: aliases,
+                systemPurpose: purpose,
+                onConfirm: { [planId, title, aliases, purpose] in
+                    Task { @MainActor in
+                        await Self.runBuildPhase(
+                            planId: planId, title: title,
+                            aliases: aliases, systemPurpose: purpose
+                        )
+                    }
+                },
+                onCancel: { [planId] in
+                    Task { @MainActor in
+                        GigiSmartOrchestrator.shared.clearShortcutProposal()
+                        await harness.cancelShortcutPlan(planId: planId)
+                        GigiSmartOrchestrator.shared.showBanner("Cancelled — no Shortcut built")
+                    }
+                }
+            )
+            GigiSmartOrchestrator.shared.presentShortcutProposal(state)
+            GigiSmartOrchestrator.shared.bannerMessage = ""
+            return "I'd build '\(title)'. Tap 'Build Shortcut' on the card to confirm."
         } catch {
-            GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't build Shortcut")
-            return "Harness error building the Shortcut: \(error.localizedDescription)."
+            GigiSmartOrchestrator.shared.showBanner("⚠️ Couldn't plan Shortcut")
+            return "Planner error: \(error.localizedDescription)."
         }
+    }
+
+    /// GATE 15 Step 3 — Build Phase. Triggered by the user tapping
+    /// "Build Shortcut" on the proposal card. cherri compile + Mac sign
+    /// happens in the background; on completion we present the share sheet
+    /// and auto-register (Step 4 Learn Phase).
+    @MainActor
+    private static func runBuildPhase(
+        planId: String, title: String,
+        aliases: [String], systemPurpose: String
+    ) async {
+        GigiSmartOrchestrator.shared.showBanner("🔨 Building Shortcut...")
+        let harness = GigiHarnessClient.shared
+        do {
+            let result = try await harness.postBuildShortcutFromPlan(planId: planId)
+            guard let urlString = result["url"] as? String,
+                  let url = URL(string: urlString) else {
+                let errMsg = (result["error"] as? String) ?? "unknown harness error"
+                GigiSmartOrchestrator.shared.clearShortcutProposal()
+                GigiSmartOrchestrator.shared.showBanner("⚠️ Build failed")
+                let speech = "Couldn't build '\(title)': \(errMsg)."
+                GigiConversationMemory.shared.addModelSpeech(speech)
+                return
+            }
+            // Server may have refined the metadata; prefer the build response
+            // for the registry record so it matches what was actually signed.
+            let finalTitle    = (result["title"]   as? String) ?? title
+            let finalAliases  = (result["aliases"] as? [String]) ?? aliases
+            let finalPurpose  = (result["systemPurpose"] as? String) ?? systemPurpose
+
+            GigiSmartOrchestrator.shared.clearShortcutProposal()
+            GigiSmartOrchestrator.shared.showBanner("⚡️ Ready — tap Add to Shortcuts")
+            await presentShortcutFile(remoteURL: url, title: finalTitle)
+
+            // GATE 15 Step 4 — Learn Phase. Register so the next time the
+            // user says any of these phrases, GIGI invokes the system
+            // Shortcut via shortcuts:// (Control Center synced) instead
+            // of asking to build again.
+            registerLearnedShortcut(
+                name: finalTitle, aliases: finalAliases, systemPurpose: finalPurpose
+            )
+        } catch {
+            GigiSmartOrchestrator.shared.clearShortcutProposal()
+            GigiSmartOrchestrator.shared.showBanner("⚠️ Build failed")
+            let speech = "Build error: \(error.localizedDescription)"
+            GigiConversationMemory.shared.addModelSpeech(speech)
+        }
+    }
+
+    /// GATE 15 Step 4 — registers the freshly-installed Shortcut so the
+    /// next utterance matches via Tier 1 (registry purpose / alias) and
+    /// fires `shortcuts://x-callback-url/run-shortcut?name=…` — system
+    /// flashlight, Control Center synced, etc.
+    @MainActor
+    private static func registerLearnedShortcut(
+        name: String, aliases: [String], systemPurpose: String
+    ) {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty else { return }
+        let cleanAliases = aliases
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let cleanPurpose = systemPurpose
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        let entry = RegisteredShortcut(
+            name: cleanName,
+            aliases: cleanAliases,
+            description: "",
+            enabled: true,
+            systemPurpose: cleanPurpose.isEmpty ? nil : cleanPurpose
+        )
+        GigiShortcutRegistry.shared.register(entry)
+
+        let aliasCount = cleanAliases.count
+        let toastBody: String
+        if aliasCount > 0 {
+            let topAliases = cleanAliases.prefix(3).joined(separator: ", ")
+            toastBody = "I learned '\(cleanName)' — next time say \(topAliases) and I'll run it."
+        } else {
+            toastBody = "I learned '\(cleanName)'."
+        }
+        GigiConversationMemory.shared.addModelSpeech(toastBody)
+        GigiSmartOrchestrator.shared.showBanner("✅ Learned \(cleanName)", autoHideAfter: 4)
+        GigiDebugLogger.log("GIGI Registry: learned '\(cleanName)' purpose=\(cleanPurpose) aliases=\(aliasCount)")
     }
 
     /// Downloads the signed .shortcut to the app sandbox and presents the

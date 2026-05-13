@@ -115,7 +115,56 @@ extension GigiHarnessClient {
             throw NSError(domain: "GigiHarnessClient", code: -10,
                           userInfo: [NSLocalizedDescriptionKey: "Harness didn't return jobId"])
         }
+        return try await pollShortcutJob(jobId: jobId)
+    }
 
+    // MARK: - GATE 15 Smart Action Loop
+
+    /// Step 2 — Plan Phase. Ask the harness to compose a proposal WITHOUT
+    /// signing anything on the Mac. Returns the plan payload that the iOS
+    /// chat layer renders as a `ShortcutProposalCard`.
+    ///
+    /// Plan TTL is 5 minutes server-side; after that `postBuildShortcutFromPlan`
+    /// returns 410 Gone.
+    func postPlanShortcut(rawText: String) async throws -> [String: Any] {
+        return try await postShortcutEndpoint(
+            payload: ["rawText": rawText],
+            path: "/api/ios/compose-shortcut/plan"
+        )
+    }
+
+    /// Step 3 — Build Phase. Triggered when the user taps "Build Shortcut"
+    /// on a proposal card. Kicks off cherri compile + Mac sign in the
+    /// background; we poll `/job/<id>` until done. The returned dictionary
+    /// is the final `done` body and carries the Learn Phase metadata
+    /// (aliases / systemPurpose / summary) that the bridge uses to
+    /// auto-register the installed Shortcut.
+    func postBuildShortcutFromPlan(planId: String) async throws -> [String: Any] {
+        let start = try await postShortcutEndpoint(
+            payload: ["planId": planId],
+            path: "/api/ios/compose-shortcut/build"
+        )
+        guard let jobId = start["jobId"] as? String, !jobId.isEmpty else {
+            throw NSError(domain: "GigiHarnessClient", code: -10,
+                          userInfo: [NSLocalizedDescriptionKey: "Harness didn't return jobId"])
+        }
+        return try await pollShortcutJob(jobId: jobId)
+    }
+
+    /// Best-effort housekeeping when the user taps "Cancel" on a proposal
+    /// card. Server-side the plan would evaporate on its 5-min TTL anyway;
+    /// this just lets us free the slot immediately. Errors are swallowed.
+    func cancelShortcutPlan(planId: String) async {
+        _ = try? await postShortcutEndpoint(
+            payload: ["planId": planId],
+            path: "/api/ios/compose-shortcut/cancel"
+        )
+    }
+
+    /// Shared 1.5s-interval poller for `/api/ios/compose-shortcut/job/<id>`.
+    /// 90-second overall budget; each poll has its own 8s timeout so a
+    /// transient network blip doesn't fail the whole flow.
+    private func pollShortcutJob(jobId: String) async throws -> [String: Any] {
         guard let cfg = Self.harnessConfigSnapshot() else {
             throw NSError(domain: "GigiHarnessClient", code: -1,
                           userInfo: [NSLocalizedDescriptionKey: "Harness not paired"])
@@ -127,14 +176,14 @@ extension GigiHarnessClient {
                           userInfo: [NSLocalizedDescriptionKey: "Invalid poll URL"])
         }
 
-        let deadline = Date().addingTimeInterval(90)  // overall budget
+        let deadline = Date().addingTimeInterval(90)
         while Date() < deadline {
-            try await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s
+            try await Task.sleep(nanoseconds: 1_500_000_000)
             var req = URLRequest(url: pollURL)
             req.httpMethod = "GET"
             req.setValue("Bearer \(cfg.secret)", forHTTPHeaderField: "Authorization")
             req.setValue(cfg.deviceId, forHTTPHeaderField: "X-Device-Id")
-            req.timeoutInterval = 8.0  // each poll short and snappy
+            req.timeoutInterval = 8.0
 
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse else { continue }
@@ -145,8 +194,7 @@ extension GigiHarnessClient {
                 throw NSError(domain: "GigiHarnessClient", code: http.statusCode,
                               userInfo: [NSLocalizedDescriptionKey: detail])
             }
-            let status = (parsed["status"] as? String) ?? "pending"
-            switch status {
+            switch (parsed["status"] as? String) ?? "pending" {
             case "done":
                 return parsed
             case "error":
@@ -154,7 +202,7 @@ extension GigiHarnessClient {
                 throw NSError(domain: "GigiHarnessClient", code: 500,
                               userInfo: [NSLocalizedDescriptionKey: msg])
             default:
-                continue  // pending, composing, signing — keep polling
+                continue
             }
         }
         throw NSError(domain: "GigiHarnessClient", code: -11,

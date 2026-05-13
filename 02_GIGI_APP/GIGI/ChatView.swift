@@ -60,6 +60,16 @@ struct ChatView: View {
                                     .id("contact-disambiguation-\(state.id)")
                                     .transition(.move(edge: .leading).combined(with: .opacity))
                             }
+
+                            // GATE 15 Step 2 — Shortcut proposal card.
+                            // Surfaces when the user asks GIGI to do something
+                            // it can't satisfy from existing capabilities and
+                            // the harness has composed a buildable plan.
+                            if let state = gigi.shortcutProposal {
+                                ShortcutProposalCard(state: state)
+                                    .id("shortcut-proposal-\(state.id)")
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
                         }
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
@@ -74,6 +84,10 @@ struct ChatView: View {
                     // Auto-scroll when the disambiguation bubble appears so
                     // the user sees the prompt without scrolling manually.
                     .onChange(of: gigi.contactDisambiguation?.id) { _, _ in
+                        scrollToBottom(proxy: proxy)
+                    }
+                    // Same auto-scroll for the GATE 15 shortcut proposal card.
+                    .onChange(of: gigi.shortcutProposal?.id) { _, _ in
                         scrollToBottom(proxy: proxy)
                     }
                 }
