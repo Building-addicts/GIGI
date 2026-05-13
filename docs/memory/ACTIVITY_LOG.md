@@ -470,3 +470,4 @@
 - `2026-05-13T21:42:10+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: log(local): session )
 - `2026-05-13T21:46:31+0200` · local · session ended on `armando-rework` (last commit: fix(gate-15): fire Learn Phase AFTER share sheet dismissal)
 - `2026-05-13T21:49:36+0200` · local · session ended on `armando-rework` (last commit: log(local): session ended on `armando-rework` (last commit: fix(gate-15): fire L)
+- `2026-05-13T22:01:15+0200` · local · session ended on `armando-rework` (last commit: feat(gate-15): Step 0.5 voice/chat consent + Step 0.6 one-tap Open-In)
