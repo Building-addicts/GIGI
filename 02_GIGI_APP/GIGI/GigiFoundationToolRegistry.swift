@@ -343,11 +343,11 @@ struct FMReadEmailTool: Tool {
 @available(iOS 26.0, *)
 struct FMHomeKitOnTool: Tool {
     let name = "homekit_on"
-    let description = "Turn on a HomeKit accessory (light, switch, plug)."
+    let description = "Turn on a HomeKit-paired accessory (lamp, switch, plug, fan)."
 
     @Generable
     struct Arguments {
-        @Guide(description: "Accessory name as configured in Home app, e.g. 'living room light'.")
+        @Guide(description: "Named HomeKit accessory as configured in the Home app, e.g. 'living room light', 'kitchen plug', 'bedroom fan'. NOT for the iPhone flashlight (use torch_on). NOT for music or radio (use play_music). The accessory name must be specific — refuse this tool if the user just said 'turn on the light' without specifying which.")
         var accessory: String
     }
 
@@ -437,25 +437,16 @@ struct FMWebOrderFoodTool: Tool {
 @available(iOS 26.0, *)
 struct FMRunShortcutTool: Tool {
     let name = "run_shortcut"
-    let description = """
-    Open the Apple Shortcuts app and run a user-installed Shortcut by name. \
-    THIS IS THE ONLY TOOL TO USE when the utterance starts with "run", \
-    "execute", "launch", "trigger", "esegui", "lancia" OR ends with "shortcut" \
-    or "scorciatoia". Examples that REQUIRE this tool: "run accendi torcia", \
-    "execute work mode", "run accendi torcia shortcut", "trigger my morning \
-    routine", "lancia modalità lavoro", "esegui buongiorno". The body after \
-    the verb is the literal Shortcut name the user chose in the Shortcuts app \
-    — DO NOT interpret it as a HomeKit accessory or timer duration. \
-    NEVER pick set_timer, homekit_on, homekit_off, or open_app for these \
-    utterances — they are explicit Shortcut invocations.
-    """
+    // Apple FM constrained decoding largely ignores prose disambiguation —
+    // it weights tool name and @Guide param descriptions. Keep this short.
+    let description = "Execute an already-installed iOS Shortcut by name."
 
     @Generable
     struct Arguments {
-        @Guide(description: "Exact or near-exact name of the Shortcut as the user said it. Examples: 'morning routine', 'work mode', 'arrive home'.")
+        @Guide(description: "The exact Shortcut name. NOT a verb, NOT a HomeKit accessory, NOT a generic action. Pick this ONLY when the user said run/execute/launch/trigger/esegui/lancia + a name. Wrong picks: 'accendi torcia' (use torch_on), 'turn on lights' (use homekit_on), 'create a shortcut that…' (use build_shortcut).")
         var name: String
 
-        @Guide(description: "Optional text input to pass to the Shortcut as its input. Empty string if none.")
+        @Guide(description: "Optional input forwarded to the Shortcut. Empty string when none.")
         var input: String
     }
 

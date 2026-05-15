@@ -68,6 +68,14 @@ final class GigiRequestRouter {
     /// Always returns a `RouteResult` — never throws. Errors are surfaced
     /// as `.error(message)` for the orchestrator to speak.
     func route(text: String, history: String = "") async -> RouteResult {
+        // Audit log — emit the entry condition every call so we can read
+        // the tier traversal in Console.app and spot which layer claimed
+        // the dispatch. Pairs with `route_skip:` markers logged inside
+        // each tier when it falls through.
+        let inputPreview = text.replacingOccurrences(of: "\n", with: " ").prefix(80)
+        GigiDebugLogger.log("ROUTE_BEGIN text=\"\(inputPreview)\" history_chars=\(history.count)")
+        defer { /* RouteResult logged by caller already */ }
+
         // GATE 15 Step 0.5 — Conversational consent for active proposal card.
         //
         // When a ShortcutProposalCard is on screen, intercept simple
@@ -276,19 +284,23 @@ final class GigiRequestRouter {
         if applefmAvailable && mode.allowsAppleFMRouter {
             #if canImport(FoundationModels)
             if #available(iOS 18.1, *) {
+                GigiDebugLogger.log("ROUTE_TIER applefm.invoke text=\"\(inputPreview)\"")
                 do {
                     decision = try await GigiFoundationSession.shared.routeRequest(text: text, history: history)
                 } catch {
-                    GigiDebugLogger.log("GIGI Router: Apple FM failed (\(error.localizedDescription)) — falling back to keyword router.")
+                    GigiDebugLogger.log("ROUTE_TIER applefm.fail \(error.localizedDescription) — falling back to keyword router")
                     decision = fallback.classifyRequest(text: text)
                 }
             } else {
+                GigiDebugLogger.log("ROUTE_TIER applefm.skip reason=os_too_old")
                 decision = fallback.classifyRequest(text: text)
             }
             #else
+            GigiDebugLogger.log("ROUTE_TIER applefm.skip reason=fm_not_compiled")
             decision = fallback.classifyRequest(text: text)
             #endif
         } else {
+            GigiDebugLogger.log("ROUTE_TIER applefm.skip reason=mode_or_unavailable applefmAvailable=\(applefmAvailable) modeAllowsFM=\(mode.allowsAppleFMRouter)")
             decision = fallback.classifyRequest(text: text)
         }
 

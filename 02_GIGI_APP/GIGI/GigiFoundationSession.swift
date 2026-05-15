@@ -171,16 +171,38 @@ final class GigiFoundationSession {
                 userInfo: [NSLocalizedDescriptionKey: "Apple Foundation Models not available"]
             )
         }
+
+        // GATE-15 audit follow-up — context budget guard.
+        //
+        // Apple Foundation Models has a hard ~4k-token window per session.
+        // The router system prompt alone is ~1.2k tokens; long histories
+        // can push the request past the limit, after which `respond(to:)`
+        // either truncates silently or throws a generic context-size error
+        // that the caller blames on Apple FM ("stupid"). Pre-check the
+        // rough size in chars/4 (~ token estimate) and trim history from
+        // the top until it fits, leaving a 256-token safety margin.
+        let systemPromptChars = GigiFoundationAgent.routerSystemPrompt.count
+        let userChars = text.count
+        let maxChars = 12_000   // ~3000 tokens budget for prompt + history
+        var trimmedHistory = history
+        let availableForHistory = max(0, maxChars - systemPromptChars - userChars)
+        if trimmedHistory.count > availableForHistory {
+            let dropCount = trimmedHistory.count - availableForHistory
+            let dropEnd = trimmedHistory.index(trimmedHistory.startIndex, offsetBy: dropCount)
+            trimmedHistory = String(trimmedHistory[dropEnd...])
+            GigiDebugLogger.log("GIGI Router: history trimmed \(dropCount) chars to fit Apple FM context budget (sys=\(systemPromptChars), user=\(userChars), remaining=\(availableForHistory))")
+        }
+
         // Stateless: new session every call to prevent transcript bias.
         let s = LanguageModelSession(instructions: GigiFoundationAgent.routerSystemPrompt)
 
         let prompt: String
-        if history.isEmpty {
+        if trimmedHistory.isEmpty {
             prompt = "Route this user utterance:\n\(text)"
         } else {
             prompt = """
             Recent conversation:
-            \(history)
+            \(trimmedHistory)
 
             Latest utterance — resolve pronouns and ellipsis from context, then route:
             \(text)

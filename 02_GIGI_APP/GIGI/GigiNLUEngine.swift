@@ -86,6 +86,30 @@ class GigiNLUEngine {
     // Runs before ML models. English patterns only — fast and deterministic.
     // Returns nil if no match → falls through to ML models.
 
+    // MARK: - Utterance-dominance guard (anti-bypass for Apple FM)
+    //
+    // Plain `text.contains(phrase)` over-matches on long utterances:
+    // "Build me a shortcut that turns the flashlight on" contains
+    // "flashlight on" and gets fired as torch_on confidence 0.99,
+    // bypassing the router via GigiAgentEngine.deterministicFastPath
+    // BEFORE Apple FM ever sees the request.
+    //
+    // This helper returns true only if the matched phrase represents the
+    // BULK of the utterance — short text where the phrase dominates. Long
+    // sentences fall through so the router can reason about the real intent.
+    private static func dominantContains(_ text: String, anyOf phrases: [String]) -> Bool {
+        let userWords = text.split { $0.isWhitespace }.count
+        for phrase in phrases {
+            if !text.contains(phrase) { continue }
+            let phraseWords = phrase.split { $0.isWhitespace }.count
+            // Match only when the utterance is at most 2 words longer than
+            // the trigger phrase. Tight enough to gate out complex sentences,
+            // loose enough to accept "turn on flashlight please".
+            if userWords <= phraseWords + 2 { return true }
+        }
+        return false
+    }
+
     private func classifyRules(_ text: String, original: String) -> GigiIntent? {
         // ── GREETINGS / SMALL TALK ────────────────────────────────────────────
         let greetings = ["hello", "hey", "hi", "how are you", "what's up", "yo", "sup"]
@@ -208,7 +232,7 @@ class GigiNLUEngine {
 
         // ── WEATHER ──────────────────────────────────────────────────────────
         let weatherTriggers = ["weather", "forecast", "temperature"]
-        if weatherTriggers.contains(where: { text.contains($0) }) {
+        if Self.dominantContains(text, anyOf: weatherTriggers) {
             var params: [String: String] = ["raw": original]
             for locTrigger in ["weather in ", "forecast for ", "weather for "] {
                 if let loc = extractAfter(locTrigger, from: text), !loc.isEmpty {
@@ -233,14 +257,19 @@ class GigiNLUEngine {
         }
 
         // ── FLASHLIGHT ───────────────────────────────────────────────────────
-        if ["turn on flashlight", "flashlight on", "turn on the flashlight",
-            "torch on", "turn on torch", "open flashlight"]
-            .contains(where: { text.contains($0) }) {
+        // Dominance-guarded: utterance must be short enough that the trigger
+        // phrase is the actual request — not embedded in a longer sentence
+        // like "build a shortcut that turns the flashlight on".
+        if Self.dominantContains(text, anyOf: [
+            "turn on flashlight", "flashlight on", "turn on the flashlight",
+            "torch on", "turn on torch", "open flashlight"
+        ]) {
             return GigiIntent(label: "torch_on", confidence: 0.99, params: ["raw": original])
         }
-        if ["turn off flashlight", "flashlight off", "turn off the flashlight",
-            "torch off", "turn off torch", "close flashlight"]
-            .contains(where: { text.contains($0) }) {
+        if Self.dominantContains(text, anyOf: [
+            "turn off flashlight", "flashlight off", "turn off the flashlight",
+            "torch off", "turn off torch", "close flashlight"
+        ]) {
             return GigiIntent(label: "torch_off", confidence: 0.99, params: ["raw": original])
         }
         if text == "flashlight" || text == "torch" {
@@ -282,20 +311,23 @@ class GigiNLUEngine {
         }
 
         // ── TIMER ─────────────────────────────────────────────────────────────
-        if text.contains("timer") || text.contains("countdown") {
+        // Dominance-guarded so "build a shortcut with a 30-second timer that…"
+        // doesn't get fired as set_timer with conf 0.97.
+        if Self.dominantContains(text, anyOf: ["timer", "countdown"]) {
             return GigiIntent(label: "set_timer", confidence: 0.97, params: ["text": original, "raw": original])
         }
         let timerPattern = #"(\d+)\s*(min|sec|second|seconds|minute|minutes|hour|hours)"#
         if (text.contains("set a") || text.contains("start a") || text.contains("start")) &&
-            text.range(of: timerPattern, options: .regularExpression) != nil {
+            text.range(of: timerPattern, options: .regularExpression) != nil &&
+            text.split(separator: " ").count <= 7 {
             return GigiIntent(label: "set_timer", confidence: 0.95, params: ["text": original, "raw": original])
         }
 
         // ── WIFI / BLUETOOTH ──────────────────────────────────────────────────
-        if text.contains("wifi") || text.contains("wi-fi") {
+        if Self.dominantContains(text, anyOf: ["wifi", "wi-fi"]) {
             return GigiIntent(label: "toggle_wifi", confidence: 0.97, params: ["raw": original])
         }
-        if text.contains("bluetooth") {
+        if Self.dominantContains(text, anyOf: ["bluetooth"]) {
             return GigiIntent(label: "toggle_bluetooth", confidence: 0.97, params: ["raw": original])
         }
 

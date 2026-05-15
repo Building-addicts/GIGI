@@ -175,7 +175,7 @@ final class GigiAgentEngine {
             return nil
         }
 
-        GigiDebugLogger.log("GIGI fast-path: \(intent.label) (\(String(format: "%.2f", intent.confidence)))")
+        GigiDebugLogger.log("ROUTE_TIER nlu.match label=\(intent.label) conf=\(String(format: "%.2f", intent.confidence)) — bypassing router")
 
         let speech: String
         var executedTools: [String] = []
