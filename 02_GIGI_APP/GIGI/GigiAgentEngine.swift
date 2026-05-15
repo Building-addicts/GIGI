@@ -68,6 +68,12 @@ final class GigiAgentEngine {
 
     /// Entry point: processes one user utterance end-to-end.
     func process(text: String) async -> AgentResult {
+        // Normalize Unicode smart-punctuation FIRST. iOS keyboards
+        // autoreplace straight apostrophes/quotes with curly equivalents
+        // (U+2019, U+2018, U+201C, U+201D) which silently break every
+        // downstream regex that matches "who's", "X's", etc. Fix once
+        // here so the entire pipeline sees ASCII.
+        let text = Self.normalizeSmartPunctuation(text)
         GigiDebugLogger.log("GIGI agentEngine.process ENTRY: text='\(text.prefix(60))'")
         let mem = GigiConversationMemory.shared
         mem.addUserTurn(text)
@@ -105,8 +111,19 @@ final class GigiAgentEngine {
         // to route() which has the canonical regex + composeShortcut.
         if Self.looksLikeBuildShortcut(text) {
             GigiDebugLogger.log("GIGI Agent: bypass fast-path — text looks like build_shortcut")
-        } else if let fastPath = await deterministicFastPath(for: text) {
-            return fastPath
+        } else {
+            // Memory recall probe: if utterance is a "who is X / what is X /
+            // tell me about X / recall X" query AND we have that X stored,
+            // answer from memory directly. The user's own statement is
+            // authoritative — never delegate to an LLM that may hallucinate
+            // over our facts. On memory miss, fall through to the normal
+            // routing pipeline so the LLM can still answer generic knowledge.
+            if let memHit = await memoryRecallProbe(for: text) {
+                return memHit
+            }
+            if let fastPath = await deterministicFastPath(for: text) {
+                return fastPath
+            }
         }
 
         // === Gate 2: 5-path router (GATE 2 lands here) ===
@@ -125,28 +142,53 @@ final class GigiAgentEngine {
         // Mode gating (GATE 7) is applied inside the router based on
         // UserDefaults("gigi.user.mode").
 
-        // Bug #013 fix (2026-05-12) — history pollution limiter.
-        // Previously passed 6 turns of conversation to the router. With
-        // repetitive interactions ('Send a message to Leo Corte' three times
-        // in a row), Apple FM router started anchoring on the dominant
-        // pattern and proposing it for unrelated follow-up prompts
-        // ('Order a Kebab' → 'Send a message to Leo Corte.' from history
-        // generalization). Now: pass only 3 turns AND deduplicate
-        // consecutive identical messages to break the anchoring.
-        let recent = mem.contents(pruningIfNeeded: true).suffix(3).map { c in
-            let role = c.role == "user" ? "User" : "Assistant"
-            let t = c.parts.compactMap { $0.text }.joined(separator: " ")
-            return "\(role): \(t)"
+        // Structured compact history — replaces flat-text transcript.
+        // Each prior turn is summarized as "Prev #N: user asked <intent>
+        // of '<slot>'", which strips the verbatim assistant response (the
+        // main vector for topic anchoring) while preserving intent/entity
+        // signal. Empty on the first turn.
+        // Replaces the older 6→3 turn flat-text limiter (Bug #013).
+        let conversation = mem.compactHistory(maxTurns: 3)
+
+        // Inject relevant user-profile memory (contacts, prefs, places) ahead
+        // of the conversation transcript. Lets the FM router resolve names
+        // and references that aren't in the recent turns ("call Marco" where
+        // contact:marco was saved a week ago). No-op when the cache is empty
+        // or no key matches the current utterance.
+        let memContext = await GigiMemory.shared.contextString(for: text)
+        let history: String
+        if memContext.isEmpty {
+            history = conversation
+        } else if conversation.isEmpty {
+            history = memContext
+        } else {
+            history = memContext + "\n\n" + conversation
         }
-        // Deduplicate consecutive identical lines (no value to FM router).
-        var deduped: [String] = []
-        for line in recent {
-            if deduped.last != line { deduped.append(line) }
-        }
-        let history = deduped.joined(separator: "\n")
 
         let routeResult = await GigiRequestRouter.shared.route(text: text, history: history)
-        return routeResult.asAgentResult
+        let agentResult = routeResult.asAgentResult
+
+        // Backfill the turn annotation using the most recent router trace
+        // entry (every router branch records into GigiRouterTrace). This
+        // turn now contributes a structured summary to the NEXT router
+        // call's compactHistory(), instead of a verbatim assistant line.
+        if let trace = GigiRouterTrace.shared.recent(count: 1).last {
+            mem.annotateLastTurn(
+                intent: trace.tool,
+                slot: trace.slot,
+                tier: trace.tier,
+                success: !agentResult.isError
+            )
+        } else {
+            mem.annotateLastTurn(
+                intent: agentResult.executedTools.first,
+                slot: nil,
+                tier: nil,
+                success: !agentResult.isError
+            )
+        }
+
+        return agentResult
     }
 
 
@@ -161,11 +203,142 @@ final class GigiAgentEngine {
     /// Mirrors GigiRequestRouter.detectBuildShortcutPattern (same verb set)
     /// but only returns a boolean — the router still runs the canonical
     /// extraction afterward.
+    /// Normalize the user's input by replacing smart punctuation that
+    /// iOS keyboards introduce automatically (curly apostrophes/quotes,
+    /// en/em dashes, NBSPs) with their ASCII equivalents. Idempotent.
+    static func normalizeSmartPunctuation(_ text: String) -> String {
+        var s = text
+        // Apostrophes
+        s = s.replacingOccurrences(of: "\u{2019}", with: "'")  // right single quote
+        s = s.replacingOccurrences(of: "\u{2018}", with: "'")  // left single quote
+        s = s.replacingOccurrences(of: "\u{02BC}", with: "'")  // modifier letter apostrophe
+        // Quotation marks
+        s = s.replacingOccurrences(of: "\u{201C}", with: "\"") // left double quote
+        s = s.replacingOccurrences(of: "\u{201D}", with: "\"") // right double quote
+        // Dashes
+        s = s.replacingOccurrences(of: "\u{2013}", with: "-")  // en dash
+        s = s.replacingOccurrences(of: "\u{2014}", with: "-")  // em dash
+        // Non-breaking space
+        s = s.replacingOccurrences(of: "\u{00A0}", with: " ")
+        // Ellipsis
+        s = s.replacingOccurrences(of: "\u{2026}", with: "...")
+        return s
+    }
+
     static func looksLikeBuildShortcut(_ text: String) -> Bool {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !t.isEmpty else { return false }
         let pattern = #"^(?:build|make|create|compose|design|generate|costruisci|crea|fammi|componi|genera)\s+(?:\w+\s+){0,2}(?:short ?cut|scorciatoia)s?\b"#
         return t.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    // MARK: - Memory recall probe
+    //
+    // Authoritative-memory short-circuit: when the user asks "who is Marco" /
+    // "what is the wifi password" / "tell me about Sakura" and that key
+    // exists in GigiMemory, return the stored value directly. Without this,
+    // the FM router would route to delegate_local (Ollama) which doesn't
+    // see the memory and hallucinates a generic encyclopaedic answer.
+    //
+    // Cache miss → return nil, let the router handle it as a knowledge query.
+
+    /// Lightweight heuristic: does the utterance look like a question or
+    /// recall-shaped request? Used as a guard before the content-match
+    /// fallback so we don't accidentally recall on imperative statements
+    /// like "call Marco" (which mentions Marco but is an action, not a
+    /// recall).
+    private static func looksLikeRecallQuestion(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return false }
+        if t.hasSuffix("?") { return true }
+        let questionStarters = [
+            "what ", "what's ", "whats ", "where ", "where's ", "wheres ",
+            "who ", "who's ", "whos ", "when ", "when's ", "whens ",
+            "why ", "why's ", "whys ", "how ", "how's ", "hows ",
+            "which ", "whose ",
+            "tell me ", "show me", "remind me ", "do you know ", "do you remember ",
+            "che ", "chi ", "cosa ", "cos'è ", "cose ", "dove ", "quando ",
+            "perché ", "perche ", "come ", "dimmi ", "ricordami "
+        ]
+        return questionStarters.contains { t.hasPrefix($0) }
+    }
+
+    private func memoryRecallProbe(for text: String) async -> AgentResult? {
+        let intent = GigiNLUEngine.shared.classify(text)
+        var query: String
+        var matchedValue: String?
+        var matchedKey: String?
+
+        // Path 1 — NLU classified as `recall` (canonical triggers like
+        // "who is", "what's", "tell me about"). Do the canonical lookup.
+        if intent.label == "recall" {
+            query = (intent.params["query"] ?? intent.params["raw"] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "?.,;:!"))
+            guard !query.isEmpty else { return nil }
+            matchedValue = await GigiMemory.shared.recallResolving(query)
+            if matchedValue == nil {
+                GigiDebugLogger.log("GIGI Agent: memory-probe MISS (NLU path) for '\(query)' — trying entity match")
+            }
+        } else {
+            query = text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "?.,;:!"))
+        }
+
+        // Path 2 — Entity-aware fallback. If the utterance looks like a
+        // question and contains tokens that match a known cache key, fire
+        // recall regardless of NLU classification. This catches typos and
+        // unanticipated phrasings ("what my password", "tell me the wifi
+        // password", "remind me my netflix password").
+        if matchedValue == nil, Self.looksLikeRecallQuestion(text) {
+            if let hit = await GigiMemory.shared.findByContentMatch(in: text) {
+                matchedKey = hit.key
+                matchedValue = hit.value
+                // Use the key suffix as the query for nice speech output.
+                let suffix = hit.key.split(separator: ":", maxSplits: 1).last.map(String.init) ?? hit.key
+                query = suffix
+                GigiDebugLogger.log("GIGI Agent: memory-probe HIT (entity match) key='\(hit.key)'")
+            }
+        }
+
+        guard let value = matchedValue else {
+            GigiDebugLogger.log("GIGI Agent: memory-probe final MISS for '\(query)' — falling through to router")
+            return nil
+        }
+        _ = matchedKey // referenced for clarity above
+
+        // Flip first-person to second-person on BOTH sides so GIGI speaks
+        // back coherently: user asked "my password" → GIGI says "your
+        // password is hi124", not "my password is hi124".
+        let subjectFlipped = GigiMemory.flipFirstPerson(query)
+        let subjectCap = subjectFlipped.prefix(1).uppercased() + subjectFlipped.dropFirst()
+        let valueFlipped = GigiMemory.flipFirstPerson(value)
+        var speech = "\(subjectCap) is \(valueFlipped)."
+        #if DEBUG
+        speech = "[memory recall 1.00 '\(query)']\n" + speech
+        #endif
+
+        GigiDebugLogger.log("GIGI Agent: memory-probe HIT '\(query)' → '\(value.prefix(40))'")
+        GigiRouterTrace.shared.record(
+            utterance: text,
+            tier: "memory",
+            tool: "recall",
+            confidence: 1.0,
+            slot: query
+        )
+        GigiConversationMemory.shared.annotateLastTurn(
+            intent: "recall", slot: query, tier: "memory", success: true
+        )
+        GigiConversationMemory.shared.addModelSpeech(speech)
+        return AgentResult(
+            speech:          speech,
+            executedTools:   ["recall"],
+            isFollowUp:      false,
+            costEstimate:    0,
+            requiresConfirm: nil,
+            isError:         false
+        )
     }
 
     private func deterministicFastPath(for text: String) async -> AgentResult? {
@@ -195,6 +368,17 @@ final class GigiAgentEngine {
             executedTools = [intent.label]
         }
 
+        let nluSlot = intent.params["contact"] ?? intent.params["query"] ?? intent.params["text"]
+        GigiRouterTrace.shared.record(
+            utterance: text,
+            tier: "nlu_fast",
+            tool: intent.label,
+            confidence: Float(intent.confidence),
+            slot: nluSlot
+        )
+        GigiConversationMemory.shared.annotateLastTurn(
+            intent: intent.label, slot: nluSlot, tier: "nlu_fast", success: true
+        )
         GigiConversationMemory.shared.addModelSpeech(speech)
         return AgentResult(
             speech:          speech,

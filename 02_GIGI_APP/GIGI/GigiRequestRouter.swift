@@ -134,6 +134,10 @@ final class GigiRequestRouter {
                 confidence: 1.0,
                 slot: registered.name
             ) + speech
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "alias",
+                tool: "run_shortcut", confidence: 1.0, slot: registered.name
+            )
             GigiConversationMemory.shared.addModelSpeech(finalSpeech)
             return .actionInvoked(speech: finalSpeech, tool: "run_shortcut")
         }
@@ -162,6 +166,10 @@ final class GigiRequestRouter {
                 confidence: 1.0,
                 slot: mathExpression
             ) + speech
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "regex",
+                tool: "calculate_math", confidence: 1.0, slot: mathExpression
+            )
             GigiConversationMemory.shared.addModelSpeech(finalSpeech)
             return .actionInvoked(speech: finalSpeech, tool: "calculate_math")
         }
@@ -185,6 +193,10 @@ final class GigiRequestRouter {
                 confidence: 1.0,
                 slot: description
             ) + speech
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "regex",
+                tool: "build_shortcut", confidence: 1.0, slot: description, path: "harness"
+            )
             GigiConversationMemory.shared.addModelSpeech(withPrefix)
             return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
         }
@@ -213,6 +225,10 @@ final class GigiRequestRouter {
                 confidence: 1.0,
                 slot: shortcutName
             ) + speech
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "regex",
+                tool: "run_shortcut", confidence: 1.0, slot: shortcutName
+            )
             GigiConversationMemory.shared.addModelSpeech(finalSpeech)
             return .actionInvoked(speech: finalSpeech, tool: "run_shortcut")
         }
@@ -246,6 +262,11 @@ final class GigiRequestRouter {
                     confidence: match.confidence,
                     slot: match.slot
                 ) + speech
+                GigiRouterTrace.shared.record(
+                    utterance: text, tier: "semantic",
+                    tool: "build_shortcut", confidence: match.confidence,
+                    slot: match.slot, path: "harness"
+                )
                 GigiConversationMemory.shared.addModelSpeech(withPrefix)
                 return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
             } else {
@@ -261,6 +282,11 @@ final class GigiRequestRouter {
                     confidence: match.confidence,
                     slot: match.slot
                 ) + speech
+                GigiRouterTrace.shared.record(
+                    utterance: text, tier: "semantic",
+                    tool: match.toolName, confidence: match.confidence,
+                    slot: match.slot
+                )
                 GigiConversationMemory.shared.addModelSpeech(finalSpeech)
                 return .actionInvoked(speech: finalSpeech, tool: match.toolName)
             }
@@ -269,6 +295,11 @@ final class GigiRequestRouter {
         // Mode gating (GATE 7) — read the selected operating mode and use
         // it to disable paths upfront. `.auto` (no mode set) keeps all paths.
         let mode = currentMode()
+
+        // Latency anchor for the appleFM/fallback branch — measures from
+        // the moment we commit to invoking the FM router (after every
+        // tier-0 intercept has missed) until dispatch is decided.
+        let fmStart = Date()
 
         // 1. Decide which router to use: Apple FM if available + mode allows
         //    Path 2; otherwise GigiFallbackRouter (rule-based keyword matching).
@@ -310,15 +341,86 @@ final class GigiRequestRouter {
             effectivePath = "delegate_local"
         }
 
+        // 2.55 Bug #015 fix (2026-05-15) — fact-assertion override.
+        // Apple FM sometimes routes bare fact assertions ("Sergio is my
+        // brother", "My favorite color is blue") to delegate_local, where
+        // Ollama just generates a conversational "Got it" without
+        // persisting anything. Detect the pattern and force native_tool
+        // remember with slots extracted from the regex match.
+        if let (subject, value) = Self.detectFactAssertion(in: text),
+           effectivePath == "delegate_local" || effectivePath == "ask_clarification" {
+            GigiDebugLogger.log("GIGI Router: fact-assertion OVERRIDE — \(effectivePath) → bridge(remember). subject='\(subject)' value='\(value)'")
+            // Dispatch directly via the bridge — DON'T re-route through
+            // dispatchNativeTool, which would call Apple FM tool-calling
+            // (Path A) and re-extract the subject from the raw text.
+            // FM's re-extraction is unstable ("My favorite movie" can
+            // collapse to just "movie"), which produces a save key that
+            // doesn't match the subsequent recall query. Keeping the
+            // regex-extracted slots is what makes round-trip work.
+            let intent = GigiIntent(
+                label: "remember",
+                confidence: 1.0,
+                params: ["contact": subject, "body": value, "raw": text]
+            )
+            let speech = await GigiActionBridge.shared.execute(intent)
+            let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Got it. I'll remember that."
+                : speech
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "regex-override",
+                tool: "remember", confidence: 1.0, slot: subject
+            )
+            GigiConversationMemory.shared.annotateLastTurn(
+                intent: "remember", slot: subject, tier: "regex-override", success: true
+            )
+            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+            return .actionInvoked(speech: finalSpeech, tool: "remember")
+        }
+
+        // 2.6 Bug #014 fix (2026-05-15) — ask_clarification downgrade.
+        // After turn-annotation refactor, Apple FM occasionally bounces
+        // open-knowledge questions ("Who is Einstein?") to
+        // ask_clarification with low confidence because it isn't sure
+        // whether the entity is a contact or a public figure. Memory has
+        // already been probed upstream (GigiAgentEngine.memoryRecallProbe)
+        // and missed — so the safest fallback is delegate_local. Ollama
+        // can always answer who/what/why/how knowledge queries.
+        if effectivePath == "ask_clarification"
+            && decision.confidence < 0.75
+            && Self.looksLikeOpenKnowledgeQuery(text) {
+            GigiDebugLogger.log("GIGI Router: ask_clarification DOWNGRADED to delegate_local — open knowledge query pattern (\(text.prefix(40)))")
+            effectivePath = "delegate_local"
+        }
+
         // Bug #012 fix (2026-05-12) — telemetry to harness Live Monitor.
         // For every router decision, fire-and-forget a telemetry event so the
         // live monitor at localhost:7777/live.html shows what the iPhone is
         // doing even when the path stays on-device. No-op when not paired.
+        let fmElapsedMs = Int(Date().timeIntervalSince(fmStart) * 1000)
         harness.postTelemetry(
             type: "router_decision",
             path: effectivePath,
             primaryAction: decision.primaryAction,
-            userText: text
+            userText: text,
+            elapsedMs: fmElapsedMs
+        )
+        // Pick a representative slot for the trace summary — first non-empty
+        // among contact/taskText/body/destination/duration.
+        let traceSlot: String? = {
+            let s = decision.slots
+            for v in [s.contact, s.taskText, s.body, s.destination, s.duration] where !v.isEmpty {
+                return v
+            }
+            return nil
+        }()
+        GigiRouterTrace.shared.record(
+            utterance: text,
+            tier: applefmAvailable && mode.allowsAppleFMRouter ? "appleFM" : "fallback",
+            tool: decision.primaryAction.isEmpty ? effectivePath : decision.primaryAction,
+            confidence: Float(decision.confidence),
+            slot: traceSlot,
+            path: effectivePath,
+            latencyMs: fmElapsedMs
         )
 
         // 3. Dispatch.
@@ -730,6 +832,83 @@ final class GigiRequestRouter {
         return webVerbs.contains(where: { lower.contains($0) })
             || codeVerbs.contains(where: { lower.contains($0) })
             || imageVerbs.contains(where: { lower.contains($0) })
+    }
+
+    /// Bug #014 helper: detect open-knowledge question patterns that
+    /// should NEVER end at ask_clarification — Ollama can always answer
+    /// them, and bouncing back "Who is Einstein?" verbatim is the worst
+    /// UX. Patterns are intentionally narrow: prefix-anchored question
+    /// stem + a copula or interrogative verb, so we don't accidentally
+    /// match imperatives like "explain to me how to set a timer".
+    /// Bug #015 helper: detect a bare "X is/are/= Y" fact assertion in EN
+    /// or IT. Returns (subject, value) split on the copula. Used to
+    /// override Apple FM's tendency to route assertions to delegate_local
+    /// (which can't persist).
+    ///
+    /// Detection avoids common interrogatives: leading who/what/where/
+    /// when/why/how/whose are NOT assertions — they're questions.
+    static func detectFactAssertion(in text: String) -> (subject: String, value: String)? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let lower = t.lowercased()
+        // Bail if it's a question — these start with WH-words.
+        let interrogativePrefixes = [
+            "who ", "who's ", "whos ",
+            "what ", "what's ", "whats ",
+            "where ", "where's ", "wheres ",
+            "when ", "when's ", "whens ",
+            "why ", "why's ", "whys ",
+            "how ", "how's ", "hows ",
+            "which ", "whose ",
+            "chi ", "che ", "cosa ", "cos'è ", "cose ", "dove ", "quando ", "perché ", "perche ", "come "
+        ]
+        if interrogativePrefixes.contains(where: { lower.hasPrefix($0) }) { return nil }
+        if lower.hasSuffix("?") { return nil }
+
+        // Try copulas in priority order. The first three are unambiguous
+        // EN/IT fact-assertion copulas; "=" is an explicit assignment.
+        let copulas = [
+            " is ", " are ", " was ", " were ",
+            " è ", " e' ",
+            " sono ", " sei ",
+            " means ", " equals ",
+            " = "
+        ]
+        for sep in copulas {
+            guard let range = t.range(of: sep, options: .caseInsensitive) else { continue }
+            let left = String(t[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let right = String(t[range.upperBound...]).trimmingCharacters(in: CharacterSet.whitespaces.union(.punctuationCharacters))
+            guard !left.isEmpty, !right.isEmpty,
+                  left.count <= 60, right.count <= 200 else { continue }
+            // Discard if the left side is an interrogative pronoun ("who is X" passed bail above only because we matched " is "; defend again).
+            if interrogativePrefixes.contains(where: { left.lowercased().hasPrefix($0.trimmingCharacters(in: .whitespaces) + " ") || left.lowercased() == $0.trimmingCharacters(in: .whitespaces) }) {
+                return nil
+            }
+            return (subject: left, value: right)
+        }
+        return nil
+    }
+
+    static func looksLikeOpenKnowledgeQuery(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Each WH-stem accepts:
+        //   - full form: "who is", "who are", "who was", "who were"
+        //   - contraction: "who's"
+        //   - typo without apostrophe: "whos"
+        let patterns = [
+            #"^who(?:\s+(?:is|are|was|were)|'s|s)\s+"#,
+            #"^what(?:\s+(?:is|are|was|were|do|does|did)|'s|s)\s+"#,
+            #"^explain\s+"#,
+            #"^how(?:\s+(?:does|do|did|to|can|could)|'s|s)\s+"#,
+            #"^why(?:\s+(?:is|are|was|were|do|does|did)|'s|s)\s+"#,
+            #"^tell\s+me\s+about\s+"#,
+            #"^when(?:\s+(?:was|were|did|is|are|do|does)|'s|s)\s+"#,
+            #"^where(?:\s+(?:is|are|was|were|did|do|does)|'s|s)\s+"#
+        ]
+        for p in patterns {
+            if t.range(of: p, options: .regularExpression) != nil { return true }
+        }
+        return false
     }
 
     /// Bug #002 helper: detect Claude CLI authentication errors that the

@@ -64,14 +64,19 @@ class GigiActionBridge {
 
     private func ensureReminderAccess() async -> Bool {
         var status = EKEventStore.authorizationStatus(for: .reminder)
+        GigiDebugLogger.log("Reminder auth (pre): \(status.rawValue)")
         if status == .notDetermined {
             let granted = await withCheckedContinuation { continuation in
-                eventStore.requestFullAccessToReminders { granted, _ in
+                eventStore.requestFullAccessToReminders { granted, err in
+                    if let err {
+                        GigiDebugLogger.log("requestFullAccessToReminders error: \(err.localizedDescription)")
+                    }
                     continuation.resume(returning: granted)
                 }
             }
             guard granted else { return false }
             status = EKEventStore.authorizationStatus(for: .reminder)
+            GigiDebugLogger.log("Reminder auth (post): \(status.rawValue)")
         }
         return status == .fullAccess
     }
@@ -318,6 +323,41 @@ class GigiActionBridge {
             let time       = intent.params["time"]       ?? ""
             let guests     = Int(intent.params["guests"] ?? "2") ?? 2
             return await bookRestaurant(restaurant: restaurant, time: time, guests: guests)
+
+        case "remember":
+            // Persists user-asserted facts ("Marco is my brother", "wifi
+            // password = hello123") to GigiMemory. Previously this case was
+            // missing so the NLU fast-path returned a fake "Got it" via
+            // localSpeech fallback while never actually saving anything.
+            let contact = intent.params["contact"] ?? ""
+            let rawBody = intent.params["body"]
+                ?? intent.params["text"]
+                ?? intent.params["raw"]
+                ?? ""
+            guard let (key, value) = GigiMemory.parseRememberKeyValue(contact: contact, body: rawBody) else {
+                return ""
+            }
+            await GigiMemory.shared.remember(key: key, value: value)
+            let subjectRaw = key.contains(":")
+                ? String(key.split(separator: ":", maxSplits: 1).last ?? Substring(key))
+                : key
+            // Flip first-person to second-person — GIGI speaks from its
+            // own perspective ("your password is X", not "my password is X").
+            let subject = GigiMemory.flipFirstPerson(subjectRaw)
+            let valueSpoken = GigiMemory.flipFirstPerson(value)
+            return "Got it. I'll remember that \(subject) is \(valueSpoken)."
+
+        case "recall":
+            // Direct memory lookup. Returns the stored value verbatim — caller
+            // is responsible for natural-language formatting if needed. Empty
+            // string on miss so the router can fall through to FM/Ollama for
+            // generic knowledge queries.
+            let query = intent.params["query"]
+                ?? intent.params["contact"]
+                ?? intent.params["raw"]
+                ?? ""
+            guard !query.isEmpty else { return "" }
+            return await GigiMemory.shared.recallResolving(query) ?? ""
 
         default:
             return ""
@@ -2085,19 +2125,36 @@ class GigiActionBridge {
     // MARK: - Reminder
 
     func createReminder(text: String) async -> String {
+        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+            GigiDebugLogger.log("createReminder: empty title after trim — input was '\(text)'")
+            return "What should I remind you about?"
+        }
         guard await ensureReminderAccess() else {
             return "Enable Reminders access in Settings."
         }
+
+        // defaultCalendarForNewReminders() can be nil on fresh installs
+        // or when no iCloud/Local Reminders source is configured.
+        let calendar: EKCalendar? = eventStore.defaultCalendarForNewReminders()
+            ?? eventStore.calendars(for: .reminder).first(where: { $0.allowsContentModifications })
+        guard let cal = calendar else {
+            GigiDebugLogger.log("createReminder: no writable Reminders calendar available")
+            return "Open the Reminders app once to set up a list, then ask me again."
+        }
+
         let reminder = EKReminder(eventStore: eventStore)
-        reminder.title    = text
-        reminder.calendar = eventStore.defaultCalendarForNewReminders()
+        reminder.title    = title
+        reminder.calendar = cal
         do {
             try eventStore.save(reminder, commit: true)
             await MainActor.run {
-                GigiSmartOrchestrator.shared.showBanner("📋 Reminder · \(text.prefix(50))")
+                GigiSmartOrchestrator.shared.showBanner("📋 Reminder · \(title.prefix(50))")
             }
-            return "Reminder set: \(text)"
+            return "Reminder set: \(title)"
         } catch {
+            let ns = error as NSError
+            GigiDebugLogger.log("createReminder save failed: \(error.localizedDescription) | domain=\(ns.domain) code=\(ns.code)")
             return "Couldn't save the reminder."
         }
     }

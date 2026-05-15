@@ -771,6 +771,91 @@ struct FMTranslateTextTool: Tool {
     }
 }
 
+// MARK: - Memory tools (remember / recall)
+
+/// Stores a user-asserted fact in long-term memory. Apple FM should call
+/// this for any utterance that asserts a relationship or value, INCLUDING
+/// utterances that don't use the verb "remember" explicitly — the model is
+/// expected to recognize fact-shapes:
+///   "Marco is my brother"
+///   "Mio fratello è Marco"
+///   "My favorite color is blue"
+///   "The wifi password is hello123"
+/// In all of these, the FM extracts subject + value + an inferred category.
+@available(iOS 26.0, *)
+struct FMRememberTool: Tool {
+    let name = "remember"
+    let description = "Store a fact the user just told GIGI (name, preference, password, relationship, place). Call this whenever the user makes an assertion the assistant should retain for future turns, even when the verb 'remember' is not used. Examples: 'Marco is my brother', 'My favorite color is blue', 'The wifi password is hello123', 'Mom lives at Via Roma 5'."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Subject of the assertion — the entity being described. Usually a name, role, or thing. Lowercase if it's a generic noun. Examples: 'Marco' (from 'Marco is my brother'), 'wifi password' (from 'the wifi password is hello123'), 'favorite color' (from 'my favorite color is blue'). Always provide.")
+        var subject: String
+
+        @Guide(description: "Verbatim value or relationship being stored. Strip framing words. Examples: 'my brother' (from 'Marco is my brother'), 'hello123', 'blue'. Always provide.")
+        var value: String
+
+        @Guide(description: "Category hint: contact (a person), pref (a preference / setting), place (an address / location), routine (a recurring time/schedule), person (a name resolution). Empty if unsure — backend will infer.")
+        var category: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        let subject = arguments.subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = arguments.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !subject.isEmpty, !value.isEmpty else {
+            return "I need both a subject and a value to remember."
+        }
+        let cat = arguments.category.trimmingCharacters(in: .whitespacesAndNewlines)
+        // parseRememberKeyValue with non-empty `contact` returns `body`
+        // verbatim as the value — so pass JUST the value, NOT
+        // "subject is value". Otherwise we store "Batta is my brother"
+        // instead of "my brother" and recall produces duplicate phrasing
+        // like "Batta is Batta is my brother".
+        guard let (key, parsedValue) = GigiMemory.parseRememberKeyValue(contact: subject, body: value) else {
+            return ""
+        }
+        await GigiMemory.shared.remember(key: key, value: parsedValue, category: cat.isEmpty ? nil : cat)
+        let displayRaw = key.contains(":")
+            ? String(key.split(separator: ":", maxSplits: 1).last ?? Substring(key))
+            : key
+        let display = GigiMemory.flipFirstPerson(displayRaw)
+        let valueSpoken = GigiMemory.flipFirstPerson(parsedValue)
+        return "Got it. I'll remember that \(display) is \(valueSpoken)."
+    }
+}
+
+/// Looks up a previously-stored fact. Apple FM should call this for any
+/// utterance that asks about a known entity — explicit recall verbs are
+/// not required:
+///   "Who is Marco" / "Who's Marco" / "Whos Marco"
+///   "What is the wifi password"
+///   "Chi è Marco"
+///   "What did I tell you about Marco"
+/// On cache miss the tool returns an empty string so the router falls
+/// back to delegate_local for generic knowledge.
+@available(iOS 26.0, *)
+struct FMRecallTool: Tool {
+    let name = "recall"
+    let description = "Retrieve a fact the user previously asked GIGI to remember. Call this whenever the user asks about a known entity — name, password, preference, place, relationship — regardless of phrasing. Includes 'who is X', 'who's X', 'what's the X', 'chi è X', 'tell me about X', 'remind me what X is'."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Entity to recall — strip filler words and trailing punctuation. Examples: 'marco' (from 'Who is Marco?'), 'wifi password' (from 'what is the wifi password'), 'favorite color' (from 'my favorite color is what'). Lowercase. Always provide.")
+        var subject: String
+    }
+
+    @MainActor
+    func call(arguments: Arguments) async -> String {
+        let q = arguments.subject
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?.,;:!"))
+        guard !q.isEmpty else { return "" }
+        return await GigiMemory.shared.recallResolving(q) ?? ""
+    }
+}
+
 // MARK: - Registry
 
 @available(iOS 26.0, *)
@@ -816,7 +901,10 @@ enum GigiFoundationToolRegistry {
             FMCreateCalendarEventTool(),
             FMAddToNoteTool(),
             // Phase 2 — AI-generated Shortcuts (Cherri pipeline)
-            FMBuildShortcutTool()
+            FMBuildShortcutTool(),
+            // Memory tools — assertion + lookup of user-stored facts
+            FMRememberTool(),
+            FMRecallTool()
         ]
     }
 
@@ -850,7 +938,10 @@ enum GigiFoundationToolRegistry {
         "create_calendar_event",
         "add_to_note",
         // Phase 2 — AI-generated Shortcuts
-        "build_shortcut"
+        "build_shortcut",
+        // Memory tools — fact assertion + lookup
+        "remember",
+        "recall"
     ]
 }
 

@@ -46,14 +46,18 @@ final class GigiSemanticRouter {
     // MARK: - Tuning
 
     /// Cosine similarity threshold above which we trust the semantic match.
-    /// 0.55 calibrated on NLEmbedding word vectors (inflated vs sentence
-    /// embeddings — see GigiVectorStore notes).
-    private static let confidenceThreshold: Float = 0.55
+    /// Raised to 0.80 (from 0.55) on 2026-05-15 after the semantic router
+    /// kept mis-firing on bare assertions like "Marco is my brother"
+    /// (→ translate_text 0.68) or recall queries lacking explicit verbs.
+    /// At 0.80 only near-canonical phrasings (close to a hand-crafted
+    /// trigger) bypass Apple FM. Everything else falls through to FM
+    /// which has full-sentence semantics + memory context.
+    private static let confidenceThreshold: Float = 0.80
 
     /// Gap between top-1 and top-2 required to avoid ambiguous matches.
-    /// If top-1 - top-2 < 0.05, we don't trust the match (semantically
-    /// ambiguous between two tools — let Apple FM decide).
-    private static let topGapThreshold: Float = 0.05
+    /// Raised to 0.10 (from 0.05) for the same reason — keep only very
+    /// unambiguous matches as the semantic-tier intercepts.
+    private static let topGapThreshold: Float = 0.10
 
     // MARK: - State
 

@@ -196,7 +196,45 @@ final class GigiFoundationAgent {
         5. reject — The request is illegal, harmful, or pure nonsense ("buy bitcoin", "hack my neighbor's wifi", "asdf"). Politely refuse in directSpeech in 1 sentence.
 
         CANONICAL ACTIONS for native_tool (primaryAction must be exactly one of these):
-        set_timer, set_alarm, set_reminder, send_message, make_call, facetime, navigate, play_music, open_app, weather, read_calendar, find_free_slot, read_email, homekit_on, homekit_off.
+        set_timer, set_alarm, set_reminder, send_message, make_call, facetime, navigate, play_music, open_app, weather, read_calendar, find_free_slot, read_email, homekit_on, homekit_off, remember, recall.
+
+        MEMORY (remember / recall) — HIGHEST PRIORITY RULES, override all others below:
+
+        RULE-R1 (assertion → remember). If the user's input is a STATEMENT of fact — pattern "<subject> is/are <value>", "<subject> = <value>", "my/mio <subject> is/è <value>", possessive description of a person/place/preference — you MUST pick path=native_tool, primaryAction=remember. Set slots.contact=<subject>, slots.body=<value>. NEVER pick delegate_local for fact assertions — Ollama cannot persist anything, it will only fake a confirmation.
+
+        RULE-R2 (entity question → recall or delegate_local, NEVER ask_clarification). For inputs starting with who/what/whose/where/when/why + a copula or contraction (who's, what's, etc.) followed by a single entity:
+            - If the entity (or its lowercase) appears in the "User memory:" block of the history → path=native_tool, primaryAction=recall, slots.contact=<entity>. Memory is AUTHORITATIVE.
+            - Otherwise → path=delegate_local with the user's question as delegatePrompt.
+            - NEVER ask_clarification for who/what/when/where/why/how questions. They are answerable.
+
+        EXPLICIT FEW-SHOT (learn from these — the slots field uses the schema's named keys):
+
+        Input: "Marco is my brother"
+        Decision: path=native_tool, primaryAction="remember", slots.contact="Marco", slots.body="my brother", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion".
+
+        Input: "Sergio is my brother"
+        Decision: path=native_tool, primaryAction="remember", slots.contact="Sergio", slots.body="my brother", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion".
+
+        Input: "My favorite restaurant is Sakura"
+        Decision: path=native_tool, primaryAction="remember", slots.contact="favorite restaurant", slots.body="Sakura", complexity=5, capabilities=[], confidence=0.9, reason="preference assertion".
+
+        Input: "Mio fratello è Marco"
+        Decision: path=native_tool, primaryAction="remember", slots.contact="fratello", slots.body="Marco", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion (IT)".
+
+        Input: "The wifi password is hello123"
+        Decision: path=native_tool, primaryAction="remember", slots.contact="wifi password", slots.body="hello123", complexity=5, capabilities=[], confidence=0.95, reason="credential assertion".
+
+        Input: "Who's Marco?" (User memory contains "marco = my brother")
+        Decision: path=native_tool, primaryAction="recall", slots.contact="Marco", complexity=5, capabilities=[], confidence=0.95, reason="memory recall hit".
+
+        Input: "Chi è Sergio" (User memory contains "sergio = my brother")
+        Decision: path=native_tool, primaryAction="recall", slots.contact="Sergio", complexity=5, capabilities=[], confidence=0.95, reason="memory recall (IT)".
+
+        Input: "Who is Einstein?" (User memory does NOT contain einstein)
+        Decision: path=delegate_local, delegatePrompt="Who is Albert Einstein?", complexity=20, capabilities=[], confidence=0.9, reason="general knowledge, not in memory".
+
+        Input: "What is photosynthesis"
+        Decision: path=delegate_local, delegatePrompt="What is photosynthesis?", complexity=25, capabilities=[], confidence=0.9, reason="general knowledge".
 
         CAPABILITIES (requiredCapabilities — a list of strings, empty for native_tool):
         - browser: needs a real web browser to navigate, click, scrape live data

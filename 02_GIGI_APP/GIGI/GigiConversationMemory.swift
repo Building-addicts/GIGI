@@ -21,6 +21,29 @@ struct GigiMessage: Identifiable, Equatable {
     }
 }
 
+// MARK: - TurnAnnotation
+//
+// Structured per-turn record paired with each user utterance in
+// `contentsArray`. Built progressively: addUserTurn() appends a placeholder,
+// annotateLastTurn() fills in the routing outcome once the router has
+// decided. Used by `compactHistory(maxTurns:)` to produce a compressed
+// summary that the FM router consumes instead of the raw transcript.
+//
+// Why this exists: passing flat-text history ("User: Who is Marco /
+// Assistant: Marco is my brother") to Apple FM caused topic anchoring —
+// the next turn ("Who is Einstein") inherited "Marco/Marcus" context and
+// got mis-answered. Structured summaries strip the verbatim assistant
+// response (the topic-carrier) while preserving intent + entity signal.
+
+struct TurnAnnotation: Codable {
+    let utterance: String
+    var intent: String?       // tool/action dispatched (e.g. "recall", "make_call")
+    var slot: String?         // primary extracted slot (e.g. "marco", "tesla news")
+    var tier: String?         // memory | nlu_fast | regex | semantic | appleFM | fallback
+    var success: Bool         // did the dispatch produce a non-empty, non-error result
+    let timestamp: Date
+}
+
 // MARK: - GigiConversationMemory
 
 @MainActor
@@ -33,6 +56,9 @@ final class GigiConversationMemory: ObservableObject {
 
     // Gemini multi-turn history (native GigiContent[])
     private var contentsArray: [GigiContent] = []
+
+    // Structured per-turn metadata, parallel to user turns in contentsArray.
+    private var turnAnnotations: [TurnAnnotation] = []
 
     // Session persistence
     private let udKey          = "gigi.session.contents"
@@ -50,10 +76,17 @@ final class GigiConversationMemory: ObservableObject {
     private var taskExtractionTask: Task<Void, Never>?
 
     private init() {
-        // Auto-restore recent session on launch
-        if let restored = loadIfRecentSession() {
-            contentsArray = restored
-        }
+        // Auto-restore disabled: when the app is killed and reopened, the
+        // UI starts empty but the LLM-facing `contentsArray` used to be
+        // restored from UserDefaults (1h TTL). That hidden history caused
+        // the FM router and Ollama to anchor on stale topics (e.g. asking
+        // "Who is Einstein?" right after a Marco conversation returned an
+        // answer about Marco). Stored *facts* still survive via GigiMemory
+        // disk persistence — the conversation transcript does not.
+        //
+        // If brief-backgrounding survival is needed later, restore as a
+        // separate "soft history" surface that's NOT included in
+        // `contents()` returned to the LLM.
     }
 
     // MARK: - UI helpers (backward compat)
@@ -139,6 +172,7 @@ final class GigiConversationMemory: ObservableObject {
     func clear() {
         messages.removeAll()
         contentsArray.removeAll()
+        turnAnnotations.removeAll()
         UserDefaults.standard.removeObject(forKey: udKey)
         UserDefaults.standard.removeObject(forKey: udTimestampKey)
     }
@@ -155,8 +189,66 @@ final class GigiConversationMemory: ObservableObject {
     // MARK: - Native Gemini content API (v3 path)
 
     /// Call at the START of each agent turn, before invoking agentLoop.
+    /// Also appends a placeholder TurnAnnotation that the orchestrator
+    /// fills in via `annotateLastTurn(...)` once routing has decided.
     func addUserTurn(_ text: String) {
         contentsArray.append(.user(text))
+        turnAnnotations.append(TurnAnnotation(
+            utterance: text,
+            intent: nil,
+            slot: nil,
+            tier: nil,
+            success: false,
+            timestamp: Date()
+        ))
+        // Keep parallel array bounded — drop the oldest if we exceed 2× UI maxTurns.
+        if turnAnnotations.count > maxTurns * 2 {
+            turnAnnotations.removeFirst(turnAnnotations.count - maxTurns * 2)
+        }
+    }
+
+    /// Update the most-recent user turn's annotation with the routing
+    /// outcome. Safe to call multiple times — last call wins (so a late
+    /// post-dispatch annotation overrides an early pre-dispatch one).
+    /// No-op if there is no user turn yet.
+    func annotateLastTurn(intent: String?, slot: String?, tier: String?, success: Bool) {
+        guard let last = turnAnnotations.indices.last else { return }
+        if let v = intent  { turnAnnotations[last].intent  = v }
+        if let v = slot    { turnAnnotations[last].slot    = v }
+        if let v = tier    { turnAnnotations[last].tier    = v }
+        turnAnnotations[last].success = success
+    }
+
+    /// Compressed structured summary of the last `maxTurns` user turns.
+    /// Replaces raw-transcript history when feeding the FM router: the
+    /// verbatim assistant response is the main cause of topic anchoring,
+    /// so we drop it and surface only the intent/slot signal.
+    ///
+    /// Format (one line per turn, oldest first):
+    ///   "Prev #N: user asked <intent> of '<slot>' [(failed)]"
+    /// Falls back to a truncated raw utterance for turns not yet annotated.
+    /// Returns empty string when there are no prior turns.
+    func compactHistory(maxTurns: Int = 3) -> String {
+        guard maxTurns > 0, !turnAnnotations.isEmpty else { return "" }
+        // Skip the very last entry — that's the CURRENT turn the router
+        // is about to decide. We summarize what happened BEFORE it.
+        let prior = turnAnnotations.dropLast()
+        guard !prior.isEmpty else { return "" }
+        let recent = Array(prior.suffix(maxTurns))
+        let lines: [String] = recent.enumerated().map { idx, ann in
+            let position = recent.count - idx   // 1 = most recent prior
+            if let intent = ann.intent, !intent.isEmpty {
+                let slotPart = (ann.slot?.isEmpty == false) ? " of '\(ann.slot!)'" : ""
+                let successPart = ann.success ? "" : " (failed)"
+                return "Prev #\(position): user asked \(intent)\(slotPart)\(successPart)"
+            }
+            // Not yet annotated — fall back to a short verbatim form.
+            let truncated = ann.utterance.count > 60
+                ? String(ann.utterance.prefix(60)) + "…"
+                : ann.utterance
+            return "Prev #\(position): user said '\(truncated)'"
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Call when Gemini responds with function calls.

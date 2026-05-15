@@ -456,13 +456,33 @@ class GigiNLUEngine {
         }
 
         // ── MEMORY ────────────────────────────────────────────────────────────
+        // Permissive: "remember X is Y" / "remember mom = Giovanna" — no "that"
+        // required. Requires a copula (is/are/=/equals/means) so we don't
+        // catch every "remember to ..." (those are reminders, handled earlier).
+        let rememberCopula = #"^remember\s+\S+.*?(?:\s+is\s+|\s+are\s+|\s+=\s+|\s+equals\s+|\s+means\s+)"#
+        if text.range(of: rememberCopula, options: .regularExpression) != nil,
+           let body = extractAfter("remember ", from: text), !body.isEmpty {
+            return GigiIntent(label: "remember", confidence: 0.97,
+                              params: ["text": body, "raw": original])
+        }
         for trigger in ["remember that ", "note that ", "keep in mind that ", "save that "] {
             if let body = extractAfter(trigger, from: text), !body.isEmpty {
                 return GigiIntent(label: "remember", confidence: 0.97,
                                   params: ["text": body, "raw": original])  // "text" matches pipeline taskText
             }
         }
-        for trigger in ["tell me about ", "what do you know about ", "who is ", "recall "] {
+        // Recall triggers — include contractions ("who's", "what's") and the
+        // bare "X?" form ("Marco?" after a previous recall). The recall
+        // confidence stays 0.90 so the memory-recall probe in GigiAgentEngine
+        // gates on actual cache presence; if memory misses, the router
+        // pipeline still gets to try Apple FM / Ollama for generic knowledge.
+        for trigger in [
+            "tell me about ",
+            "what do you know about ",
+            "who is ", "who's ", "whos ",
+            "what is ", "what's ", "whats ",
+            "recall "
+        ] {
             if let q = extractAfter(trigger, from: text), !q.isEmpty {
                 return GigiIntent(label: "recall", confidence: 0.90,
                                   params: ["query": q, "raw": original])
