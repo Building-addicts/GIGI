@@ -575,14 +575,23 @@ struct SettingsView: View {
             .alert("Clear All Memory?", isPresented: $showClearMemoryAlert) {
                 Button("Clear", role: .destructive) {
                     Task {
+                        // 1. Wipe stored facts (CloudKit + local disk cache).
                         let all = await GigiMemory.shared.mostUsed(limit: 1000)
                         for (key, _) in all { await GigiMemory.shared.forget(key) }
+                        // 2. Wipe conversation-level state too: turn
+                        //    annotations, pending clarifications, and the
+                        //    persisted last-referent map (UserDefaults).
+                        //    Without this, "him"/"her" would still resolve
+                        //    to a name the user thinks they erased.
+                        await MainActor.run {
+                            GigiConversationMemory.shared.clear()
+                        }
                         memoryCount = 0
                     }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This deletes all saved facts from CloudKit and local cache. Cannot be undone.")
+                Text("This deletes all saved facts, conversation context, and last-referent state. Cannot be undone.")
             }
         } header: {
             Text("🔒 Privacy")

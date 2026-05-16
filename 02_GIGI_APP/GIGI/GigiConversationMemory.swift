@@ -60,6 +60,137 @@ final class GigiConversationMemory: ObservableObject {
     // Structured per-turn metadata, parallel to user turns in contentsArray.
     private var turnAnnotations: [TurnAnnotation] = []
 
+    // MARK: - Pending clarification state
+    //
+    // When the router asks the user for a missing slot ("What do you want
+    // to say to Marco?"), we stash enough context to consume the NEXT
+    // utterance as that slot's value. TTL keeps stale state from
+    // hijacking a fresh user request minutes later.
+
+    struct PendingClarification {
+        let intent: String                  // e.g. "send_message"
+        let slot: String                    // e.g. "body"
+        let partialParams: [String: String] // already-extracted slots (contact, platform)
+        let timestamp: Date
+    }
+
+    private var pendingClarification: PendingClarification?
+    private let pendingClarificationTTL: TimeInterval = 120  // 2 min
+
+    func setPendingClarification(_ p: PendingClarification) {
+        pendingClarification = p
+    }
+
+    /// Return + clear the pending clarification IF still fresh (within
+    /// TTL). After this call the slot is cleared regardless — caller
+    /// owns the decision whether to use it or fall through.
+    func consumePendingClarification() -> PendingClarification? {
+        guard let p = pendingClarification else { return nil }
+        pendingClarification = nil
+        guard Date().timeIntervalSince(p.timestamp) < pendingClarificationTTL else {
+            return nil
+        }
+        return p
+    }
+
+    func clearPendingClarification() {
+        pendingClarification = nil
+    }
+
+    // MARK: - Last-referent tracking (coreference)
+    //
+    // Names of the most recently mentioned entity per kind. Used by
+    // `GigiAgentEngine.resolveCoreferences(text:)` to substitute pronouns
+    // ("him", "her", "it", "there") with the actual referent BEFORE the
+    // routing pipeline sees the utterance. Updated by the orchestrator
+    // after each successful turn via `recordReferent(_:kind:)`.
+    //
+    // PERSISTED via UserDefaults so a kill+relaunch doesn't make GIGI
+    // forget who "him" refers to. TTL'd: after 24h of no use, the
+    // entries are dropped so an old conversation can't haunt a fresh
+    // session days later. The disk write is tiny (~150 bytes).
+    private static let referentUDKey = "gigi.coreference.lastReferentByKind"
+    private static let referentTSUDKey = "gigi.coreference.referentTimestamps"
+    private static let referentTTL: TimeInterval = 86_400  // 24h
+
+    private var lastReferentByKind: [String: String] = {
+        if let dict = UserDefaults.standard.dictionary(forKey: "gigi.coreference.lastReferentByKind") as? [String: String] {
+            return dict
+        }
+        return [:]
+    }()
+
+    private var referentTimestamps: [String: Date] = {
+        if let raw = UserDefaults.standard.dictionary(forKey: "gigi.coreference.referentTimestamps") as? [String: Double] {
+            return raw.mapValues { Date(timeIntervalSince1970: $0) }
+        }
+        return [:]
+    }()
+
+    /// Save the entity mentioned in the last successful turn so the next
+    /// turn can resolve a coreference pronoun against it. Kind is one of
+    /// "person", "place", "thing". Pass an empty name to clear that slot.
+    /// Persists to UserDefaults so coreference survives app kill.
+    /// Person names are Title-Cased so display is always proper-noun-ish.
+    func recordReferent(_ name: String, kind: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            lastReferentByKind.removeValue(forKey: kind)
+            referentTimestamps.removeValue(forKey: kind)
+        } else {
+            // Normalize person names to Title Case so future displays
+            // ("What do you want to say to Leo Corte?") look clean
+            // regardless of what casing the user originally typed.
+            let normalized: String
+            if kind == "person" {
+                normalized = GigiRequestRouter.titleCaseName(trimmed)
+            } else {
+                normalized = trimmed
+            }
+            lastReferentByKind[kind] = normalized
+            referentTimestamps[kind] = Date()
+        }
+        persistReferentState()
+    }
+
+    private func persistReferentState() {
+        UserDefaults.standard.set(lastReferentByKind, forKey: Self.referentUDKey)
+        let raw = referentTimestamps.mapValues { $0.timeIntervalSince1970 }
+        UserDefaults.standard.set(raw, forKey: Self.referentTSUDKey)
+    }
+
+    /// Most recent referent of a given kind, or nil if it expired (TTL)
+    /// or was never recorded. Person referents are returned in Title
+    /// Case; legacy lowercase entries get retroactively normalized on
+    /// read so old data doesn't look broken after the casing fix.
+    func lastReferent(kind: String) -> String? {
+        guard let raw = lastReferentByKind[kind] else { return nil }
+        // TTL check: if the entry is older than referentTTL, drop it.
+        if let ts = referentTimestamps[kind],
+           Date().timeIntervalSince(ts) > Self.referentTTL {
+            lastReferentByKind.removeValue(forKey: kind)
+            referentTimestamps.removeValue(forKey: kind)
+            persistReferentState()
+            return nil
+        }
+        // Entries written before the TTL was added have no timestamp.
+        // Treat as expired so old test-data referents don't stick forever.
+        if referentTimestamps[kind] == nil {
+            lastReferentByKind.removeValue(forKey: kind)
+            persistReferentState()
+            return nil
+        }
+        if kind == "person" {
+            let titled = GigiRequestRouter.titleCaseName(raw)
+            if titled != raw {
+                lastReferentByKind[kind] = titled
+                persistReferentState()
+            }
+            return titled
+        }
+        return raw
+    }
+
     // Session persistence
     private let udKey          = "gigi.session.contents"
     private let udTimestampKey = "gigi.session.timestamp"
@@ -173,8 +304,13 @@ final class GigiConversationMemory: ObservableObject {
         messages.removeAll()
         contentsArray.removeAll()
         turnAnnotations.removeAll()
+        lastReferentByKind.removeAll()
+        referentTimestamps.removeAll()
+        pendingClarification = nil
         UserDefaults.standard.removeObject(forKey: udKey)
         UserDefaults.standard.removeObject(forKey: udTimestampKey)
+        UserDefaults.standard.removeObject(forKey: Self.referentUDKey)
+        UserDefaults.standard.removeObject(forKey: Self.referentTSUDKey)
     }
 
     // Legacy string context (used by v2 path — keep until Phase 1.8 removes it)

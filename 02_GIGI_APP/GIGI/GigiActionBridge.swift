@@ -509,8 +509,78 @@ class GigiActionBridge {
         raw.filter { "0123456789+*#".contains($0) }
     }
 
+    /// Compute the canonical international `tel:` body for a contact's
+    /// raw phone string. Single source of truth shared by makeCall,
+    /// sendMessage, and facetimeCall — fixes Italian-number bug where
+    /// "392 1234567" (10-digit local mobile) was previously turned into
+    /// "+3921234567" (no country code, just "+digits") and dialed wrong.
+    /// Now we prepend the device-locale dialing code when the number
+    /// looks local.
+    private func canonicalDialString(rawPhone: String) -> String? {
+        let sanitized = sanitizePhoneNumber(rawPhone)
+        let digits = gatewayPhoneDigits(sanitized)
+        guard !digits.isEmpty else { return nil }
+        // Already international: "+39 ..." → use as-is.
+        if sanitized.hasPrefix("+") { return sanitized }
+        // EU international prefix "00<cc>" → convert to "+<cc>".
+        if sanitized.hasPrefix("00") && sanitized.count > 4 {
+            return "+" + String(sanitized.dropFirst(2))
+        }
+        let region = Locale.current.region?.identifier.uppercased() ?? "US"
+        if let dialCode = Self.dialingCode(for: region),
+           Self.looksLikeLocalNumber(digits: digits, region: region) {
+            return "+\(dialCode)\(digits)"
+        }
+        // Long digit-only number with no clear country signal — assume
+        // it already includes the country code and just add "+".
+        if digits.count >= 11 { return "+" + digits }
+        return digits
+    }
+
+    /// Common country → E.164 dialing code map. Add entries as needed.
+    private static func dialingCode(for region: String) -> String? {
+        let map: [String: String] = [
+            "IT": "39", "US": "1", "CA": "1", "GB": "44", "FR": "33",
+            "DE": "49", "ES": "34", "CH": "41", "AT": "43", "AU": "61",
+            "NL": "31", "BE": "32", "SE": "46", "NO": "47", "DK": "45",
+            "FI": "358", "PT": "351", "PL": "48", "JP": "81", "BR": "55",
+            "MX": "52", "AR": "54", "IN": "91", "CN": "86", "RU": "7"
+        ]
+        return map[region]
+    }
+
+    /// Heuristic: does `digits` look like a local (no-country-code)
+    /// phone number for the given region? Used to decide whether to
+    /// prepend the country code. Italian mobile is 10 digits starting
+    /// with 3; US numbers are 10 digits; UK numbers are 10–11 digits
+    /// often starting with 7 (mobile) or an area code.
+    private static func looksLikeLocalNumber(digits: String, region: String) -> Bool {
+        switch region {
+        case "IT":
+            // Mobile (3XX) or landline (0X)
+            return (digits.count == 10 && digits.hasPrefix("3"))
+                || (digits.count >= 9 && digits.count <= 11 && digits.hasPrefix("0"))
+        case "US", "CA":
+            return digits.count == 10
+        case "GB":
+            return digits.count == 10 || digits.count == 11
+        case "FR":
+            return digits.count == 10 && (digits.hasPrefix("0") || digits.hasPrefix("6") || digits.hasPrefix("7"))
+        case "DE":
+            return digits.count >= 10 && digits.count <= 12 && digits.hasPrefix("0")
+        case "ES":
+            return digits.count == 9 && (digits.hasPrefix("6") || digits.hasPrefix("7") || digits.hasPrefix("9"))
+        default:
+            return digits.count == 10  // generic best-effort
+        }
+    }
+
     func makeCallAutomatic(to contact: String) async -> String {
         guard !contact.isEmpty else { return "Who do you want to call?" }
+        // Relationship resolution: "my brother" → look up the saved name.
+        // Applied uniformly across NLU fast-path, FM tool calling, and any
+        // direct dispatcher so EVERY contact-based action benefits.
+        let contact = (await GigiRequestRouter.resolveContactFromMemory(contact)) ?? contact
         guard await ensureContactsAccess() else {
             return "Turn on Contacts for GIGI in Settings → Privacy → Contacts."
         }
@@ -526,33 +596,15 @@ class GigiActionBridge {
         }
         let number = picked.phone
         let displayName = picked.name.isEmpty ? contact : picked.name
-        // 2026-05-12 v5 fix — preserve `+` for international dialing.
-        // gatewayPhoneDigits strips ALL non-digits (including '+'), producing
-        // '393756548643' from '+39 375 654 8643'. iOS Phone app then treats it
-        // as a local number missing country code and silently refuses to dial
-        // (user reported: 'tappo il blu, non chiama').
-        //
-        // Apple spec (developer.apple.com PhoneLinks): use `tel:+15551234567`
-        // with leading '+' for international numbers. The '+' is a supported
-        // character in the tel: URL scheme.
-        //
-        // We keep the raw sanitizePhoneNumber output (digits + leading '+')
-        // for the tel: URL, and prepend '+' if missing on a long number.
-        let sanitized = sanitizePhoneNumber(number)
-        let digits = gatewayPhoneDigits(sanitized)
-        guard !digits.isEmpty else { return "Invalid phone number for \(contact)." }
-
-        // Build the canonical tel: URL with international format.
-        //   - If the sanitized form already starts with '+', use it as-is.
-        //   - If the digits look international (>= 10) but no '+' is present,
-        //     synthesize a '+' prefix (heuristic: trust the resolver supplied
-        //     a country code).
-        //   - Otherwise (short local numbers), pass digits as-is.
-        let telBody: String = {
-            if sanitized.hasPrefix("+") { return sanitized }
-            if digits.count >= 10        { return "+" + digits }
-            return digits
-        }()
+        // 2026-05-16 v6 fix — canonical international format via shared
+        // helper. Previous v5 ("if digits.count >= 10 → '+' + digits")
+        // mangled Italian mobile numbers: "3921234567" became
+        // "+3921234567" instead of "+393921234567". The new helper uses
+        // device locale to prepend the correct country code when the
+        // number is local.
+        guard let telBody = canonicalDialString(rawPhone: number) else {
+            return "Invalid phone number for \(contact)."
+        }
 
         await MainActor.run {
             GigiSmartOrchestrator.shared.stopMicCapture()
@@ -598,6 +650,8 @@ class GigiActionBridge {
 
     func sendMessageAutomatic(to contact: String, body: String, platform: String) async -> String {
         guard !contact.isEmpty else { return "Who should I message?" }
+        // Relationship resolution: "my brother" → saved name.
+        let contact = (await GigiRequestRouter.resolveContactFromMemory(contact)) ?? contact
         // Bug #017: disambiguate when multiple matches exist — never silently
         // message the wrong contact.
         guard let picked = await disambiguateContact(query: contact, actionLabel: "message") else {
@@ -608,7 +662,12 @@ class GigiActionBridge {
         }
         let number = picked.phone
         let _ = picked.name.isEmpty ? contact : picked.name  // displayName reserved for future use
-        let digits = gatewayPhoneDigits(sanitizePhoneNumber(number))
+        // Use the locale-aware canonical dial string and strip the "+"
+        // for messenger deep links that expect raw E.164 digits.
+        guard let canonical = canonicalDialString(rawPhone: number) else {
+            return "Invalid phone number for \(contact)."
+        }
+        let digits = canonical.hasPrefix("+") ? String(canonical.dropFirst()) : canonical
         guard !digits.isEmpty else { return "Invalid phone number for \(contact)." }
 
         await MainActor.run {
@@ -1141,6 +1200,8 @@ class GigiActionBridge {
 
     private func facetimeCall(contact: String, audio: Bool) async -> String {
         guard !contact.isEmpty else { return "Who do you want to FaceTime?" }
+        // Relationship resolution: "my brother" → saved name.
+        let contact = (await GigiRequestRouter.resolveContactFromMemory(contact)) ?? contact
         // Bug #017: disambiguate when multiple matches exist.
         guard let picked = await disambiguateContact(
             query: contact,
@@ -1154,8 +1215,13 @@ class GigiActionBridge {
         let number = picked.phone
         let displayName = picked.name.isEmpty ? contact : picked.name
         let scheme = audio ? "facetime-audio" : "facetime"
-        let digits = gatewayPhoneDigits(sanitizePhoneNumber(number))
-        guard let url = URL(string: "\(scheme)://\(digits)") else {
+        // FaceTime URL: scheme://+<country><number> — use canonical
+        // dial string so Italian local numbers get the +39 prefix
+        // instead of becoming "+392..." (country-code mangle).
+        guard let canonical = canonicalDialString(rawPhone: number) else {
+            return "Couldn't build FaceTime URL."
+        }
+        guard let url = URL(string: "\(scheme)://\(canonical)") else {
             return "Couldn't build FaceTime URL."
         }
         GigiSmartOrchestrator.shared.showBanner(audio ? "📞 FaceTime audio..." : "📹 FaceTime video...")

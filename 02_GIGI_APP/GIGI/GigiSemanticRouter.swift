@@ -89,11 +89,10 @@ final class GigiSemanticRouter {
             "set an alarm for 7am", "wake me up at 8", "alarm tomorrow morning",
             "set alarm 6:30", "sveglia alle 7", "imposta sveglia"
         ],
-        "set_reminder": [
-            "remind me to call mom tomorrow", "set a reminder to buy milk",
-            "remind me to take pills at 8pm", "ricordami di chiamare",
-            "promemoria comprare latte"
-        ],
+        // set_reminder REMOVED 2026-05-15 — multi-slot (task + date + time)
+        // extraction is unreliable when the semantic router dispatches via
+        // bridge directly. Routed via Apple FM Tool calling instead, which
+        // uses @Generable constrained decoding to split slots correctly.
 
         // COMMUNICATION — call / facetime / message
         "make_call": [
@@ -104,11 +103,10 @@ final class GigiSemanticRouter {
             "facetime mom", "video call marco", "start facetime",
             "fai una facetime con", "videochiamata"
         ],
-        "send_message": [
-            "send a message to marco", "text mom", "whatsapp leo",
-            "send a whatsapp to marco saying hello",
-            "manda un messaggio", "manda whatsapp a marco"
-        ],
+        // send_message REMOVED 2026-05-15 — see note above. The semantic
+        // router can't reliably extract (contact, body) from short
+        // embeddings; passes the full sentence as `slot`, which becomes
+        // a bad contact name. Apple FM Tool calling handles this.
 
         // CALENDAR — read / find slot
         "read_calendar": [

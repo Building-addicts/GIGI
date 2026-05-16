@@ -137,11 +137,74 @@ struct FMSendMessageTool: Tool {
 
     @MainActor
     func call(arguments: Arguments) async -> String {
-        await dispatchAction(label: "send_message", params: [
-            "contact": arguments.contact,
-            "body": arguments.body,
-            "platform": arguments.platform.isEmpty ? "imessage" : arguments.platform
+        let cleanedBody = Self.stripFramingPrefix(arguments.body)
+        let platform = await Self.resolvePlatform(fmExtracted: arguments.platform)
+        let contact = arguments.contact.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Body validation: Apple FM sometimes calls this tool with an
+        // empty body — usually when the user said "Send him a message"
+        // without specifying what. Worse, with conversation history in
+        // context, FM may HALLUCINATE the body from a previous turn.
+        // Defense: if the cleaned body is empty OR doesn't appear in the
+        // current utterance (= came from elsewhere), ask the user.
+        let utteranceLower = GigiAgentEngine.currentUserUtterance.lowercased()
+        let bodyAppearsInUtterance = !cleanedBody.isEmpty
+            && utteranceLower.contains(cleanedBody.lowercased())
+        if cleanedBody.isEmpty || !bodyAppearsInUtterance {
+            let targetName = contact.isEmpty ? "them" : contact
+            GigiConversationMemory.shared.setPendingClarification(.init(
+                intent: "send_message",
+                slot: "body",
+                partialParams: ["contact": contact, "platform": platform],
+                timestamp: Date()
+            ))
+            return "What do you want to say to \(targetName)?"
+        }
+
+        return await dispatchAction(label: "send_message", params: [
+            "contact": contact,
+            "body": cleanedBody,
+            "platform": platform
         ])
+    }
+
+    /// Determines messaging platform by inspecting the actual user
+    /// utterance (single source of truth) rather than trusting Apple FM's
+    /// platform slot extraction (which often hallucinates WhatsApp).
+    /// Delegates to GigiRequestRouter.resolveMessagePlatform for the
+    /// canonical priority rules (text mention > user pref > imessage).
+    @MainActor
+    static func resolvePlatform(fmExtracted: String) async -> String {
+        return await GigiRequestRouter.resolveMessagePlatform(
+            forUtterance: GigiAgentEngine.currentUserUtterance
+        )
+    }
+
+    /// Strip leading framing words/phrases ("saying ", "tell them ",
+    /// "telling them ", "to say ", "and say ", "that says ", IT variants)
+    /// from the message body. Case-insensitive, idempotent.
+    static func stripFramingPrefix(_ body: String) -> String {
+        var s = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Trim matched optional surrounding quotes.
+        if (s.hasPrefix("\"") && s.hasSuffix("\""))
+            || (s.hasPrefix("'") && s.hasSuffix("'")) {
+            s = String(s.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let framers = [
+            "saying ", "to say ", "and say ", "that says ", "that ",
+            "telling them ", "tell them ", "tell him ", "tell her ",
+            "telling him ", "telling her ", "told them ", "told him ",
+            "told her ", "to tell them ", "to tell him ", "to tell her ",
+            "with the message ", "the message ", "message ",
+            "with ", "writing "
+        ]
+        let lower = s.lowercased()
+        for f in framers where lower.hasPrefix(f) {
+            s = String(s.dropFirst(f.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            // One pass is enough; loop again to chain ("saying that ..."):
+            return stripFramingPrefix(s)
+        }
+        return s
     }
 }
 

@@ -101,6 +101,43 @@ final class GigiRequestRouter {
             // Card stays visible; user can still issue other intents.
         }
 
+        // Bug #016 continuation — Pending clarification.
+        //
+        // If the previous turn was an override that asked the user for a
+        // missing slot (e.g. "What do you want to say to Marco?"), use
+        // THIS turn's text as that slot's value, complete the original
+        // intent, and dispatch. The user can cancel with "no/cancel" or
+        // implicitly by starting a new command verb (set/turn/call/...);
+        // those cases fall through to the normal pipeline.
+        if let pending = GigiConversationMemory.shared.consumePendingClarification() {
+            if Self.detectNegative(in: text) {
+                GigiDebugLogger.log("GIGI Router: pending clarification CANCELLED")
+                let speech = "Cancelled."
+                GigiConversationMemory.shared.addModelSpeech(speech)
+                return .actionInvoked(speech: speech, tool: "\(pending.intent)_cancel")
+            }
+            if Self.looksLikeNewCommand(text) {
+                GigiDebugLogger.log("GIGI Router: pending clarification SUPERSEDED by new command — falling through")
+                // pending is already consumed; continue with normal routing
+            } else {
+                var params = pending.partialParams
+                params[pending.slot] = text
+                params["raw"] = text
+                GigiDebugLogger.log("GIGI Router: pending clarification CONTINUED — intent=\(pending.intent) slot=\(pending.slot) value='\(text.prefix(40))'")
+                let intent = GigiIntent(label: pending.intent, confidence: 1.0, params: params)
+                let speech = await GigiActionBridge.shared.execute(intent)
+                let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "Done."
+                    : speech
+                GigiRouterTrace.shared.record(
+                    utterance: text, tier: "clarification-continuation",
+                    tool: pending.intent, confidence: 1.0, slot: params[pending.slot]
+                )
+                GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+                return .actionInvoked(speech: finalSpeech, tool: pending.intent)
+            }
+        }
+
         // GATE 9 polish — discovery intercept (Layer B preview, full impl GATE 10).
         // Discovery queries ("what can you do?", "cosa sai fare?", "help") are
         // handled BEFORE the semantic router because they need a curated
@@ -292,6 +329,37 @@ final class GigiRequestRouter {
             }
         }
 
+        // Bug #017 (2026-05-15) — Pre-FM preference assertion intercept.
+        //
+        // Apple FM confidently mis-classifies "My default message platform
+        // is WhatsApp" as native_tool(send_message) because of the
+        // "message"/"WhatsApp" tokens. The post-FM Bug #015 override
+        // doesn't fire because effectivePath is already native_tool.
+        // Catch possessive assertions ("my X is Y") BEFORE Apple FM ever
+        // sees them — these are unambiguously personal preferences.
+        if let (subject, value) = Self.detectFactAssertion(in: text),
+           Self.looksLikePreferenceAssertion(subject: subject) {
+            GigiDebugLogger.log("GIGI Router: pre-FM preference assertion → bridge(remember). subject='\(subject)' value='\(value)'")
+            let intent = GigiIntent(
+                label: "remember",
+                confidence: 1.0,
+                params: ["contact": subject, "body": value, "raw": text]
+            )
+            let speech = await GigiActionBridge.shared.execute(intent)
+            let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Got it. I'll remember that."
+                : speech
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "preference-intercept",
+                tool: "remember", confidence: 1.0, slot: subject
+            )
+            GigiConversationMemory.shared.annotateLastTurn(
+                intent: "remember", slot: subject, tier: "preference-intercept", success: true
+            )
+            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+            return .actionInvoked(speech: finalSpeech, tool: "remember")
+        }
+
         // Mode gating (GATE 7) — read the selected operating mode and use
         // it to disable paths upfront. `.auto` (no mode set) keeps all paths.
         let mode = currentMode()
@@ -373,8 +441,79 @@ final class GigiRequestRouter {
             GigiConversationMemory.shared.annotateLastTurn(
                 intent: "remember", slot: subject, tier: "regex-override", success: true
             )
+            // Coreference: track the asserted subject so the next turn
+            // can resolve "him/her" to it — but ONLY if the subject is
+            // actually a person (not a preference like "my password").
+            // smartKey returns "contact:..." for names, "pref:..." for
+            // preferences. Only record on contact.
+            if GigiMemory.smartKey(forSubject: subject).hasPrefix("contact:") {
+                GigiConversationMemory.shared.recordReferent(subject, kind: "person")
+            }
             GigiConversationMemory.shared.addModelSpeech(finalSpeech)
             return .actionInvoked(speech: finalSpeech, tool: "remember")
+        }
+
+        // 2.56 Bug #016 fix (2026-05-15) — messaging-without-body override.
+        // Apple FM occasionally routes "Send Marco a message" (no body)
+        // to delegate_local, dumping the request to Ollama which has no
+        // messaging tools and answers with a verbose apology. Detect
+        // messaging-shape utterances missing a body indicator and force
+        // ask_clarification with a sensible prompt.
+        if let detected = Self.detectMessageWithoutBody(in: text) {
+            // Relationship resolution: "my brother" → look up who that is.
+            // If found, substitute. So "Send a message to my brother"
+            // becomes "What do you want to say to Leo Corte?" not "to
+            // My Brother?".
+            let resolvedContact = (await Self.resolveContactFromMemory(detected)) ?? detected
+            let contact = resolvedContact
+            let directSpeech = "What do you want to say to \(contact)?"
+            let platform = await Self.resolveMessagePlatform(forUtterance: text)
+            GigiDebugLogger.log("GIGI Router: msg-without-body OVERRIDE — \(effectivePath) → ask_clarification, contact='\(contact)' (detected='\(detected)') platform='\(platform)'")
+            GigiConversationMemory.shared.setPendingClarification(.init(
+                intent: "send_message",
+                slot: "body",
+                partialParams: ["contact": contact, "platform": platform],
+                timestamp: Date()
+            ))
+            // Track resolved contact as person referent so future "him"
+            // works.
+            GigiConversationMemory.shared.recordReferent(contact, kind: "person")
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "regex-override",
+                tool: "ask_clarification", confidence: 1.0, slot: contact
+            )
+            GigiConversationMemory.shared.annotateLastTurn(
+                intent: "ask_clarification", slot: contact, tier: "regex-override", success: true
+            )
+            GigiConversationMemory.shared.addModelSpeech(directSpeech)
+            return .spoken(directSpeech)
+        }
+
+        // Bug #018 — messaging shape with unresolved pronoun.
+        // "Send him a message" with no known person referent. We rejected
+        // it in detectMessageWithoutBody (pronoun guard) — but rather
+        // than fall through to Ollama, ask for the contact explicitly.
+        // Then the next turn supplies the name, we save it as the
+        // person referent, and re-run as if the user had typed the name.
+        if Self.detectMessageWithUnresolvedContact(in: text) {
+            let platform = await Self.resolveMessagePlatform(forUtterance: text)
+            let directSpeech = "Who do you want to send a message to?"
+            GigiDebugLogger.log("GIGI Router: msg-unresolved-contact OVERRIDE — \(effectivePath) → ask_clarification")
+            GigiConversationMemory.shared.setPendingClarification(.init(
+                intent: "send_message",
+                slot: "contact",
+                partialParams: ["platform": platform],
+                timestamp: Date()
+            ))
+            GigiRouterTrace.shared.record(
+                utterance: text, tier: "regex-override",
+                tool: "ask_clarification", confidence: 1.0, slot: nil
+            )
+            GigiConversationMemory.shared.annotateLastTurn(
+                intent: "ask_clarification", slot: nil, tier: "regex-override", success: true
+            )
+            GigiConversationMemory.shared.addModelSpeech(directSpeech)
+            return .spoken(directSpeech)
         }
 
         // 2.6 Bug #014 fix (2026-05-15) — ask_clarification downgrade.
@@ -840,6 +979,220 @@ final class GigiRequestRouter {
     /// UX. Patterns are intentionally narrow: prefix-anchored question
     /// stem + a copula or interrogative verb, so we don't accidentally
     /// match imperatives like "explain to me how to set a timer".
+    /// Resolves the messaging platform for an utterance using priority:
+    /// 1. Verbatim mention in the user's text (whatsapp/telegram/sms/imessage)
+    /// 2. User-saved preference (`pref:default_message_platform`)
+    /// 3. Fallback to imessage
+    /// Single source of truth shared by Bug #016 override and FMSendMessageTool.
+    static func resolveMessagePlatform(forUtterance text: String) async -> String {
+        let lower = text.lowercased()
+        if lower.contains("whatsapp") || lower.contains("whats app") { return "whatsapp" }
+        if lower.contains("telegram") { return "telegram" }
+        if lower.contains(" sms") || lower.hasPrefix("sms ") || lower.contains("text message") { return "sms" }
+        if lower.contains("imessage") { return "imessage" }
+        if let pref = await GigiMemory.shared.recall("pref:default_message_platform"),
+           ["whatsapp", "telegram", "sms", "imessage"].contains(pref.lowercased()) {
+            return pref.lowercased()
+        }
+        return "imessage"
+    }
+
+    /// Relationship resolution: given a contact phrase like "my brother",
+    /// "my mom", "my boss", look up the user-saved value in GigiMemory
+    /// and return it Title-Cased. Falls back to:
+    ///   - pref:<rest_underscored>     (canonical smartKey shape)
+    ///   - pref:<rest as-is>
+    ///   - contact:<rest>              (legacy contacts saved that way)
+    ///   - person:<rest>
+    ///   - findByContentMatch          (Jaccard token overlap)
+    /// Returns nil if nothing matches. Caller decides whether to ask
+    /// for clarification or fall through to Contacts search.
+    static func resolveContactFromMemory(_ contactPhrase: String) async -> String? {
+        let lower = contactPhrase.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard lower.hasPrefix("my ") else { return nil }
+        let rest = String(lower.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rest.isEmpty else { return nil }
+        let underscored = rest.replacingOccurrences(of: " ", with: "_")
+        let candidates = [
+            "pref:\(underscored)",
+            "pref:\(rest)",
+            "contact:\(rest)",
+            "person:\(rest)"
+        ]
+        for k in candidates {
+            if let val = await GigiMemory.shared.recall(k), !val.isEmpty {
+                return Self.titleCaseName(val)
+            }
+        }
+        // Last-resort fuzzy lookup using tokens shared with the cache.
+        if let hit = await GigiMemory.shared.findByContentMatch(in: contactPhrase) {
+            return Self.titleCaseName(hit.value)
+        }
+        return nil
+    }
+
+    /// Strip filler words ("to", "a", "an", "the", pronouns like "it/him/her")
+    /// from the start of a string AND apply Title Case so proper-noun
+    /// names always look right ("leo corte" → "Leo Corte", regardless of
+    /// what the user typed). Multi-pass: "it to leo" → "Leo". Idempotent.
+    static func cleanContactName(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let removable = [
+            "to ", "a ", "an ", "the ",
+            "it ", "this ", "that ",
+            "him ", "her ", "them ",
+            "for "
+        ]
+        var changed = true
+        while changed {
+            changed = false
+            let lower = s.lowercased()
+            for p in removable where lower.hasPrefix(p) {
+                s = String(s.dropFirst(p.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                changed = true
+                break
+            }
+        }
+        return Self.titleCaseName(s)
+    }
+
+    /// Title Case for proper-noun-like names: each word's first letter
+    /// uppercased, the rest lowercased. Preserves single-letter words
+    /// and hyphenated parts. Idempotent.
+    static func titleCaseName(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        // Split on whitespace, capitalize each word, join with single spaces.
+        let parts = trimmed.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        let cased = parts.map { word -> String in
+            // Handle hyphenated parts ("jean-paul" → "Jean-Paul")
+            let subParts = word.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+            let casedSubs = subParts.map { sub -> String in
+                guard let first = sub.first else { return sub }
+                return String(first).uppercased() + sub.dropFirst().lowercased()
+            }
+            return casedSubs.joined(separator: "-")
+        }
+        return cased.joined(separator: " ")
+    }
+
+    /// Bug #018 helper: same shape as detectMessageWithoutBody but the
+    /// contact slot is an unresolved pronoun (no person referent yet).
+    /// Used to ask "Who do you want to send a message to?".
+    static func detectMessageWithUnresolvedContact(in text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return false }
+        let verbs = ["send ", "text ", "message ", "whatsapp ", "imessage ", "telegram ", "sms "]
+        guard verbs.contains(where: { t.hasPrefix($0) }) else { return false }
+        // Mention any pronoun anywhere in the residue.
+        let pronouns = [" him", " her", " them", " he ", " she ", " they ", " someone", " anyone"]
+        if pronouns.contains(where: { t.contains($0) }) { return true }
+        // Also handle "Send a message" (no contact, no pronoun) — open
+        // request that needs both contact AND body. Treated the same.
+        let openShapes = ["send a message", "send a text", "send a whatsapp",
+                          "send a telegram", "send an sms"]
+        if openShapes.contains(where: { t == $0 || t.hasPrefix($0 + " ") || t.hasSuffix(" " + $0) }) {
+            return true
+        }
+        return false
+    }
+
+    /// Bug #017 helper: detect a possessive / preference-shaped subject
+    /// ("my password", "my favorite movie", "my default platform").
+    /// Used to force `remember` BEFORE Apple FM router runs, since FM
+    /// often misclassifies these as send_message / delegate_local.
+    static func looksLikePreferenceAssertion(subject: String) -> Bool {
+        let s = subject.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return false }
+        if s.hasPrefix("my ") { return true }
+        let prefKeywords = ["default ", "preferred ", "favorite ", "favourite "]
+        return prefKeywords.contains(where: { s.contains($0) })
+    }
+
+    /// Bug #016 helper: detect that the user started a new command
+    /// instead of supplying the missing slot value the previous turn
+    /// asked for. Heuristic: prefix matches a strong command verb /
+    /// question word. When true, the pending clarification is dropped
+    /// and the new utterance is processed via the normal pipeline.
+    static func looksLikeNewCommand(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let starters = [
+            "set ", "turn ", "call ", "text ", "send ", "message ", "whatsapp ",
+            "imessage ", "telegram ", "play ", "open ", "launch ", "navigate ",
+            "drive ", "forget ", "remember ", "remind ",
+            "who ", "who's ", "whos ", "what ", "what's ", "whats ",
+            "where ", "where's ", "when ", "when's ", "why ", "how ",
+            "tell me ", "find ", "search ", "look up ", "show me ",
+            "weather ", "time ", "date "
+        ]
+        return starters.contains { t.hasPrefix($0) }
+    }
+
+    /// Bug #016 helper: detect a messaging-shape request that is missing
+    /// a body indicator. Used to override Apple FM's tendency to bail
+    /// to delegate_local on "Send X a message" instead of asking the
+    /// user what to say. Returns the extracted contact name.
+    ///
+    /// Detection rules:
+    /// 1. Starts with a messaging verb (send / text / message / whatsapp
+    ///    / imessage / telegram / sms).
+    /// 2. Does NOT contain a body indicator (saying / telling / tell /
+    ///    told / to say / and say / with the message / that says /
+    ///    writing).
+    /// 3. Does NOT contain ":" or quoted span (would imply explicit body).
+    static func detectMessageWithoutBody(in text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty else { return nil }
+        let verbs = ["send ", "text ", "message ", "whatsapp ", "imessage ", "telegram ", "sms "]
+        guard verbs.contains(where: { t.hasPrefix($0) }) else { return nil }
+        let bodyIndicators = [
+            " saying ", " telling ", " tell ", " told ",
+            " to say ", " and say ", " with the message ", " that says ",
+            " writing ", " write "
+        ]
+        for ind in bodyIndicators where t.contains(ind) { return nil }
+        if t.contains(":") || t.contains("\"") { return nil }
+        // Extract contact: trim verb, optional fillers, then take the
+        // residue. Cap at 40 chars to avoid feedback when the utterance
+        // is something pathological.
+        var rest = t
+        for v in verbs where rest.hasPrefix(v) {
+            rest = String(rest.dropFirst(v.count))
+            break
+        }
+        let prefixFillers = [
+            "a message on whatsapp to ", "a message on imessage to ",
+            "a message on telegram to ", "a message on sms to ",
+            "a whatsapp to ", "a telegram to ", "a text to ",
+            "a message to ", "a text ",
+            "message to ", "text to ", "to "
+        ]
+        for f in prefixFillers where rest.hasPrefix(f) {
+            rest = String(rest.dropFirst(f.count))
+            break
+        }
+        let trailingFillers = [
+            " a message on whatsapp", " a message on telegram",
+            " a message", " a text", " a whatsapp", " a telegram", " a sms"
+        ]
+        for f in trailingFillers where rest.hasSuffix(f) {
+            rest = String(rest.dropLast(f.count))
+        }
+        rest = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?"))
+        // Multi-pass strip of filler words / pronouns + Title Case:
+        // "it to leo corte" → "Leo Corte".
+        rest = Self.cleanContactName(rest)
+        guard !rest.isEmpty, rest.count <= 40 else { return nil }
+        // Reject if cleaning left only a pronoun (no actual contact name).
+        let pronouns: Set<String> = [
+            "him", "her", "them", "it", "he", "she", "they", "there",
+            "someone", "anyone", "nobody"
+        ]
+        if pronouns.contains(rest.lowercased()) { return nil }
+        return rest
+    }
+
     /// Bug #015 helper: detect a bare "X is/are/= Y" fact assertion in EN
     /// or IT. Returns (subject, value) split on the copula. Used to
     /// override Apple FM's tendency to route assertions to delegate_local

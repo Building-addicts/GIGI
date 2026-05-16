@@ -30,9 +30,19 @@ final class GigiAgentEngine {
     // Whitelist of NLU labels eligible for the deterministic fast-path.
     // High-confidence (>=0.95) classifications skip the Groq round-trip and
     // dispatch straight to GigiActionBridge after the Force Claude gate.
+    //
+    // POLICY: only SINGLE-SLOT or near-deterministic intents belong here.
+    // Multi-slot ambiguous intents (send_message: contact + body + platform;
+    // set_reminder: task + date + time; send_email: contact + subject +
+    // body) are routed via Apple FM Tool calling instead, where
+    // constrained-decoding @Generable extraction handles arbitrary sentence
+    // structures — including post-coreference utterances like "send Marco
+    // a message saying hi" that the NLU regex would mis-split.
+    //
+    // Removed 2026-05-15: send_message, set_reminder.
     private static let fastPathIntents: Set<String> = [
-        "ask_time", "ask_date", "torch_on", "torch_off", "make_call", "send_message",
-        "navigate", "navigation", "set_timer", "set_alarm", "set_reminder",
+        "ask_time", "ask_date", "torch_on", "torch_off", "make_call",
+        "navigate", "navigation", "set_timer", "set_alarm",
         "toggle_wifi", "toggle_bluetooth", "media_play_pause", "media_next", "media_previous",
         "play_music", "open_app", "read_calendar", "read_week_calendar", "find_free_slot",
         "remember", "respond", "facetime", "facetime_audio"
@@ -56,6 +66,11 @@ final class GigiAgentEngine {
 
     var onInterimEvent: ((InterimEvent) -> Void)?
 
+    /// Last normalized + coreference-resolved user utterance. Exposed to
+    /// downstream tools (e.g. FMSendMessageTool) that need to validate
+    /// Apple FM's slot extraction against the actual user text.
+    static var currentUserUtterance: String = ""
+
     private init() {
         // Wire GigiClaudeBridge to conversation memory so stream events
         // can append `.thinking` / `.toolEvent` bubbles while Claude runs.
@@ -73,9 +88,30 @@ final class GigiAgentEngine {
         // (U+2019, U+2018, U+201C, U+201D) which silently break every
         // downstream regex that matches "who's", "X's", etc. Fix once
         // here so the entire pipeline sees ASCII.
-        let text = Self.normalizeSmartPunctuation(text)
-        GigiDebugLogger.log("GIGI agentEngine.process ENTRY: text='\(text.prefix(60))'")
+        let normalized = Self.normalizeSmartPunctuation(text)
         let mem = GigiConversationMemory.shared
+        // Coreference resolution — replace 3rd-person pronouns
+        // (him/her/them/it/there) with the last referent of that kind.
+        // Done BEFORE all routing tiers so every classifier sees the
+        // resolved entity, not the pronoun. Conservative: only fires
+        // when a referent of the matching kind was recorded.
+        let resolved = Self.resolveCoreferences(normalized, memory: mem)
+        if resolved != normalized {
+            GigiDebugLogger.log("GIGI Agent: coreference resolved '\(normalized.prefix(60))' → '\(resolved.prefix(60))'")
+        }
+        let text = resolved
+        Self.currentUserUtterance = text
+        GigiDebugLogger.log("GIGI agentEngine.process ENTRY: text='\(text.prefix(60))'")
+
+        // Pending clarification continuation — MUST run BEFORE the fast-path
+        // and probe, otherwise "Hi" would get caught as a greeting (`respond`)
+        // and the user's answer to "What do you want to say to Marco?" gets
+        // lost. The router-side check still runs as a defense-in-depth for
+        // non-fast-path turns.
+        if let agentResult = await consumePendingClarificationIfAny(text: text) {
+            mem.addUserTurn(text)
+            return agentResult
+        }
         mem.addUserTurn(text)
 
         #if DEBUG
@@ -172,20 +208,37 @@ final class GigiAgentEngine {
         // entry (every router branch records into GigiRouterTrace). This
         // turn now contributes a structured summary to the NEXT router
         // call's compactHistory(), instead of a verbatim assistant line.
-        if let trace = GigiRouterTrace.shared.recent(count: 1).last {
-            mem.annotateLastTurn(
-                intent: trace.tool,
-                slot: trace.slot,
-                tier: trace.tier,
-                success: !agentResult.isError
-            )
-        } else {
-            mem.annotateLastTurn(
-                intent: agentResult.executedTools.first,
-                slot: nil,
-                tier: nil,
-                success: !agentResult.isError
-            )
+        let traceEntry = GigiRouterTrace.shared.recent(count: 1).last
+        let resolvedIntent = traceEntry?.tool ?? agentResult.executedTools.first
+        let resolvedSlot   = traceEntry?.slot
+        let resolvedTier   = traceEntry?.tier
+        mem.annotateLastTurn(
+            intent:  resolvedIntent,
+            slot:    resolvedSlot,
+            tier:    resolvedTier,
+            success: !agentResult.isError
+        )
+
+        // Coreference bookkeeping: if the dispatched intent surfaced an
+        // entity, remember it so the next turn can resolve pronouns
+        // against it. Only on success — failures leave the previous
+        // referent in place.
+        // remember/recall need special handling: the subject can be a
+        // person, a preference, or a thing — pref subjects MUST NOT
+        // overwrite lastReferent[person] (otherwise the next "him"
+        // resolves to "my default message platform" etc.).
+        if !agentResult.isError,
+           let intent = resolvedIntent,
+           let slot = resolvedSlot, !slot.isEmpty {
+            let kind: String?
+            if intent == "remember" || intent == "recall" {
+                kind = Self.referentKindForRememberRecall(subject: slot)
+            } else {
+                kind = Self.referentKind(for: intent)
+            }
+            if let k = kind {
+                mem.recordReferent(slot, kind: k)
+            }
         }
 
         return agentResult
@@ -203,6 +256,152 @@ final class GigiAgentEngine {
     /// Mirrors GigiRequestRouter.detectBuildShortcutPattern (same verb set)
     /// but only returns a boolean — the router still runs the canonical
     /// extraction afterward.
+    // MARK: - Pending clarification continuation
+
+    /// If the previous turn left a pending clarification (e.g. "What do
+    /// you want to say to Marco?"), consume the current utterance as the
+    /// missing slot value and dispatch the completed intent. Returns nil
+    /// to let normal processing continue when:
+    ///   - there is no pending clarification
+    ///   - the user issued a clear new command (set/turn/call/who/...)
+    /// Returns an AgentResult when:
+    ///   - the user cancelled (no/cancel/abort/...)
+    ///   - the utterance was consumed as the slot value and dispatched.
+    private func consumePendingClarificationIfAny(text: String) async -> AgentResult? {
+        guard let pending = GigiConversationMemory.shared.consumePendingClarification() else {
+            return nil
+        }
+        if GigiRequestRouter.detectNegative(in: text) {
+            GigiDebugLogger.log("GIGI Agent: pending clarification CANCELLED")
+            let speech = "Cancelled."
+            GigiConversationMemory.shared.addModelSpeech(speech)
+            return AgentResult(speech: speech, executedTools: ["\(pending.intent)_cancel"],
+                               isFollowUp: false, costEstimate: 0,
+                               requiresConfirm: nil, isError: false)
+        }
+        if GigiRequestRouter.looksLikeNewCommand(text) {
+            GigiDebugLogger.log("GIGI Agent: pending clarification SUPERSEDED by new command")
+            return nil
+        }
+
+        // Chain: if we just filled the `contact` slot of send_message,
+        // the body is still missing. Clean filler prefixes ("To leo
+        // corte" → "Leo Corte"), resolve relationships ("my brother" →
+        // the saved name), save as person referent, and ask for body.
+        if pending.intent == "send_message" && pending.slot == "contact" {
+            let rawContact = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolved = await GigiRequestRouter.resolveContactFromMemory(rawContact)
+            let cleaned = GigiRequestRouter.cleanContactName(rawContact)
+            let contact: String
+            if let r = resolved, !r.isEmpty {
+                contact = r
+            } else if !cleaned.isEmpty {
+                contact = cleaned
+            } else {
+                contact = rawContact
+            }
+            GigiConversationMemory.shared.recordReferent(contact, kind: "person")
+            let platform = pending.partialParams["platform"] ?? "imessage"
+            let speech = "What do you want to say to \(contact)?"
+            GigiConversationMemory.shared.setPendingClarification(.init(
+                intent: "send_message",
+                slot: "body",
+                partialParams: ["contact": contact, "platform": platform],
+                timestamp: Date()
+            ))
+            GigiDebugLogger.log("GIGI Agent: pending chained — contact='\(contact)' → asking for body")
+            GigiConversationMemory.shared.addModelSpeech(speech)
+            return AgentResult(speech: speech, executedTools: [],
+                               isFollowUp: true, costEstimate: 0,
+                               requiresConfirm: nil, isError: false)
+        }
+
+        var params = pending.partialParams
+        params[pending.slot] = text
+        params["raw"] = text
+        let intent = GigiIntent(label: pending.intent, confidence: 1.0, params: params)
+        let speech = await GigiActionBridge.shared.execute(intent)
+        let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Done."
+            : speech
+        GigiDebugLogger.log("GIGI Agent: pending CONTINUED intent=\(pending.intent) slot=\(pending.slot) value='\(text.prefix(40))'")
+        GigiRouterTrace.shared.record(
+            utterance: text, tier: "clarification-continuation",
+            tool: pending.intent, confidence: 1.0, slot: params[pending.slot]
+        )
+        GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+        return AgentResult(speech: finalSpeech, executedTools: [pending.intent],
+                           isFollowUp: false, costEstimate: 0,
+                           requiresConfirm: nil, isError: false)
+    }
+
+    // MARK: - Coreference resolver
+    //
+    // Substitutes 3rd-person pronouns (him/her/them/it/there) with the
+    // last referent of the matching kind, tracked by
+    // GigiConversationMemory. Runs after smart-punctuation normalization
+    // and BEFORE every routing tier, so all downstream classifiers see
+    // the resolved text. Conservative: only substitutes when the pronoun
+    // appears as a whole word and a referent of the right kind exists.
+
+    private static let pronounToKind: [(pattern: String, kind: String)] = [
+        (#"\bhim\b"#,      "person"),
+        (#"\bher\b"#,      "person"),
+        (#"\bhe\b"#,       "person"),
+        (#"\bshe\b"#,      "person"),
+        (#"\bthem\b"#,     "person"),
+        (#"\bthey\b"#,     "person"),
+        (#"\bit\b"#,       "thing"),
+        (#"\bthere\b"#,    "place")
+    ]
+
+    static func resolveCoreferences(_ text: String, memory: GigiConversationMemory) -> String {
+        var resolved = text
+        for (pattern, kind) in pronounToKind {
+            guard let referent = memory.lastReferent(kind: kind), !referent.isEmpty else { continue }
+            guard resolved.range(of: pattern, options: .regularExpression) != nil else { continue }
+            // Whole-word, case-insensitive replacement.
+            resolved = resolved.replacingOccurrences(
+                of: pattern,
+                with: referent,
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        return resolved
+    }
+
+    /// Maps a dispatched intent's slot to a coreference entity kind so
+    /// the next turn can resolve "him/her/it/there" against it.
+    /// Returns nil for intents that don't surface a referent.
+    private static func referentKind(for intent: String) -> String? {
+        switch intent {
+        case "make_call", "send_message", "facetime", "facetime_audio":
+            return "person"
+        case "navigate", "navigation", "weather":
+            return "place"
+        case "play_music", "open_app", "set_timer", "set_alarm", "set_reminder":
+            return "thing"
+        default:
+            // remember/recall are intentionally absent here — the subject
+            // could be a person ("Marco"), a preference ("my password"),
+            // or a thing ("the wifi password"). Callers must use
+            // `referentKindForRememberRecall(subject:)` to inspect the
+            // actual subject and decide.
+            return nil
+        }
+    }
+
+    /// remember/recall variant — inspects the subject to decide whether
+    /// the referent should be tracked as a person (so "him/her" resolves
+    /// to it) or skipped entirely (preferences/things shouldn't
+    /// overwrite the last person referent).
+    private static func referentKindForRememberRecall(subject: String) -> String? {
+        let key = GigiMemory.smartKey(forSubject: subject)
+        if key.hasPrefix("contact:") { return "person" }
+        // pref:/place:/etc — don't pollute the person slot.
+        return nil
+    }
+
     /// Normalize the user's input by replacing smart punctuation that
     /// iOS keyboards introduce automatically (curly apostrophes/quotes,
     /// en/em dashes, NBSPs) with their ASCII equivalents. Idempotent.
@@ -330,6 +529,9 @@ final class GigiAgentEngine {
         GigiConversationMemory.shared.annotateLastTurn(
             intent: "recall", slot: query, tier: "memory", success: true
         )
+        if let kind = Self.referentKind(for: "recall") {
+            GigiConversationMemory.shared.recordReferent(query, kind: kind)
+        }
         GigiConversationMemory.shared.addModelSpeech(speech)
         return AgentResult(
             speech:          speech,
@@ -379,6 +581,26 @@ final class GigiAgentEngine {
         GigiConversationMemory.shared.annotateLastTurn(
             intent: intent.label, slot: nluSlot, tier: "nlu_fast", success: true
         )
+        // For `remember`, NLU passes the FULL body ("Marco is my brother")
+        // as params["text"], not the subject. Parse it via
+        // parseRememberKeyValue to recover the actual subject ("Marco")
+        // so coreference resolves "him" → "Marco", not "him" → "Marco is
+        // my brother". Only record as person referent when the parsed
+        // key is a contact (NOT pref:/place:/etc — those shouldn't
+        // overwrite lastReferent[person]).
+        if intent.label == "remember" {
+            let body = intent.params["text"] ?? intent.params["raw"] ?? ""
+            if let (key, _) = GigiMemory.parseRememberKeyValue(contact: "", body: body) {
+                let subjectRaw = key.split(separator: ":", maxSplits: 1).last.map(String.init) ?? key
+                let subject = subjectRaw.prefix(1).uppercased() + subjectRaw.dropFirst()
+                if key.hasPrefix("contact:") {
+                    GigiConversationMemory.shared.recordReferent(String(subject), kind: "person")
+                }
+            }
+        } else if let kind = Self.referentKind(for: intent.label),
+                  let slot = nluSlot, !slot.isEmpty {
+            GigiConversationMemory.shared.recordReferent(slot, kind: kind)
+        }
         GigiConversationMemory.shared.addModelSpeech(speech)
         return AgentResult(
             speech:          speech,

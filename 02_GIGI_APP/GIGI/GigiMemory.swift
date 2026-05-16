@@ -354,6 +354,30 @@ final class GigiMemory {
         return flipped.joined(separator: " ")
     }
 
+    /// Heuristic: pick the right key prefix based on the shape of the
+    /// subject the user asserted. Possessive phrases ("my password",
+    /// "my default message platform", "my favorite movie") are personal
+    /// PREFERENCES, not contacts — so they get `pref:<slug>`. Bare names
+    /// ("Marco", "Sergio Rossi") become `contact:<slug>`. Other generic
+    /// preference keywords (default/preferred/favorite) also trigger
+    /// pref. The slug normalizes spaces to underscores so multi-word
+    /// keys round-trip cleanly through CloudKit and fuzzy recall.
+    static func smartKey(forSubject subject: String) -> String {
+        let s = subject.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return "" }
+        if s.hasPrefix("my ") {
+            let rest = String(s.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let slug = rest.replacingOccurrences(of: " ", with: "_")
+            return slug.isEmpty ? "" : "pref:\(slug)"
+        }
+        let prefKeywords = ["default ", "preferred ", "favorite ", "favourite "]
+        if prefKeywords.contains(where: { s.contains($0) }) {
+            let slug = s.replacingOccurrences(of: " ", with: "_")
+            return "pref:\(slug)"
+        }
+        return Self.contactKey(forName: subject)
+    }
+
     /// `contact:<name>` unless `contact` already contains `:`.
     static func contactKey(forName name: String) -> String {
         let slug = name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -366,7 +390,12 @@ final class GigiMemory {
         let c = contact.trimmingCharacters(in: .whitespacesAndNewlines)
         let b = body.trimmingCharacters(in: .whitespacesAndNewlines)
         if !c.isEmpty, !b.isEmpty {
-            let key = c.contains(":") ? c.lowercased() : Self.contactKey(forName: c)
+            let key: String
+            if c.contains(":") {
+                key = c.lowercased()
+            } else {
+                key = Self.smartKey(forSubject: c)
+            }
             guard !key.isEmpty else { return nil }
             return (key, b)
         }
@@ -380,7 +409,12 @@ final class GigiMemory {
                 left = String(left.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
             }
             guard left.count >= 1, right.count >= 1 else { continue }
-            let key = left.contains(":") ? left.lowercased() : Self.contactKey(forName: left)
+            let key: String
+            if left.contains(":") {
+                key = left.lowercased()
+            } else {
+                key = Self.smartKey(forSubject: left)
+            }
             guard !key.isEmpty else { continue }
             return (key, right)
         }
