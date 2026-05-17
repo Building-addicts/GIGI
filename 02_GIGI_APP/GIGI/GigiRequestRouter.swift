@@ -329,36 +329,15 @@ final class GigiRequestRouter {
             }
         }
 
-        // Bug #017 (2026-05-15) — Pre-FM preference assertion intercept.
-        //
-        // Apple FM confidently mis-classifies "My default message platform
-        // is WhatsApp" as native_tool(send_message) because of the
-        // "message"/"WhatsApp" tokens. The post-FM Bug #015 override
-        // doesn't fire because effectivePath is already native_tool.
-        // Catch possessive assertions ("my X is Y") BEFORE Apple FM ever
-        // sees them — these are unambiguously personal preferences.
-        if let (subject, value) = Self.detectFactAssertion(in: text),
-           Self.looksLikePreferenceAssertion(subject: subject) {
-            GigiDebugLogger.log("GIGI Router: pre-FM preference assertion → bridge(remember). subject='\(subject)' value='\(value)'")
-            let intent = GigiIntent(
-                label: "remember",
-                confidence: 1.0,
-                params: ["contact": subject, "body": value, "raw": text]
-            )
-            let speech = await GigiActionBridge.shared.execute(intent)
-            let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "Got it. I'll remember that."
-                : speech
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "preference-intercept",
-                tool: "remember", confidence: 1.0, slot: subject
-            )
-            GigiConversationMemory.shared.annotateLastTurn(
-                intent: "remember", slot: subject, tier: "preference-intercept", success: true
-            )
-            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-            return .actionInvoked(speech: finalSpeech, tool: "remember")
-        }
+        // Bug #017 removed (2026-05-17). The pre-FM preference intercept was
+        // a band-aid for early iOS 26 betas where Apple FM mis-routed
+        // possessive "my X is Y" assertions. With routerSystemPrompt RULE-R1
+        // + 5 few-shot examples, FM now routes pure preferences to
+        // native_tool(remember) on its own. The intercept created its own
+        // failure mode by mis-classifying compound requests like
+        // "my car is broken, find the nearest mechanic" as preferences.
+        // detectFactAssertion's strict guards still gate the post-FM
+        // Bug #015 override below for the remaining mis-routes.
 
         // Mode gating (GATE 7) — read the selected operating mode and use
         // it to disable paths upfront. `.auto` (no mode set) keeps all paths.
@@ -406,6 +385,21 @@ final class GigiRequestRouter {
             && !Self.hasWebOrCodeOrImageVerb(text)
             && decision.requiredCapabilities.isEmpty {
             GigiDebugLogger.log("GIGI Router: delegate_cloud DOWNGRADED to delegate_local — no web/code/image verb in prompt")
+            effectivePath = "delegate_local"
+        }
+
+        // 2.54 Compound-command override (2026-05-17).
+        // Apple FM sometimes treats "<X> is <state> <imperative> <object>"
+        // as a pure fact assertion and picks native_tool(remember).
+        // Example: "my car is broken find the nearest mechanic" — FM
+        // misses that "find" is the actual command. If the utterance
+        // contains an imperative verb (other than at the start, which
+        // would already have been classified as an action), downgrade
+        // to delegate_local so Ollama can actually respond to the task.
+        if effectivePath == "native_tool"
+            && decision.primaryAction == "remember"
+            && Self.containsEmbeddedImperative(in: text) {
+            GigiDebugLogger.log("GIGI Router: native_tool(remember) DOWNGRADED to delegate_local — embedded imperative in '\(text)'")
             effectivePath = "delegate_local"
         }
 
@@ -1344,12 +1338,10 @@ final class GigiRequestRouter {
             if left.contains(",") { return nil }
             let leftWordCount = left.split(whereSeparator: { $0.isWhitespace }).count
             if leftWordCount > 5 { return nil }
-            // Compound-request guard: if any clause (split by comma OR
-            // by sentence connectors "and"/"then") on EITHER side starts
-            // with an imperative verb, this is "context + task" — not a
-            // fact. "My car is broken, find the nearest mechanic" splits
-            // to ["broken", "find the nearest mechanic"] and the second
-            // clause is a command → reject so FM can dispatch the task.
+            // Compound-request guard (with-comma): if any clause (split by
+            // comma/semicolon) on EITHER side starts with an imperative
+            // verb, this is "context + task" — not a fact.
+            // "My car is broken, find the nearest mechanic" → reject.
             let allClauses = (left + " " + sep + " " + right)
                 .lowercased()
                 .split(whereSeparator: { $0 == "," || $0 == ";" })
@@ -1367,6 +1359,14 @@ final class GigiRequestRouter {
                     return nil
                 }
             }
+            // Compound-request guard (without-comma): when the user runs
+            // sentences together ("my car is broken find the nearest
+            // mechanic" with no comma), scan the right-hand side for a
+            // standalone imperative verb. "broken find the nearest …"
+            // contains "find" → reject as compound.
+            if Self.containsEmbeddedImperative(in: right) {
+                return nil
+            }
             // Defensive: discard if the left side starts with an
             // interrogative pronoun ("who is X" already bailed above on
             // hasPrefix, but defend against parser drift).
@@ -1376,6 +1376,45 @@ final class GigiRequestRouter {
             return (subject: left, value: right)
         }
         return nil
+    }
+
+    /// Detects a standalone imperative verb embedded anywhere in the
+    /// text. Used to identify compound utterances of the form
+    /// "<context-assertion> <imperative> <object>" — e.g.
+    /// "my car is broken find the nearest mechanic".
+    ///
+    /// Tokenizes the text on any non-letter character (so commas,
+    /// periods, hyphens, digits all separate words). Matches against
+    /// a curated set of bare verb stems. Word-boundary safe: "search"
+    /// matches but "researcher" doesn't.
+    static func containsEmbeddedImperative(in text: String) -> Bool {
+        let bareImperatives: Set<String> = [
+            // EN
+            "find", "call", "send", "text", "message", "whatsapp",
+            "buy", "book", "order", "search", "look", "browse",
+            "open", "play", "set", "turn", "remind", "remember",
+            "fix", "explain", "tell", "help", "show", "navigate",
+            "make", "create", "build", "run", "execute", "launch",
+            "schedule", "start", "stop", "pause", "compose",
+            // IT
+            "trova", "cerca", "manda", "chiama", "prenota", "ordina",
+            "esegui", "ripara", "apri", "spiega", "ricorda", "lancia",
+            "mostra", "elenca", "compra"
+        ]
+        let words = text.lowercased()
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+        // Skip the first word — if it's an imperative, the utterance
+        // is a normal command and gets caught upstream by the regular
+        // imperative-starter rejection. We're looking for imperatives
+        // that appear AFTER context, embedded in the sentence.
+        guard words.count > 1 else { return false }
+        for word in words.dropFirst() {
+            if bareImperatives.contains(word) {
+                return true
+            }
+        }
+        return false
     }
 
     static func looksLikeOpenKnowledgeQuery(_ text: String) -> Bool {
