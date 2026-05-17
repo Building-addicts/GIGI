@@ -52,14 +52,20 @@ class GigiActionBridge {
         var status = EKEventStore.authorizationStatus(for: .event)
         if status == .notDetermined {
             let granted = await withCheckedContinuation { continuation in
-                eventStore.requestFullAccessToEvents { granted, _ in
+                eventStore.requestFullAccessToEvents { granted, err in
+                    if let err {
+                        GigiDebugLogger.log("requestFullAccessToEvents error: \(err.localizedDescription)")
+                    }
                     continuation.resume(returning: granted)
                 }
             }
             guard granted else { return false }
             status = EKEventStore.authorizationStatus(for: .event)
         }
-        return status == .fullAccess
+        // iOS 17+ split event access into fullAccess and writeOnly; both
+        // can save new events. Accept either to avoid silently rejecting
+        // a granted-but-write-only state.
+        return status == .fullAccess || status == .writeOnly
     }
 
     private func ensureReminderAccess() async -> Bool {
@@ -75,10 +81,19 @@ class GigiActionBridge {
                 }
             }
             guard granted else { return false }
+            // iOS occasionally returns granted=true while the authorization
+            // status hasn't propagated yet. Yield once and re-poll before
+            // declaring failure.
             status = EKEventStore.authorizationStatus(for: .reminder)
+            if status == .notDetermined {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                status = EKEventStore.authorizationStatus(for: .reminder)
+            }
             GigiDebugLogger.log("Reminder auth (post): \(status.rawValue)")
         }
-        return status == .fullAccess
+        // Defensive: accept writeOnly too in case Apple ever extends it
+        // to the reminder entity (currently fullAccess only on iOS 17+).
+        return status == .fullAccess || status == .writeOnly
     }
 
     // MARK: - Execute intent
@@ -2197,7 +2212,14 @@ class GigiActionBridge {
             return "What should I remind you about?"
         }
         guard await ensureReminderAccess() else {
-            return "Enable Reminders access in Settings."
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            GigiDebugLogger.log("createReminder: access denied (status=\(status.rawValue))")
+            switch status {
+            case .denied, .restricted:
+                return "Reminders access is off. Open Settings → Privacy → Reminders → GIGI to enable it."
+            default:
+                return "I couldn't get Reminders access. Try again, or enable it in Settings → Privacy → Reminders → GIGI."
+            }
         }
 
         // defaultCalendarForNewReminders() can be nil on fresh installs
@@ -2205,7 +2227,8 @@ class GigiActionBridge {
         let calendar: EKCalendar? = eventStore.defaultCalendarForNewReminders()
             ?? eventStore.calendars(for: .reminder).first(where: { $0.allowsContentModifications })
         guard let cal = calendar else {
-            GigiDebugLogger.log("createReminder: no writable Reminders calendar available")
+            let sources = eventStore.sources.map(\.title).joined(separator: ",")
+            GigiDebugLogger.log("createReminder: no writable Reminders calendar available | sources=[\(sources)]")
             return "Open the Reminders app once to set up a list, then ask me again."
         }
 
@@ -2220,8 +2243,11 @@ class GigiActionBridge {
             return "Reminder set: \(title)"
         } catch {
             let ns = error as NSError
-            GigiDebugLogger.log("createReminder save failed: \(error.localizedDescription) | domain=\(ns.domain) code=\(ns.code)")
-            return "Couldn't save the reminder."
+            GigiDebugLogger.log("createReminder save failed: \(error.localizedDescription) | domain=\(ns.domain) code=\(ns.code) | calendar='\(cal.title)' source='\(cal.source.title)'")
+            // Surface a hint so the user can report what they hit instead
+            // of "Couldn't save". The error code is short and acts as a
+            // tag we can grep for in logs.
+            return "Couldn't save the reminder (\(ns.domain) \(ns.code))."
         }
     }
 

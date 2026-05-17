@@ -38,6 +38,11 @@ struct SettingsView: View {
     @State private var forceClaude: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.forceClaude)
     @State private var autoFallback: Bool = GigiKeychain.loadBool(forKey: GigiKeychain.Key.autoFallback)
 
+    // Default platform for "send a message to X" when the utterance
+    // doesn't mention one. Backed by pref:default_message_platform in
+    // GigiMemory — same key resolveMessagePlatform reads at runtime.
+    @State private var defaultMessagePlatform: String = "imessage"
+
     // Phase 2 GATE 4 — Ollama (Path 3) status snapshot. Refreshed on appear
     // and on explicit "Re-check" tap. Driven by GigiHarnessClient.localLLMStatus.
     @State private var ollamaStatus: GigiHarnessClient.LocalLLMStatus? = nil
@@ -71,6 +76,7 @@ struct SettingsView: View {
                 brainModeSection
                 harnessSection
                 whatsAppSection
+                messagingDefaultsSection
                 profileSection
                 hardwareTriggerSection
                 homeKitSection
@@ -342,6 +348,34 @@ struct SettingsView: View {
             Text("💬 WhatsApp Web")
         } footer: {
             Text("Scan QR once to let GIGI send messages automatically without opening the app.")
+                .font(.caption)
+        }
+    }
+
+    // MARK: - Messaging defaults section
+
+    private var messagingDefaultsSection: some View {
+        Section {
+            Picker("Default platform", selection: $defaultMessagePlatform) {
+                Text("iMessage").tag("imessage")
+                Text("WhatsApp").tag("whatsapp")
+                Text("Telegram").tag("telegram")
+                Text("SMS").tag("sms")
+            }
+            .pickerStyle(.menu)
+            .tint(.purple)
+            .onChange(of: defaultMessagePlatform) { _, new in
+                Task {
+                    await GigiMemory.shared.remember(
+                        key: "pref:default_message_platform",
+                        value: new
+                    )
+                }
+            }
+        } header: {
+            Text("💬 Messaging")
+        } footer: {
+            Text("Used when you say \"send a message to X\" without naming a platform. Saying \"on WhatsApp\" or \"text\" in the request overrides this.")
                 .font(.caption)
         }
     }
@@ -1067,6 +1101,10 @@ struct SettingsView: View {
         harnessSecret = GigiKeychain.load(forKey: GigiKeychain.Key.harnessSecret) ?? ""
         let pairingState = GigiHarnessClient.shared.pairingState
         harnessStatus = pairingState.isConfigured ? "Configured (not tested)" : "Not configured - \(pairingState.debugLabel)"
+        if let pref = await GigiMemory.shared.recall("pref:default_message_platform"),
+           ["imessage", "whatsapp", "telegram", "sms"].contains(pref.lowercased()) {
+            defaultMessagePlatform = pref.lowercased()
+        }
     }
 
     /// Used only by the "Salva e testa" button inside the manual/advanced

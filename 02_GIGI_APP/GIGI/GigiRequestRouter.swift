@@ -760,13 +760,31 @@ final class GigiRequestRouter {
             return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
         }
 
-        let prompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+        // Topic-coreference fix: the `history` parameter we receive is the
+        // FM-router-optimized compact form ("Prev #1: user asked recall of
+        // 'hyperopt'") which has no value for Ollama. Ollama needs the
+        // verbatim previous turns so it can resolve "it" / "how does it
+        // work" / "explain it simply" against the actual topic of the
+        // last 1-3 exchanges. Build a richer transcript here.
+        let verbose = GigiConversationMemory.shared.contextString(maxTurns: 3)
+        let basePrompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+        let prompt: String
+        if verbose.isEmpty {
+            prompt = basePrompt
+        } else {
+            prompt = """
+            Previous conversation (for context, do not repeat verbatim):
+            \(verbose)
+
+            Current user message: \(basePrompt)
+            """
+        }
 
         guard harness.isConfigured else {
             return .error("Local AI needs a paired harness. Pair the harness from Settings to enable Ollama.")
         }
 
-        GigiDebugLogger.log("GIGI Router → delegate_local: prompt=\(prompt.prefix(80))")
+        GigiDebugLogger.log("GIGI Router → delegate_local: prompt=\(prompt.prefix(80)) (verbose-context bytes=\(verbose.count))")
         var fullText = ""
         var sawError: String?
         for await event in harness.runLocalLLM(prompt: prompt, history: history) {
@@ -1079,22 +1097,37 @@ final class GigiRequestRouter {
     /// Bug #018 helper: same shape as detectMessageWithoutBody but the
     /// contact slot is an unresolved pronoun (no person referent yet).
     /// Used to ask "Who do you want to send a message to?".
+    ///
+    /// Never fires when a body indicator is present — that means the
+    /// user already gave both contact and body ("Send a message to
+    /// mamma saying hi"), so we should let FM handle it as a fully
+    /// specified send_message instead of bouncing back a contact prompt.
     static func detectMessageWithUnresolvedContact(in text: String) -> Bool {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !t.isEmpty else { return false }
         let verbs = ["send ", "text ", "message ", "whatsapp ", "imessage ", "telegram ", "sms "]
         guard verbs.contains(where: { t.hasPrefix($0) }) else { return false }
+        // Body indicator guard — mirror Bug #016. If the user already
+        // gave a body, the request isn't "unresolved", whatever the
+        // contact slot looks like.
+        let bodyIndicators = [
+            " saying ", " telling ", " tell ", " told ",
+            " to say ", " and say ", " with the message ", " that says ",
+            " writing ", " write "
+        ]
+        if bodyIndicators.contains(where: { t.contains($0) }) { return false }
+        if t.contains(":") || t.contains("\"") { return false }
         // Mention any pronoun anywhere in the residue.
         let pronouns = [" him", " her", " them", " he ", " she ", " they ", " someone", " anyone"]
         if pronouns.contains(where: { t.contains($0) }) { return true }
-        // Also handle "Send a message" (no contact, no pronoun) — open
-        // request that needs both contact AND body. Treated the same.
+        // Also handle bare "Send a message" (no contact, no pronoun, no
+        // body) — open request that needs both contact AND body. Match
+        // ONLY when the utterance is the open shape itself, not a prefix
+        // of a longer utterance (otherwise "send a message to mamma"
+        // would wrongly trigger).
         let openShapes = ["send a message", "send a text", "send a whatsapp",
                           "send a telegram", "send an sms"]
-        if openShapes.contains(where: { t == $0 || t.hasPrefix($0 + " ") || t.hasSuffix(" " + $0) }) {
-            return true
-        }
-        return false
+        return openShapes.contains(where: { t == $0 })
     }
 
     /// Bug #017 helper: detect a possessive / preference-shaped subject
@@ -1190,6 +1223,16 @@ final class GigiRequestRouter {
             "someone", "anyone", "nobody"
         ]
         if pronouns.contains(rest.lowercased()) { return nil }
+        // Reject if cleaning left only a message-noun. Happens on bare
+        // "send a message" / "send a text" — cleanContactName strips
+        // "a " and leaves "message", which would otherwise be Title-Cased
+        // to "Message" and used as a fake contact. Bug #018 picks these
+        // up downstream with the right prompt ("Who do you want to send
+        // a message to?").
+        let messageNouns: Set<String> = [
+            "message", "text", "whatsapp", "telegram", "sms", "imessage"
+        ]
+        if messageNouns.contains(rest.lowercased()) { return nil }
         return rest
     }
 
@@ -1198,13 +1241,21 @@ final class GigiRequestRouter {
     /// override Apple FM's tendency to route assertions to delegate_local
     /// (which can't persist).
     ///
-    /// Detection avoids common interrogatives: leading who/what/where/
-    /// when/why/how/whose are NOT assertions — they're questions.
+    /// Rejections (a true fact assertion has none of these):
+    /// - Question shape: leading WH-word, trailing "?", or embedded
+    ///   "what is/are", "how does", "why is" anywhere in the text.
+    /// - Imperative shape: leading command verb (explain, tell, show,
+    ///   describe, define, run, build, send, call, …).
+    /// - Meta-commentary: leading first/second-person discourse marker
+    ///   ("I was", "I'm not", "I said", "you said", "what I meant" …) —
+    ///   these are conversational comments, not facts to persist.
+    /// - Multi-clause subject: left side > 5 words or contains a comma.
     static func detectFactAssertion(in text: String) -> (subject: String, value: String)? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return nil }
         let lower = t.lowercased()
-        // Bail if it's a question — these start with WH-words.
+
+        // Bail if it's a question — leading WH-words.
         let interrogativePrefixes = [
             "who ", "who's ", "whos ",
             "what ", "what's ", "whats ",
@@ -1217,6 +1268,60 @@ final class GigiRequestRouter {
         ]
         if interrogativePrefixes.contains(where: { lower.hasPrefix($0) }) { return nil }
         if lower.hasSuffix("?") { return nil }
+
+        // Bail on embedded questions — a copula preceded by a WH-word
+        // anywhere in the text means the user is asking about a topic,
+        // not asserting a fact. Catches "Explain it, what are X" and
+        // "Tell me, who is Y".
+        let embeddedQuestions = [
+            " what is ", " what are ", " what was ", " what were ",
+            " who is ", " who are ", " who was ", " who were ",
+            " how is ", " how are ", " how does ", " how do ",
+            " why is ", " why are ", " why does ",
+            " where is ", " where are ",
+            " when is ", " when are ", " when was ",
+            " cosa è ", " cos'è ", " chi è ", " come è ", " perché è "
+        ]
+        if embeddedQuestions.contains(where: { lower.contains($0) }) { return nil }
+
+        // Bail on imperative-verb-led commands. These are requests for
+        // action / explanation, not statements of fact. EN + IT.
+        let imperativeStarters = [
+            "explain ", "tell ", "show ", "describe ", "define ",
+            "give ", "list ", "name ", "help ",
+            "find ", "search ", "look ", "browse ", "fetch ",
+            "run ", "execute ", "launch ", "trigger ", "start ", "stop ",
+            "build ", "create ", "make ", "compose ", "draft ",
+            "send ", "text ", "message ", "call ", "facetime ",
+            "set ", "turn ", "play ", "pause ", "open ", "close ",
+            "navigate ", "drive ", "take me ", "go to ",
+            "remind ", "remember ", "forget ", "save ", "write ",
+            "fix ", "book ", "order ", "schedule ", "buy ",
+            "spiega ", "dimmi ", "raccontami ", "mostra ", "elenca ",
+            "trova ", "cerca ", "esegui ", "lancia ", "apri ",
+            "manda ", "chiama ", "ricorda ", "ricordami ", "dimentica ",
+            "ripara ", "prenota ", "ordina ", "compra "
+        ]
+        if imperativeStarters.contains(where: { lower.hasPrefix($0) }) { return nil }
+
+        // Bail on first/second-person discourse markers — meta-commentary
+        // about the conversation, not facts. "I was not talking about X"
+        // shouldn't be persisted as "I = not talking about X".
+        //
+        // Conservative list — only past-tense / speech-act / negation
+        // shapes that are almost never fact assertions. "I'm Federico"
+        // and "I am Italian" are kept routable as identity assertions.
+        let metaDiscourse = [
+            "i was ", "i wasn't ", "i was not ",
+            "i said ", "i meant ", "i mean ", "i think ", "i thought ",
+            "i didn't ", "i did not ", "i don't ", "i do not ",
+            "i'm not ", "im not ", "i am not ",
+            "you said ", "you mean ", "you meant ",
+            "you didn't ", "you did not ",
+            "what i ", "what you ",
+            "non stavo ", "stavo dicendo ", "non ho detto ", "non intendevo "
+        ]
+        if metaDiscourse.contains(where: { lower.hasPrefix($0) }) { return nil }
 
         // Try copulas in priority order. The first three are unambiguous
         // EN/IT fact-assertion copulas; "=" is an explicit assignment.
@@ -1233,7 +1338,38 @@ final class GigiRequestRouter {
             let right = String(t[range.upperBound...]).trimmingCharacters(in: CharacterSet.whitespaces.union(.punctuationCharacters))
             guard !left.isEmpty, !right.isEmpty,
                   left.count <= 60, right.count <= 200 else { continue }
-            // Discard if the left side is an interrogative pronoun ("who is X" passed bail above only because we matched " is "; defend again).
+            // Multi-clause subjects are almost never genuine assertions.
+            // Real ones: "Sergio", "My brother", "My favorite color" — at
+            // most 5 words, no internal punctuation.
+            if left.contains(",") { return nil }
+            let leftWordCount = left.split(whereSeparator: { $0.isWhitespace }).count
+            if leftWordCount > 5 { return nil }
+            // Compound-request guard: if any clause (split by comma OR
+            // by sentence connectors "and"/"then") on EITHER side starts
+            // with an imperative verb, this is "context + task" — not a
+            // fact. "My car is broken, find the nearest mechanic" splits
+            // to ["broken", "find the nearest mechanic"] and the second
+            // clause is a command → reject so FM can dispatch the task.
+            let allClauses = (left + " " + sep + " " + right)
+                .lowercased()
+                .split(whereSeparator: { $0 == "," || $0 == ";" })
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            for clause in allClauses {
+                // Also peel off a leading "and "/"then "/"so "/"please "
+                // so "...and find me X" still gets matched.
+                var c = clause
+                let connectors = ["and ", "then ", "so ", "please ", "e ", "poi ", "quindi "]
+                for con in connectors where c.hasPrefix(con) {
+                    c = String(c.dropFirst(con.count))
+                    break
+                }
+                if imperativeStarters.contains(where: { c.hasPrefix($0) }) {
+                    return nil
+                }
+            }
+            // Defensive: discard if the left side starts with an
+            // interrogative pronoun ("who is X" already bailed above on
+            // hasPrefix, but defend against parser drift).
             if interrogativePrefixes.contains(where: { left.lowercased().hasPrefix($0.trimmingCharacters(in: .whitespaces) + " ") || left.lowercased() == $0.trimmingCharacters(in: .whitespaces) }) {
                 return nil
             }
