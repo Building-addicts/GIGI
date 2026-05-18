@@ -341,9 +341,20 @@ const CHERRI_VOCABULARY = {
   setBrightness:    { template: 'setBrightness(${brightness})', include: 'settings' },
   setVolume:        { template: 'setVolume(${level})',          include: 'settings' },
 
-  // A11y (LED torch)
-  torchOn:          { template: 'setLEDFlash(true)',            include: 'a11y' },
-  torchOff:         { template: 'setLEDFlash(false)',           include: 'a11y' },
+  // Camera torch — INTENTIONALLY UNSUPPORTED.
+  //
+  // Cherri 2.2.0 stdlib has `setLEDFlash` under actions/a11y, but it maps to
+  // `com.apple.AccessibilityUtilities.AXSettingsShortcuts.AXToggleLEDFlashIntent`
+  // — the accessibility "LED Flash for Alerts" toggle, NOT the camera
+  // flashlight (`is.workflow.actions.flashlight`). The silent failure of
+  // the previous mapping wasted real device-debugging time; we now fail
+  // loudly at the plan phase so the user knows immediately.
+  //
+  // Fix path: when cherri ships a stdlib function for the camera torch
+  // action (or the harness gains a non-cherri plist injector), swap these
+  // entries back to a working `{ template, include }` shape.
+  torchOn:          { unsupported: 'Flashlight Shortcuts (torch on) are not yet supported by this builder — the underlying compiler has no mapping for the camera-flashlight action. Try a different intent for now.' },
+  torchOff:         { unsupported: 'Flashlight Shortcuts (torch off) are not yet supported by this builder — the underlying compiler has no mapping for the camera-flashlight action. Try a different intent for now.' },
 
   // Sharing
   setClipboard:     { template: 'setClipboard(${text})',        include: 'sharing' },
@@ -400,6 +411,14 @@ function translateActionsToCherri(title, actions) {
     if (!entry) {
       logger.warn(`unknown cherri action '${spec?.action}' — abort translation`);
       return null;
+    }
+    if (entry.unsupported) {
+      // Loud-fail: caller's try/catch surfaces this message to iOS so the
+      // user sees a clear explanation instead of a silently broken Shortcut.
+      logger.warn(`action '${spec?.action}' is intentionally unsupported: ${entry.unsupported}`);
+      const err = new Error(entry.unsupported);
+      err.code = 'CHERRI_ACTION_UNSUPPORTED';
+      throw err;
     }
     if (entry.include) includes.add(entry.include);
   }
