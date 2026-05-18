@@ -57,7 +57,7 @@ final class GigiRequestRouter {
     static let shared = GigiRequestRouter()
 
     private let bridge = GigiActionBridge.shared
-    private let harness = GigiHarnessClient.shared
+    let harness = GigiHarnessClient.shared
     private let fallback = GigiFallbackRouter.shared
 
     private init() {}
@@ -68,530 +68,46 @@ final class GigiRequestRouter {
     /// Always returns a `RouteResult` — never throws. Errors are surfaced
     /// as `.error(message)` for the orchestrator to speak.
     func route(text: String, history: String = "") async -> RouteResult {
-        // GATE 15 Step 0.5 — Conversational consent for active proposal card.
+        // Refactor #6 — Declarative tier pipeline (final form).
         //
-        // When a ShortcutProposalCard is on screen, intercept simple
-        // YES/NO confirmations BEFORE the normal routing fires. This lets
-        // the user accept or dismiss the proposal by voice or chat without
-        // tapping the card buttons — same UX pattern as the contact
-        // disambiguation listener (ContactDisambiguationBubble).
+        // Every routing path lives in GigiRouterTiers.swift. The pipeline
+        // runs in declarative order; the DispatchTier at the tail is always
+        // terminal, so the `?? .error(...)` below is unreachable in
+        // practice — it's a defensive fallback if a tier returns .pass when
+        // it should have produced a terminal.
         //
-        // Guard against false positives: a long utterance that happens to
-        // contain "yes" (e.g. "yes call mom from spotify") is NOT a consent —
-        // fall through so the normal router can dispatch the actual intent.
-        if let proposal = await MainActor.run(body: { GigiSmartOrchestrator.shared.shortcutProposal }) {
-            let utterance = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let wordCount = utterance.split { $0.isWhitespace }.count
-            if wordCount > 0 && wordCount <= 4 {
-                if Self.detectAffirmative(in: utterance) {
-                    GigiDebugLogger.log("GIGI Router: proposal consent → CONFIRM via '\(utterance)'")
-                    await MainActor.run { proposal.onConfirm() }
-                    let speech = "Building '\(proposal.title)'..."
-                    GigiConversationMemory.shared.addModelSpeech(speech)
-                    return .actionInvoked(speech: speech, tool: "shortcut_proposal_confirm")
-                }
-                if Self.detectNegative(in: utterance) {
-                    GigiDebugLogger.log("GIGI Router: proposal consent → CANCEL via '\(utterance)'")
-                    await MainActor.run { proposal.onCancel() }
-                    let speech = "Cancelled."
-                    GigiConversationMemory.shared.addModelSpeech(speech)
-                    return .actionInvoked(speech: speech, tool: "shortcut_proposal_cancel")
-                }
-            }
-            // Card stays visible; user can still issue other intents.
-        }
-
-        // Bug #016 continuation — Pending clarification.
+        // Tier ordering is load-bearing — see the doc comment on each tier
+        // in GigiRouterTiers.swift for why.
         //
-        // If the previous turn was an override that asked the user for a
-        // missing slot (e.g. "What do you want to say to Marco?"), use
-        // THIS turn's text as that slot's value, complete the original
-        // intent, and dispatch. The user can cancel with "no/cancel" or
-        // implicitly by starting a new command verb (set/turn/call/...);
-        // those cases fall through to the normal pipeline.
-        if let pending = GigiConversationMemory.shared.consumePendingClarification() {
-            if Self.detectNegative(in: text) {
-                GigiDebugLogger.log("GIGI Router: pending clarification CANCELLED")
-                let speech = "Cancelled."
-                GigiConversationMemory.shared.addModelSpeech(speech)
-                return .actionInvoked(speech: speech, tool: "\(pending.intent)_cancel")
-            }
-            if Self.looksLikeNewCommand(text) {
-                GigiDebugLogger.log("GIGI Router: pending clarification SUPERSEDED by new command — falling through")
-                // pending is already consumed; continue with normal routing
-            } else {
-                var params = pending.partialParams
-                params[pending.slot] = text
-                params["raw"] = text
-                GigiDebugLogger.log("GIGI Router: pending clarification CONTINUED — intent=\(pending.intent) slot=\(pending.slot) value='\(text.prefix(40))'")
-                let intent = GigiIntent(label: pending.intent, confidence: 1.0, params: params)
-                let speech = await GigiActionBridge.shared.execute(intent)
-                let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? "Done."
-                    : speech
-                GigiRouterTrace.shared.record(
-                    utterance: text, tier: "clarification-continuation",
-                    tool: pending.intent, confidence: 1.0, slot: params[pending.slot]
-                )
-                GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-                return .actionInvoked(speech: finalSpeech, tool: pending.intent)
-            }
-        }
-
-        // GATE 9 polish — discovery intercept (Layer B preview, full impl GATE 10).
-        // Discovery queries ("what can you do?", "cosa sai fare?", "help") are
-        // handled BEFORE the semantic router because they need a curated
-        // English overview response, not a tool dispatch.
-        if detectDiscoveryQuery(in: text) {
-            let speech = discoveryOverviewResponse()
-            GigiDebugLogger.log("GIGI Router: discovery intercept → curated overview")
-            GigiConversationMemory.shared.addModelSpeech(speech)
-            return .spoken(speech)
-        }
-
-        // GATE 14.B.2 lite — Registered-Shortcut alias intercept.
-        //
-        // The user can register their own Apple Shortcuts in Settings with
-        // natural-language aliases (e.g. Shortcut "accendi torcia" with
-        // alias "open torch"). When the utterance matches any registered
-        // alias literally, dispatch run_shortcut directly. Bypasses Apple
-        // FM and the deterministic verb regex below — explicit user-
-        // declared alias has highest priority.
-        if let registered = GigiShortcutRegistry.shared.matchAlias(text) {
-            GigiDebugLogger.log("GIGI Router: registered-alias match → '\(registered.name)' from utterance '\(text)'")
-            GigiShortcutRegistry.shared.recordUse(name: registered.name)
-            let speech = await GigiActionBridge.shared.execute(GigiIntent(
-                label: "run_shortcut",
-                confidence: 1.0,
-                params: ["name": registered.name, "raw": registered.name, "input": ""]
-            ))
-            let finalSpeech = debugPrefix(
-                routerSource: "alias",
-                tool: "run_shortcut",
-                confidence: 1.0,
-                slot: registered.name
-            ) + speech
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "alias",
-                tool: "run_shortcut", confidence: 1.0, slot: registered.name
-            )
-            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-            return .actionInvoked(speech: finalSpeech, tool: "run_shortcut")
-        }
-
-        // GATE 10.C tier-0 — Math expression detection.
-        //
-        // NLEmbedding word vectors don't index pure-number tokens, so
-        // "What's 47 times 23" collapses to just {what, times} for the
-        // semantic match — diluted similarity, falls through to Apple FM
-        // which routes to delegate_local (LLM does arithmetic, slow + costly).
-        //
-        // Direct detection: if the utterance contains digit-operator-digit
-        // patterns (or "X plus Y", "X times Y" etc.), dispatch calculate_math
-        // directly. The expression evaluator handles the math via NSExpression
-        // in microseconds. 100x faster than delegating to an LLM.
-        if let mathExpression = detectMathExpression(in: text) {
-            GigiDebugLogger.log("GIGI Router: tier-0 calculate_math → '\(mathExpression)'")
-            let speech = await GigiActionBridge.shared.execute(GigiIntent(
-                label: "calculate_math",
-                confidence: 1.0,
-                params: ["expression": mathExpression, "raw": mathExpression]
-            ))
-            let finalSpeech = debugPrefix(
-                routerSource: "regex",
-                tool: "calculate_math",
-                confidence: 1.0,
-                slot: mathExpression
-            ) + speech
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "regex",
-                tool: "calculate_math", confidence: 1.0, slot: mathExpression
-            )
-            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-            return .actionInvoked(speech: finalSpeech, tool: "calculate_math")
-        }
-
-        // Phase 2 tier-0 — Explicit "build/create/make a shortcut" pattern.
-        //
-        // Option A (ADR-0014 follow-up): route DIRECTLY to the harness
-        // Claude composer (bypass Apple FM). Apple FM on-device is
-        // unreliable at structured JSON synthesis for multi-step shortcuts —
-        // it frequently returns conversational apologies ("I'm sorry, but
-        // I couldn't build the shortcut...") instead of invoking the tool.
-        // Claude in the harness produces correct {title, actions[]} JSON
-        // on the first try, then translates to Cherri DSL, signs, and
-        // returns a URL. Trade-off: ~3-12s harness round-trip.
-        if let description = detectBuildShortcutPattern(in: text) {
-            GigiDebugLogger.log("GIGI Router: regex tier-0 build_shortcut → '\(description)' (via harness composer)")
-            let speech = await GigiActionBridge.shared.composeShortcut(rawText: text)
-            let withPrefix = debugPrefix(
-                routerSource: "regex+claude",
-                tool: "build_shortcut",
-                confidence: 1.0,
-                slot: description
-            ) + speech
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "regex",
-                tool: "build_shortcut", confidence: 1.0, slot: description, path: "harness"
-            )
-            GigiConversationMemory.shared.addModelSpeech(withPrefix)
-            return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
-        }
-
-        // GATE 9.A + GATE 15 fix — Explicit verb regex tier-0 fast-path.
-        //
-        // Restored after GATE 15 device test showed semantic router fails
-        // for "Run X" where X is a single concrete word ("call", "mom",
-        // "luce"). Word embedding averages bias toward the concrete word's
-        // tool (make_call, homekit_on) and lose the run intent signal.
-        //
-        // Regex is precision-100 for explicit verbs (run/execute/launch/
-        // trigger/esegui/lancia) — any text after the verb IS a Shortcut
-        // name by definition. Semantic router stays as tier-1 fallback
-        // for natural variants the regex doesn't cover.
-        if let shortcutName = detectRunShortcutPattern(in: text) {
-            GigiDebugLogger.log("GIGI Router: regex tier-0 run_shortcut → '\(shortcutName)'")
-            let speech = await GigiActionBridge.shared.execute(GigiIntent(
-                label: "run_shortcut",
-                confidence: 1.0,
-                params: ["name": shortcutName, "raw": shortcutName, "input": ""]
-            ))
-            let finalSpeech = debugPrefix(
-                routerSource: "regex",
-                tool: "run_shortcut",
-                confidence: 1.0,
-                slot: shortcutName
-            ) + speech
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "regex",
-                tool: "run_shortcut", confidence: 1.0, slot: shortcutName
-            )
-            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-            return .actionInvoked(speech: finalSpeech, tool: "run_shortcut")
-        }
-
-        // GATE 15 — Smart Router semantic fast-path.
-        //
-        // Replaces the deterministic regex intercepts (run_shortcut,
-        // web_search, etc.) with a single semantic-embedding match against a
-        // curated catalog of trigger phrases per tool. NLEmbedding word
-        // vectors via Accelerate (~5ms per query, fully on-device).
-        //
-        // On confident match (cosine ≥0.55, gap ≥0.05 vs runner-up):
-        //   - dispatch the tool directly with the extracted slot
-        //   - bypass Apple FM entirely (zero LLM tokens spent)
-        //
-        // On ambiguous or low-confidence: fall through to Apple FM —
-        // no behavioral regression for queries the catalog doesn't cover.
-        //
-        // ADR-0012 — Smart Router Architecture.
-        if let match = GigiSemanticRouter.shared.match(text) {
-
-            // Special case Phase 2 (option A): semantic build_shortcut
-            // routes to the harness Claude composer, same as tier-0 regex.
-            // Apple FM is skipped — see comment above the tier-0 block.
-            if match.toolName == "build_shortcut" {
-                GigiDebugLogger.log("GIGI Router: semantic build_shortcut → harness composer (slot='\(match.slot)')")
-                let speech = await GigiActionBridge.shared.composeShortcut(rawText: text)
-                let withPrefix = debugPrefix(
-                    routerSource: "semantic+claude",
-                    tool: "build_shortcut",
-                    confidence: match.confidence,
-                    slot: match.slot
-                ) + speech
-                GigiRouterTrace.shared.record(
-                    utterance: text, tier: "semantic",
-                    tool: "build_shortcut", confidence: match.confidence,
-                    slot: match.slot, path: "harness"
-                )
-                GigiConversationMemory.shared.addModelSpeech(withPrefix)
-                return .actionInvoked(speech: withPrefix, tool: "build_shortcut")
-            } else {
-                let params = buildSemanticParams(for: match)
-                let speech = await GigiActionBridge.shared.execute(GigiIntent(
-                    label: match.toolName,
-                    confidence: Double(match.confidence),
-                    params: params
-                ))
-                let finalSpeech = debugPrefix(
-                    routerSource: "semantic",
-                    tool: match.toolName,
-                    confidence: match.confidence,
-                    slot: match.slot
-                ) + speech
-                GigiRouterTrace.shared.record(
-                    utterance: text, tier: "semantic",
-                    tool: match.toolName, confidence: match.confidence,
-                    slot: match.slot
-                )
-                GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-                return .actionInvoked(speech: finalSpeech, tool: match.toolName)
-            }
-        }
-
-        // Bug #017 removed (2026-05-17). The pre-FM preference intercept was
-        // a band-aid for early iOS 26 betas where Apple FM mis-routed
-        // possessive "my X is Y" assertions. With routerSystemPrompt RULE-R1
-        // + 5 few-shot examples, FM now routes pure preferences to
-        // native_tool(remember) on its own. The intercept created its own
-        // failure mode by mis-classifying compound requests like
-        // "my car is broken, find the nearest mechanic" as preferences.
-        // detectFactAssertion's strict guards still gate the post-FM
-        // Bug #015 override below for the remaining mis-routes.
-
-        // Mode gating (GATE 7) — read the selected operating mode and use
-        // it to disable paths upfront. `.auto` (no mode set) keeps all paths.
-        let mode = currentMode()
-
-        // Latency anchor for the appleFM/fallback branch — measures from
-        // the moment we commit to invoking the FM router (after every
-        // tier-0 intercept has missed) until dispatch is decided.
-        let fmStart = Date()
-
-        // 1. Decide which router to use: Apple FM if available + mode allows
-        //    Path 2; otherwise GigiFallbackRouter (rule-based keyword matching).
-        let decision: FoundationRouterDecision
-        if applefmAvailable && mode.allowsAppleFMRouter {
-            #if canImport(FoundationModels)
-            if #available(iOS 18.1, *) {
-                do {
-                    decision = try await GigiFoundationSession.shared.routeRequest(text: text, history: history)
-                } catch {
-                    GigiDebugLogger.log("GIGI Router: Apple FM failed (\(error.localizedDescription)) — falling back to keyword router.")
-                    decision = fallback.classifyRequest(text: text)
-                }
-            } else {
-                decision = fallback.classifyRequest(text: text)
-            }
-            #else
-            decision = fallback.classifyRequest(text: text)
-            #endif
-        } else {
-            decision = fallback.classifyRequest(text: text)
-        }
-
-        // 2. Apply mode-based path remapping (GATE 7).
-        var effectivePath = mode.remap(decision.path, capabilities: decision.requiredCapabilities)
-
-        // 2.5 Bug #003 fix (2026-05-12) — defensive downgrade.
-        // Apple FM router sometimes mis-routes knowledge Q&A as
-        // delegate_cloud (e.g. "Explain Bayes theorem"). If path is
-        // delegate_cloud but the user's text contains NO web/code/image
-        // verb AND the router didn't claim any browser/code/vision
-        // capability, downgrade to delegate_local. Saves a useless
-        // Claude Code spawn (and a /login error if claude isn't logged in)
-        // for queries that the local Ollama model can answer.
-        if effectivePath == "delegate_cloud"
-            && !Self.hasWebOrCodeOrImageVerb(text)
-            && decision.requiredCapabilities.isEmpty {
-            GigiDebugLogger.log("GIGI Router: delegate_cloud DOWNGRADED to delegate_local — no web/code/image verb in prompt")
-            effectivePath = "delegate_local"
-        }
-
-        // 2.54 Compound-command override (2026-05-17).
-        // Apple FM sometimes treats "<X> is <state> <imperative> <object>"
-        // as a pure fact assertion and picks native_tool(remember).
-        // Example: "my car is broken find the nearest mechanic" — FM
-        // misses that "find" is the actual command. If the utterance
-        // contains an imperative verb (other than at the start, which
-        // would already have been classified as an action), downgrade
-        // to delegate_local so Ollama can actually respond to the task.
-        if effectivePath == "native_tool"
-            && decision.primaryAction == "remember"
-            && Self.containsEmbeddedImperative(in: text) {
-            GigiDebugLogger.log("GIGI Router: native_tool(remember) DOWNGRADED to delegate_local — embedded imperative in '\(text)'")
-            effectivePath = "delegate_local"
-        }
-
-        // 2.55 Bug #015 fix (2026-05-15) — fact-assertion override.
-        // Apple FM sometimes routes bare fact assertions ("Sergio is my
-        // brother", "My favorite color is blue") to delegate_local, where
-        // Ollama just generates a conversational "Got it" without
-        // persisting anything. Detect the pattern and force native_tool
-        // remember with slots extracted from the regex match.
-        if let (subject, value) = Self.detectFactAssertion(in: text),
-           effectivePath == "delegate_local" || effectivePath == "ask_clarification" {
-            GigiDebugLogger.log("GIGI Router: fact-assertion OVERRIDE — \(effectivePath) → bridge(remember). subject='\(subject)' value='\(value)'")
-            // Dispatch directly via the bridge — DON'T re-route through
-            // dispatchNativeTool, which would call Apple FM tool-calling
-            // (Path A) and re-extract the subject from the raw text.
-            // FM's re-extraction is unstable ("My favorite movie" can
-            // collapse to just "movie"), which produces a save key that
-            // doesn't match the subsequent recall query. Keeping the
-            // regex-extracted slots is what makes round-trip work.
-            let intent = GigiIntent(
-                label: "remember",
-                confidence: 1.0,
-                params: ["contact": subject, "body": value, "raw": text]
-            )
-            let speech = await GigiActionBridge.shared.execute(intent)
-            let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "Got it. I'll remember that."
-                : speech
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "regex-override",
-                tool: "remember", confidence: 1.0, slot: subject
-            )
-            GigiConversationMemory.shared.annotateLastTurn(
-                intent: "remember", slot: subject, tier: "regex-override", success: true
-            )
-            // Coreference: track the asserted subject so the next turn
-            // can resolve "him/her" to it — but ONLY if the subject is
-            // actually a person (not a preference like "my password").
-            // smartKey returns "contact:..." for names, "pref:..." for
-            // preferences. Only record on contact.
-            if GigiMemory.smartKey(forSubject: subject).hasPrefix("contact:") {
-                GigiConversationMemory.shared.recordReferent(subject, kind: "person")
-            }
-            GigiConversationMemory.shared.addModelSpeech(finalSpeech)
-            return .actionInvoked(speech: finalSpeech, tool: "remember")
-        }
-
-        // 2.56 Bug #016 fix (2026-05-15) — messaging-without-body override.
-        // Apple FM occasionally routes "Send Marco a message" (no body)
-        // to delegate_local, dumping the request to Ollama which has no
-        // messaging tools and answers with a verbose apology. Detect
-        // messaging-shape utterances missing a body indicator and force
-        // ask_clarification with a sensible prompt.
-        if let detected = Self.detectMessageWithoutBody(in: text) {
-            // Relationship resolution: "my brother" → look up who that is.
-            // If found, substitute. So "Send a message to my brother"
-            // becomes "What do you want to say to Leo Corte?" not "to
-            // My Brother?".
-            let resolvedContact = (await Self.resolveContactFromMemory(detected)) ?? detected
-            let contact = resolvedContact
-            let directSpeech = "What do you want to say to \(contact)?"
-            let platform = await Self.resolveMessagePlatform(forUtterance: text)
-            GigiDebugLogger.log("GIGI Router: msg-without-body OVERRIDE — \(effectivePath) → ask_clarification, contact='\(contact)' (detected='\(detected)') platform='\(platform)'")
-            GigiConversationMemory.shared.setPendingClarification(.init(
-                intent: "send_message",
-                slot: "body",
-                partialParams: ["contact": contact, "platform": platform],
-                timestamp: Date()
-            ))
-            // Track resolved contact as person referent so future "him"
-            // works.
-            GigiConversationMemory.shared.recordReferent(contact, kind: "person")
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "regex-override",
-                tool: "ask_clarification", confidence: 1.0, slot: contact
-            )
-            GigiConversationMemory.shared.annotateLastTurn(
-                intent: "ask_clarification", slot: contact, tier: "regex-override", success: true
-            )
-            GigiConversationMemory.shared.addModelSpeech(directSpeech)
-            return .spoken(directSpeech)
-        }
-
-        // Bug #018 — messaging shape with unresolved pronoun.
-        // "Send him a message" with no known person referent. We rejected
-        // it in detectMessageWithoutBody (pronoun guard) — but rather
-        // than fall through to Ollama, ask for the contact explicitly.
-        // Then the next turn supplies the name, we save it as the
-        // person referent, and re-run as if the user had typed the name.
-        if Self.detectMessageWithUnresolvedContact(in: text) {
-            let platform = await Self.resolveMessagePlatform(forUtterance: text)
-            let directSpeech = "Who do you want to send a message to?"
-            GigiDebugLogger.log("GIGI Router: msg-unresolved-contact OVERRIDE — \(effectivePath) → ask_clarification")
-            GigiConversationMemory.shared.setPendingClarification(.init(
-                intent: "send_message",
-                slot: "contact",
-                partialParams: ["platform": platform],
-                timestamp: Date()
-            ))
-            GigiRouterTrace.shared.record(
-                utterance: text, tier: "regex-override",
-                tool: "ask_clarification", confidence: 1.0, slot: nil
-            )
-            GigiConversationMemory.shared.annotateLastTurn(
-                intent: "ask_clarification", slot: nil, tier: "regex-override", success: true
-            )
-            GigiConversationMemory.shared.addModelSpeech(directSpeech)
-            return .spoken(directSpeech)
-        }
-
-        // 2.6 Bug #014 fix (2026-05-15) — ask_clarification downgrade.
-        // After turn-annotation refactor, Apple FM occasionally bounces
-        // open-knowledge questions ("Who is Einstein?") to
-        // ask_clarification with low confidence because it isn't sure
-        // whether the entity is a contact or a public figure. Memory has
-        // already been probed upstream (GigiAgentEngine.memoryRecallProbe)
-        // and missed — so the safest fallback is delegate_local. Ollama
-        // can always answer who/what/why/how knowledge queries.
-        if effectivePath == "ask_clarification"
-            && decision.confidence < 0.75
-            && Self.looksLikeOpenKnowledgeQuery(text) {
-            GigiDebugLogger.log("GIGI Router: ask_clarification DOWNGRADED to delegate_local — open knowledge query pattern (\(text.prefix(40)))")
-            effectivePath = "delegate_local"
-        }
-
-        // Bug #012 fix (2026-05-12) — telemetry to harness Live Monitor.
-        // For every router decision, fire-and-forget a telemetry event so the
-        // live monitor at localhost:7777/live.html shows what the iPhone is
-        // doing even when the path stays on-device. No-op when not paired.
-        let fmElapsedMs = Int(Date().timeIntervalSince(fmStart) * 1000)
-        harness.postTelemetry(
-            type: "router_decision",
-            path: effectivePath,
-            primaryAction: decision.primaryAction,
-            userText: text,
-            elapsedMs: fmElapsedMs
+        // Bug #017 was removed 2026-05-17 (pre-FM preference intercept).
+        // With routerSystemPrompt RULE-R1 + 5 few-shot examples, FM now
+        // routes pure preferences to native_tool(remember) on its own.
+        var ctx = RouterContext(
+            text: text,
+            history: history,
+            mode: currentMode(),
+            applefmAvailable: applefmAvailable
         )
-        // Pick a representative slot for the trace summary — first non-empty
-        // among contact/taskText/body/destination/duration.
-        let traceSlot: String? = {
-            let s = decision.slots
-            for v in [s.contact, s.taskText, s.body, s.destination, s.duration] where !v.isEmpty {
-                return v
-            }
-            return nil
-        }()
-        GigiRouterTrace.shared.record(
-            utterance: text,
-            tier: applefmAvailable && mode.allowsAppleFMRouter ? "appleFM" : "fallback",
-            tool: decision.primaryAction.isEmpty ? effectivePath : decision.primaryAction,
-            confidence: Float(decision.confidence),
-            slot: traceSlot,
-            path: effectivePath,
-            latencyMs: fmElapsedMs
-        )
-
-        // 3. Dispatch.
-        let result: RouteResult
-        switch effectivePath {
-        case "native_tool":
-            result = await dispatchNativeTool(decision: decision, originalText: text, history: history)
-        case "delegate_local":
-            result = await dispatchDelegateLocal(decision: decision, originalText: text, history: history)
-        case "delegate_cloud":
-            result = await dispatchDelegateCloud(decision: decision, originalText: text, history: history)
-        case "ask_clarification":
-            result = .spoken(decision.directSpeech.isEmpty
-                ? "Could you say that another way?"
-                : decision.directSpeech)
-        case "reject":
-            result = .spoken(decision.directSpeech.isEmpty
-                ? "I can't help with that one."
-                : decision.directSpeech)
-        case "mode_blocked_local":
-            result = .spoken("Local AI is disabled in this mode. Switch to Local-First or Full Power mode to enable Ollama.")
-        case "mode_blocked_cloud":
-            result = .spoken("Cloud mode is disabled in this mode. Switch to Apple Optimized or Full Power mode to enable Claude Code.")
-        default:
-            return .error("Unknown routing decision: \(effectivePath).")
-        }
-
-        // GATE 15 — DEBUG-only routing diagnostic. Prepends a one-line tag
-        // showing which router fired (appleFM path + primaryAction) so the
-        // user can immediately see what got dispatched. Stripped in release
-        // builds via `#if DEBUG` in `debugPrefix()`.
-        let primaryAction = decision.primaryAction.isEmpty ? effectivePath : decision.primaryAction
-        let prefix = debugPrefix(
-            routerSource: "appleFM",
-            tool: primaryAction,
-            confidence: Float(decision.confidence)
-        )
-        return prefix.isEmpty ? result : prependDebug(prefix, to: result)
+        let pipeline: [RouterTier] = [
+            ProposalConsentTier(router: self),
+            PendingClarificationTier(router: self),
+            DiscoveryQueryTier(router: self),
+            RegisteredAliasTier(router: self),
+            MathExpressionTier(router: self),
+            BuildShortcutRegexTier(router: self),
+            RunShortcutRegexTier(router: self),
+            SemanticRouterTier(router: self),
+            FMDecisionTier(router: self),
+            CloudDowngradeTier(router: self),
+            CompoundCommandTier(router: self),
+            FactAssertionTier(router: self),
+            MessageWithoutBodyTier(router: self),
+            UnresolvedContactTier(router: self),
+            ClarificationDowngradeTier(router: self),
+            DispatchTier(router: self),
+        ]
+        return await runPipeline(pipeline, ctx: &ctx)
+            ?? .error("Router: pipeline returned no terminal — pipeline misconfigured")
     }
 
     /// Internal helper — re-wraps a RouteResult with the given debug prefix
@@ -634,7 +150,7 @@ final class GigiRequestRouter {
         return false
     }
 
-    private func prependDebug(_ prefix: String, to result: RouteResult) -> RouteResult {
+    func prependDebug(_ prefix: String, to result: RouteResult) -> RouteResult {
         switch result {
         case .spoken(let s):
             return .spoken(prefix + s)
@@ -676,7 +192,7 @@ final class GigiRequestRouter {
     //
     // Both paths converge to the same bridge + speech logic.
 
-    private func dispatchNativeTool(
+    func dispatchNativeTool(
         decision: FoundationRouterDecision,
         originalText: String,
         history: String
@@ -741,7 +257,7 @@ final class GigiRequestRouter {
 
     // MARK: - Dispatch: delegate_local (Path 3 — Ollama)
 
-    private func dispatchDelegateLocal(
+    func dispatchDelegateLocal(
         decision: FoundationRouterDecision,
         originalText: String,
         history: String
@@ -809,7 +325,7 @@ final class GigiRequestRouter {
 
     // MARK: - Dispatch: delegate_cloud (Path 4 — Claude Code)
 
-    private func dispatchDelegateCloud(
+    func dispatchDelegateCloud(
         decision: FoundationRouterDecision,
         originalText: String,
         history: String
@@ -978,7 +494,7 @@ final class GigiRequestRouter {
         "what's in this photo", "analyze this picture"
     ]
 
-    private static func hasWebOrCodeOrImageVerb(_ text: String) -> Bool {
+    static func hasWebOrCodeOrImageVerb(_ text: String) -> Bool {
         let lower = text.lowercased()
         return webVerbs.contains(where: { lower.contains($0) })
             || codeVerbs.contains(where: { lower.contains($0) })
@@ -1625,7 +1141,7 @@ final class GigiRequestRouter {
     /// Layer B in GATE 10 will upgrade this to context-aware top-3 suggestions
     /// (different responses by time-of-day, location, recent activity). For
     /// now this provides a curated static overview to fix the echo bug.
-    private func detectDiscoveryQuery(in text: String) -> Bool {
+    func detectDiscoveryQuery(in text: String) -> Bool {
         let t = text.lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "?!.,"))
@@ -1670,7 +1186,7 @@ final class GigiRequestRouter {
     ///   - Recently registered Shortcuts → reference them when present
     ///   - Number of registered alias Shortcuts → boost meta capability
     ///     awareness ("you have N custom Shortcuts...")
-    private func discoveryOverviewResponse() -> String {
+    func discoveryOverviewResponse() -> String {
         let hour = Calendar.current.component(.hour, from: Date())
         let registeredCount = GigiShortcutRegistry.shared.shortcuts.count
 
@@ -1739,7 +1255,7 @@ final class GigiRequestRouter {
     /// routing source decided and with what confidence. Only active in DEBUG
     /// builds — production users never see this. Format:
     /// `[semantic web_search 0.67 'best ramen'] Searching for ...`
-    private func debugPrefix(
+    func debugPrefix(
         routerSource: String,
         tool: String,
         confidence: Float,
@@ -1764,7 +1280,7 @@ final class GigiRequestRouter {
     /// Maps a `SemanticMatch` to the params dictionary expected by
     /// `GigiActionBridge.execute(GigiIntent)`. Each tool has a different
     /// parameter contract — this centralizes the slot → param key mapping.
-    private func buildSemanticParams(for match: SemanticMatch) -> [String: String] {
+    func buildSemanticParams(for match: SemanticMatch) -> [String: String] {
         let slot = match.slot
         switch match.toolName {
         case "web_search":
@@ -1856,7 +1372,7 @@ final class GigiRequestRouter {
     ///   - Natural-language math: "what's 47 times 23", "47 plus 23",
     ///     "15% of 200", "quanto fa 100 diviso 8"
     ///   - Common math verbs: "calculate", "compute", "evaluate", "quanto fa"
-    private func detectMathExpression(in text: String) -> String? {
+    func detectMathExpression(in text: String) -> String? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !t.isEmpty else { return nil }
 
@@ -2006,7 +1522,7 @@ final class GigiRequestRouter {
     ///
     /// Returns the description portion (e.g. "turns on the torch and waits
     /// 5 seconds"), with leading "that/which/who/who" filler stripped.
-    private func detectBuildShortcutPattern(in text: String) -> String? {
+    func detectBuildShortcutPattern(in text: String) -> String? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !t.isEmpty else { return nil }
 
@@ -2067,7 +1583,7 @@ final class GigiRequestRouter {
     ///
     /// Returns the cleaned name (trailing/leading whitespace stripped, the
     /// word "shortcut" removed if present at the start or end).
-    private func detectRunShortcutPattern(in text: String) -> String? {
+    func detectRunShortcutPattern(in text: String) -> String? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !t.isEmpty else { return nil }
 
