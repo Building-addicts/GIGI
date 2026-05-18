@@ -110,6 +110,35 @@ final class GigiRequestRouter {
             ?? .error("Router: pipeline returned no terminal — pipeline misconfigured")
     }
 
+    /// Refactor #6 Step 10 — Pre-FM tier-0 entry point used by
+    /// `GigiAgentEngine.process` BEFORE `memoryRecallProbe`. Runs only the
+    /// deterministic, non-FM tiers (proposal_consent through semantic) and
+    /// returns the first terminal, or nil if none of them dispatched.
+    ///
+    /// Architectural fix for the probe over-matching on garbage memory keys:
+    /// math expressions like "what is 42 times 11" now hit MathExpressionTier
+    /// before the probe ever runs, so a stray `contact:42 times 11` entry
+    /// can't intercept the query. None of these tiers need history.
+    func runTier0(text: String) async -> RouteResult? {
+        var ctx = RouterContext(
+            text: text,
+            history: "",
+            mode: currentMode(),
+            applefmAvailable: applefmAvailable
+        )
+        let tier0: [RouterTier] = [
+            ProposalConsentTier(router: self),
+            PendingClarificationTier(router: self),
+            DiscoveryQueryTier(router: self),
+            RegisteredAliasTier(router: self),
+            MathExpressionTier(router: self),
+            BuildShortcutRegexTier(router: self),
+            RunShortcutRegexTier(router: self),
+            SemanticRouterTier(router: self),
+        ]
+        return await runPipeline(tier0, ctx: &ctx)
+    }
+
     /// Internal helper — re-wraps a RouteResult with the given debug prefix
     /// prepended to the speech, preserving the case (.spoken / .actionInvoked /
     /// .error). No-op when prefix is empty (release build).

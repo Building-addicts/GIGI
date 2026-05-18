@@ -148,6 +148,17 @@ final class GigiAgentEngine {
         if Self.looksLikeBuildShortcut(text) {
             GigiDebugLogger.log("GIGI Agent: bypass fast-path — text looks like build_shortcut")
         } else {
+            // Refactor #6 Step 10 — Run the deterministic tier-0 pipeline
+            // (math, alias, discovery, regex shortcuts, semantic catalog)
+            // BEFORE the memory probe. Architectural fix for the over-match
+            // bug where "what is 42 times 11" was intercepted by a garbage
+            // memory key `contact:42 times 11`. Math is categorically NOT a
+            // recall query — its rightful tier (MathExpressionTier) now wins
+            // because tier-0 runs first.
+            if let tier0 = await GigiRequestRouter.shared.runTier0(text: text) {
+                return tier0.asAgentResult
+            }
+
             // Memory recall probe: if utterance is a "who is X / what is X /
             // tell me about X / recall X" query AND we have that X stored,
             // answer from memory directly. The user's own statement is
