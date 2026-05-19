@@ -322,25 +322,13 @@ final class GigiRequestRouter {
             lower == verb || lower.hasPrefix("\(verb) ") || lower.contains(" \(verb) ")
         }
         let hasServiceMarker = serviceMarkers.contains { lower.contains($0) }
-        // DIAG-SN-2026-05-19 (rimuovere dopo conferma) — marker visibile per
-        // capire se il safety-net text-heuristic sta scattando sul device.
-        GigiDebugLogger.log("DIAG-SN input='\(originalText.prefix(80))' lower='\(lower.prefix(80))' hasAction=\(hasActionVerb) hasService=\(hasServiceMarker)")
         if hasActionVerb && hasServiceMarker {
             var upgraded = decision
             if !upgraded.requiredCapabilities.contains("browser") {
                 upgraded.requiredCapabilities.append("browser")
             }
             GigiDebugLogger.log("GIGI Router: delegate_local upgraded to delegate_cloud (text heuristic: external action verb + service marker in '\(originalText.prefix(80))')")
-            let cloudResult = await dispatchDelegateCloud(decision: upgraded, originalText: originalText, history: history)
-            // DIAG-SN: prefisso visibile nella bubble per confermare fired
-            switch cloudResult {
-            case .spoken(let s):
-                return .spoken("[SN→cloud] " + s)
-            case .actionInvoked(let speech, let tool):
-                return .actionInvoked(speech: "[SN→cloud] " + speech, tool: tool)
-            case .error(let s):
-                return .error("[SN→cloud-err] " + s)
-            }
+            return await dispatchDelegateCloud(decision: upgraded, originalText: originalText, history: history)
         }
 
         // Topic-coreference fix: the `history` parameter we receive is the
