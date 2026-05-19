@@ -304,29 +304,29 @@ async function activePage(instanceName) {
 const INSTANCE_PROP = {
   instance: {
     type: 'string',
-    description: 'Nome istanza browser (main, slot1, slot2, ...). Default "main". Usa browser_lease per ottenere un\'istanza dedicata quando servono azioni parallele sulla stessa app.'
+    description: 'Browser instance name (main, slot1, slot2, ...). Default "main". Most flows just use default. Call browser_lease only when you need a dedicated instance for parallel work.'
   }
 };
 
 const tools = [
   {
     name: 'browser_lease',
-    description: 'Prenota un\'istanza browser dedicata per un task. Pool CONDIVISO cross-process (file-locked): due Claude paralleli non otterranno mai la stessa istanza. Se tutte occupate, aspetta fino a wait_ms che una si liberi; poi fallback a "main" con queued=true, oppure se skip_if_busy=true ritorna instance=null. Rilascia SEMPRE con browser_release a fine task.',
+    description: 'Reserve a dedicated browser instance for a task. Shared pool cross-process (file-locked): two parallel Claude runs will never get the same instance. If all busy, waits up to wait_ms; then falls back to "main" with queued=true, or if skip_if_busy=true returns instance=null. Always release with browser_release when done. For a single ordering/action flow you can usually skip browser_lease and just call browser_navigate directly on the default "main" instance.',
     inputSchema: {
       type: 'object',
       properties: {
-        app: { type: 'string', description: 'App target (whatsapp, telegram, gmail, tradingview, ...). Solo tag diagnostico.' },
-        task_id: { type: 'string', description: 'ID arbitrario del task. Usalo per rilasciare poi.' },
-        prefer_main: { type: 'boolean', description: 'Default true: preferisce "main" se libera.' },
-        wait_ms: { type: 'number', description: 'Timeout di attesa (default 20000ms) per avere un\'istanza libera. Dopo fallback a main con queued=true.' },
-        skip_if_busy: { type: 'boolean', description: 'Default false. Se true e il pool è esaurito, invece di aspettare/fallback ritorna instance=null skipped=true. Utile per watcher che preferiscono saltare il fire.' }
+        app: { type: 'string', description: 'Target app tag for diagnostics (whatsapp, telegram, gmail, amazon, justeat, ...).' },
+        task_id: { type: 'string', description: 'Arbitrary task ID. Use it to release later.' },
+        prefer_main: { type: 'boolean', description: 'Default true: prefer "main" if free.' },
+        wait_ms: { type: 'number', description: 'Wait timeout (default 20000ms) for a free instance. Then fallback to main with queued=true.' },
+        skip_if_busy: { type: 'boolean', description: 'Default false. If true and the pool is exhausted, returns instance=null skipped=true instead of waiting.' }
       },
       required: ['app', 'task_id']
     }
   },
   {
     name: 'browser_release',
-    description: 'Rilascia il lease precedentemente ottenuto con browser_lease.',
+    description: 'Release a lease previously obtained with browser_lease.',
     inputSchema: {
       type: 'object',
       properties: { task_id: { type: 'string' } },
@@ -335,24 +335,24 @@ const tools = [
   },
   {
     name: 'browser_instances',
-    description: 'Elenca le istanze browser configurate e il loro stato di lease corrente.',
+    description: 'List configured browser instances and their current lease state.',
     inputSchema: { type: 'object' }
   },
-  { name: 'browser_navigate', description: 'Navigate the active tab to a URL. Browser persistente con cookies/login salvati (WhatsApp Web, LinkedIn, ecc.).', inputSchema: { type: 'object', properties: { url: { type: 'string' }, ...INSTANCE_PROP }, required: ['url'] } },
-  { name: 'browser_screenshot', description: 'Screenshot della pagina attiva (base64 PNG).', inputSchema: { type: 'object', properties: { full_page: { type: 'boolean' }, selector: { type: 'string' }, ...INSTANCE_PROP } } },
-  { name: 'browser_click', description: 'Click su un elemento per CSS selector.', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, ...INSTANCE_PROP }, required: ['selector'] } },
-  { name: 'browser_fill', description: 'Fill an input field (clears first).', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, value: { type: 'string' }, ...INSTANCE_PROP }, required: ['selector', 'value'] } },
-  { name: 'browser_type', description: 'Type text in the currently focused element.', inputSchema: { type: 'object', properties: { text: { type: 'string' }, ...INSTANCE_PROP }, required: ['text'] } },
-  { name: 'browser_press', description: 'Press a keyboard key (es. Enter, Escape, Tab).', inputSchema: { type: 'object', properties: { key: { type: 'string' }, ...INSTANCE_PROP }, required: ['key'] } },
-  { name: 'browser_evaluate', description: 'Execute JavaScript in page context and return the result.', inputSchema: { type: 'object', properties: { script: { type: 'string' }, ...INSTANCE_PROP }, required: ['script'] } },
-  { name: 'browser_text', description: 'innerText del body o di un selector.', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, ...INSTANCE_PROP } } },
-  { name: 'browser_wait', description: 'Sleep for N milliseconds.', inputSchema: { type: 'object', properties: { ms: { type: 'number' } }, required: ['ms'] } },
-  { name: 'browser_wait_selector', description: 'Wait until a selector appears (default timeout 10000ms).', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, timeout: { type: 'number' }, ...INSTANCE_PROP }, required: ['selector'] } },
-  { name: 'browser_url', description: 'URL e title del tab attivo.', inputSchema: { type: 'object', properties: { ...INSTANCE_PROP } } },
-  { name: 'browser_pages', description: 'Elenca i tab aperti.', inputSchema: { type: 'object', properties: { ...INSTANCE_PROP } } },
-  { name: 'browser_new_tab', description: 'Apre un nuovo tab (eventualmente su URL).', inputSchema: { type: 'object', properties: { url: { type: 'string' }, ...INSTANCE_PROP } } },
-  { name: 'browser_close_tab', description: 'Chiude il tab attivo.', inputSchema: { type: 'object', properties: { ...INSTANCE_PROP } } },
-  { name: 'browser_switch_tab', description: 'Switcha tab per indice (vedi browser_pages).', inputSchema: { type: 'object', properties: { index: { type: 'number' }, ...INSTANCE_PROP }, required: ['index'] } },
+  { name: 'browser_navigate', description: 'Navigate to a URL in the user\'s logged-in Chrome session (Amazon, Just Eat, Gmail, Uber, banking — any site the user is signed into). Cookies and saved data are available. Use this to act on the user\'s account.', inputSchema: { type: 'object', properties: { url: { type: 'string' }, ...INSTANCE_PROP }, required: ['url'] } },
+  { name: 'browser_screenshot', description: 'Screenshot the current page in the user\'s logged-in Chrome (base64 PNG). Use to verify page state before clicking or to confirm a result.', inputSchema: { type: 'object', properties: { full_page: { type: 'boolean' }, selector: { type: 'string' }, ...INSTANCE_PROP } } },
+  { name: 'browser_click', description: 'Click an element by CSS selector in the user\'s logged-in Chrome.', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, ...INSTANCE_PROP }, required: ['selector'] } },
+  { name: 'browser_fill', description: 'Fill an input field (clears first) in the user\'s logged-in Chrome. Use for search boxes, form fields, etc.', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, value: { type: 'string' }, ...INSTANCE_PROP }, required: ['selector', 'value'] } },
+  { name: 'browser_type', description: 'Type text in the currently focused element of the user\'s logged-in Chrome.', inputSchema: { type: 'object', properties: { text: { type: 'string' }, ...INSTANCE_PROP }, required: ['text'] } },
+  { name: 'browser_press', description: 'Press a keyboard key (e.g. Enter, Escape, Tab) in the user\'s logged-in Chrome.', inputSchema: { type: 'object', properties: { key: { type: 'string' }, ...INSTANCE_PROP }, required: ['key'] } },
+  { name: 'browser_evaluate', description: 'Execute JavaScript in the user\'s logged-in Chrome page context and return the result. Use for complex page reads/writes.', inputSchema: { type: 'object', properties: { script: { type: 'string' }, ...INSTANCE_PROP }, required: ['script'] } },
+  { name: 'browser_text', description: 'Get visible innerText of the page (or a specific selector) in the user\'s logged-in Chrome. Use to read page state before deciding the next action.', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, ...INSTANCE_PROP } } },
+  { name: 'browser_wait', description: 'Sleep for N milliseconds. Use sparingly — prefer browser_wait_selector.', inputSchema: { type: 'object', properties: { ms: { type: 'number' } }, required: ['ms'] } },
+  { name: 'browser_wait_selector', description: 'Wait until a selector appears on the page in the user\'s logged-in Chrome (default timeout 10000ms).', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, timeout: { type: 'number' }, ...INSTANCE_PROP }, required: ['selector'] } },
+  { name: 'browser_url', description: 'Get the URL and title of the active tab in the user\'s logged-in Chrome.', inputSchema: { type: 'object', properties: { ...INSTANCE_PROP } } },
+  { name: 'browser_pages', description: 'List all open tabs in the user\'s logged-in Chrome (with title + URL).', inputSchema: { type: 'object', properties: { ...INSTANCE_PROP } } },
+  { name: 'browser_new_tab', description: 'Open a new tab in the user\'s logged-in Chrome (optionally with a URL).', inputSchema: { type: 'object', properties: { url: { type: 'string' }, ...INSTANCE_PROP } } },
+  { name: 'browser_close_tab', description: 'Close the active tab in the user\'s logged-in Chrome.', inputSchema: { type: 'object', properties: { ...INSTANCE_PROP } } },
+  { name: 'browser_switch_tab', description: 'Switch to a tab by index (see browser_pages) in the user\'s logged-in Chrome.', inputSchema: { type: 'object', properties: { index: { type: 'number' }, ...INSTANCE_PROP }, required: ['index'] } },
 ];
 
 const handlers = {

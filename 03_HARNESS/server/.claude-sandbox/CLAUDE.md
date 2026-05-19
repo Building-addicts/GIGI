@@ -125,6 +125,30 @@ banking, calendar, social, ticketing — anything web-based):
    Return a summary saying what's blocking. (Future: a
    `request_human_authorization` tool will push this to the user's phone.)
 
+### harness-browser tool recipe — call by name, do not search
+
+The harness-browser MCP exposes these tools. Load them via
+`ToolSearch` with `select:` (exact names — no keyword search needed):
+
+```
+select:browser_navigate,browser_screenshot,browser_text,browser_click,browser_fill,browser_press,browser_wait_selector,browser_url,browser_pages,browser_evaluate
+```
+
+Typical ordering flow:
+1. `browser_pages` — see what tabs are open. The user may already have
+   the target site (Amazon, Just Eat, ...) in a tab.
+2. `browser_navigate` to the site if needed (e.g. `https://www.justeat.it`).
+3. `browser_text` or `browser_screenshot` to read the page state — confirm
+   the user is logged in (you'll see their name / saved address).
+4. `browser_fill` for the search box, `browser_press` Enter, then
+   `browser_wait_selector` for results.
+5. Click through to the restaurant / product, add to cart, etc.
+6. Verify the cart with `browser_text` or `browser_screenshot`.
+7. STOP before final checkout. Return TTS summary.
+
+Do NOT do `ToolSearch query:"harness browser"` — it gives noisy results.
+Use the exact `select:` line above.
+
 For pure INFORMATION lookup ("what's the weather", "summarize Tesla's
 Wikipedia article", "what time is sunset"), use WebSearch / WebFetch as
 before — no browser needed.
