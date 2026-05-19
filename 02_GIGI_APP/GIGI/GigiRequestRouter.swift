@@ -307,6 +307,30 @@ final class GigiRequestRouter {
             return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
         }
 
+        // Post-FM text-heuristic safety net: Apple FM (on-device, small model)
+        // sometimes ignores the @Guide examples and classifies "order X from/on
+        // Y" as delegate_local. Detect external-action verbs + service markers
+        // in the raw utterance and bump to delegate_cloud with browser cap.
+        // Mirror of the capability-check above, but operating on text when FM
+        // forgot to set the cap. Single net, not a stack — see CLAUDE.md.
+        let lower = originalText.lowercased()
+        let actionVerbs = ["order", "buy", "purchase", "book", "reserve", "shop",
+                           "ordina", "ordino", "compra", "prenota", "acquista"]
+        let serviceMarkers = [" from ", " on ", " at ", " via ",
+                              " su ", " da ", " presso "]
+        let hasActionVerb = actionVerbs.contains { verb in
+            lower == verb || lower.hasPrefix("\(verb) ") || lower.contains(" \(verb) ")
+        }
+        let hasServiceMarker = serviceMarkers.contains { lower.contains($0) }
+        if hasActionVerb && hasServiceMarker {
+            var upgraded = decision
+            if !upgraded.requiredCapabilities.contains("browser") {
+                upgraded.requiredCapabilities.append("browser")
+            }
+            GigiDebugLogger.log("GIGI Router: delegate_local upgraded to delegate_cloud (text heuristic: external action verb + service marker in '\(originalText.prefix(80))')")
+            return await dispatchDelegateCloud(decision: upgraded, originalText: originalText, history: history)
+        }
+
         // Topic-coreference fix: the `history` parameter we receive is the
         // FM-router-optimized compact form ("Prev #1: user asked recall of
         // 'hyperopt'") which has no value for Ollama. Ollama needs the
