@@ -90,28 +90,41 @@ Why SUCCESS: price is real (read from the cart page via `browser_text`).
 Address is real (read from the order page). The cart actually has an
 item in it. The only thing left is the user's tap to authorize payment.
 
-### harness-browser tool recipe — load directly, do not keyword-search
+### harness-browser tool names — call directly, NO ToolSearch needed
 
-The harness-browser MCP exposes these tools. Load them by exact name via
-ToolSearch with `select:` syntax — do NOT keyword-search ("browser
-navigate" / "harness browser" / "mcp harness" all give noisy or empty
-results):
+The harness-browser MCP server is loaded for you. Its tools are **already
+available** in your tool list — you do NOT need ToolSearch to find them.
+The full tool names use the `mcp__harness-browser__` prefix:
 
-```
-ToolSearch query="select:browser_navigate,browser_screenshot,browser_text,browser_click,browser_fill,browser_press,browser_wait_selector,browser_url,browser_pages,browser_evaluate"
-```
+- `mcp__harness-browser__browser_pages`
+- `mcp__harness-browser__browser_navigate`
+- `mcp__harness-browser__browser_text`
+- `mcp__harness-browser__browser_screenshot`
+- `mcp__harness-browser__browser_click`
+- `mcp__harness-browser__browser_fill`
+- `mcp__harness-browser__browser_press`
+- `mcp__harness-browser__browser_wait_selector`
+- `mcp__harness-browser__browser_url`
+- `mcp__harness-browser__browser_evaluate`
 
-Typical ordering flow once the tools are loaded:
-1. `browser_pages` — see what tabs are open. The user may already have
-   the target site in a tab.
-2. `browser_navigate` to the site if needed (`https://www.justeat.it`,
-   `https://www.amazon.it`, etc.).
-3. `browser_text` to read the page state — verify the user is logged in
-   (you'll see their name / saved address).
-4. `browser_fill` for the search box, `browser_press` Enter, then
-   `browser_wait_selector` for results.
-5. Click through to the restaurant / product, customize, add to cart.
-6. Verify the cart with `browser_text`.
+Call them directly. **Do NOT** waste turns on
+`ToolSearch query="harness browser"` or `query="mcp"` or
+`query="select:browser_navigate,..."` — those return nothing or noise.
+The tools are pre-registered; just invoke them.
+
+Typical ordering flow:
+1. `mcp__harness-browser__browser_pages` — see what tabs are open. The
+   user may already have the target site in a tab.
+2. `mcp__harness-browser__browser_navigate` to the site if needed
+   (`https://www.justeat.it`, `https://www.amazon.it`, etc.).
+3. `mcp__harness-browser__browser_text` to read the page state — verify
+   the user is logged in (you'll see their name / saved address).
+4. `mcp__harness-browser__browser_fill` for the search box,
+   `mcp__harness-browser__browser_press` Enter, then
+   `mcp__harness-browser__browser_wait_selector` for results.
+5. Click through to the restaurant / product via
+   `mcp__harness-browser__browser_click`, customize, add to cart.
+6. Verify the cart with `mcp__harness-browser__browser_text`.
 7. STOP before final checkout. Return TTS summary with the REAL price
    and address you just read.
 
