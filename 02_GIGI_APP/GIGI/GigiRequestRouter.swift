@@ -234,9 +234,16 @@ final class GigiRequestRouter {
             return await dispatchDelegateCloud(decision: decision, originalText: originalText, history: history)
         }
 
+        // GATE 6 — synthetic decisions from the 2-turn callback already carry
+        // the title+body in `slots`. Apple FM Path (A) re-extracts args from the
+        // prompt and ignores slots, which risks the FM hallucinating a confirmation
+        // without invoking the tool (bug found on E2E-1 "Tesla → note" 2026-05-19).
+        // Force Path (B) bridge for these — deterministic, slots-driven.
+        let isCallbackSynthetic = decision.reason == "GATE 6 multi-step callback"
+
         // (A) Pure Apple FM Tool calling path.
         #if canImport(FoundationModels)
-        if #available(iOS 26.0, *), appleFMToolsEnabled() {
+        if #available(iOS 26.0, *), appleFMToolsEnabled(), !isCallbackSynthetic {
             if let tool = GigiFoundationToolRegistry.tool(for: action) {
                 let prompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
                 do {
@@ -367,7 +374,23 @@ final class GigiRequestRouter {
         // The harness operator manual (`.claude-sandbox/CLAUDE.md`) instructs
         // Claude to parse this header and localize the response.
         let rawPrompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
-        let prompt = Self.prependUserContext(to: rawPrompt)
+        var prompt = Self.prependUserContext(to: rawPrompt)
+
+        // GATE 6 — Task 6.3 prompt engineering. When the user's utterance is a
+        // "research + action" multi-step (e.g. "search Tesla and create a note"),
+        // prepend a system header that constrains Claude Code to:
+        //   1. fetch FRESH info via MCP browser (no reuse of prior-session files);
+        //   2. NOT use the Write tool to "save" the note — the iOS device handles
+        //      note/reminder/email creation on the secondary turn;
+        //   3. return a concise 2-3 sentence summary that the iOS callback will
+        //      paste into the user-visible note body.
+        // Bug seen 2026-05-19 E2E-1: Claude Code reused notes/nikola-tesla.md
+        // from a previous session and used the Write tool, treating filesystem
+        // writes as "creating a note" — producing stale + side-effect output.
+        if detectFollowUpAction(originalText: originalText) != nil {
+            prompt = Self.researchActionSystemHeader + prompt
+            GigiDebugLogger.log("GIGI Router: delegate_cloud — research+action header prepended")
+        }
 
         guard harness.isConfigured else {
             return .error("Cloud AI needs a paired harness. Pair it from Settings to enable Claude Code.")
@@ -496,6 +519,26 @@ final class GigiRequestRouter {
     /// to parse this header and localize responses (justeat.it vs just-eat.co.uk,
     /// "near me" defaults to user's country, etc.). Pulls Locale.current —
     /// no GPS, so works without location permission.
+    /// System header prepended to Path 4 prompts when a research+action
+    /// multi-step is detected by `detectFollowUpAction`. Constrains Claude
+    /// Code to fresh research + concise summary and forbids the Write tool
+    /// (which would shadow the iOS-side note creation on the secondary turn).
+    private static let researchActionSystemHeader: String = """
+    [SYSTEM — research+action multi-step]
+    You are GIGI's research backend. The user's voice assistant will perform the
+    follow-up action (create note / reminder / email draft) on the iOS device
+    using the summary you return. Your job is strictly:
+      1. Fetch FRESH information via the harness-browser MCP tool. Do NOT reuse
+         files from previous sessions. Do NOT consult notes/*.md or any local
+         cache. Always navigate to the source (Wikipedia, the web).
+      2. Return a CONCISE 2-3 sentence summary in plain English. No bullets,
+         no markdown, no file paths.
+      3. Do NOT use the Write tool. Do NOT claim to have "saved a note" —
+         the iOS device, not you, creates the note from your summary.
+      4. Do NOT take destructive actions. Do NOT navigate to login/auth pages.
+    [USER UTTERANCE]
+    """ + "\n"
+
     private static func prependUserContext(to prompt: String) -> String {
         let locale = Locale.current
         let country = locale.region?.identifier ?? "unknown"
@@ -1055,10 +1098,16 @@ final class GigiRequestRouter {
     }
 
     /// Build a synthetic `FoundationRouterDecision` for the secondary turn.
-    /// Bypasses Apple FM (no extra round-trip) — we already know the action
-    /// and we have the body from Path 4's response.
+    /// `delegatePrompt` carries the title+body as a natural-language instruction
+    /// so the Apple FM Tool calling path (A) of `dispatchNativeTool` can
+    /// extract arguments — without it, Path A would see only "callback: <action>"
+    /// and the FM would hallucinate a confirmation without invoking the tool.
+    /// `reason` is also marked so `dispatchNativeTool` can skip Path A entirely
+    /// for these synthetic decisions (defense in depth — bridge path B is
+    /// deterministic since slots are already populated).
     private func makeSecondaryDecision(action: String, title: String, body: String) -> FoundationRouterDecision {
         let slots = makeSlots(title: title, body: body)
+        let prompt = synthesizedPrompt(action: action, title: title, body: body)
         #if canImport(FoundationModels)
         return FoundationRouterDecision(
             path: "native_tool",
@@ -1069,7 +1118,7 @@ final class GigiRequestRouter {
             reason: "GATE 6 multi-step callback",
             slots: slots,
             directSpeech: "",
-            delegatePrompt: ""
+            delegatePrompt: prompt
         )
         #else
         var d = FoundationRouterDecision()
@@ -1080,8 +1129,22 @@ final class GigiRequestRouter {
         d.requiredCapabilities = []
         d.reason = "GATE 6 multi-step callback"
         d.slots = slots
+        d.delegatePrompt = prompt
         return d
         #endif
+    }
+
+    private func synthesizedPrompt(action: String, title: String, body: String) -> String {
+        switch action {
+        case "create_note":
+            return "Save a note titled \"\(title)\" with body: \(body)"
+        case "set_reminder":
+            return "Create a reminder titled \"\(title)\": \(body)"
+        case "send_message":
+            return "Draft a message about \"\(title)\": \(body)"
+        default:
+            return "\(action) — title: \(title); body: \(body)"
+        }
     }
 
     private func makeSlots(title: String, body: String) -> ActionSlots {
@@ -1103,18 +1166,49 @@ final class GigiRequestRouter {
     /// did not pre-extract one. Picks the most informative noun-ish phrase.
     private func defaultTitle(for originalText: String) -> String {
         let t = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Try to extract "about X" pattern: "create a note about X"
-        if let r = t.range(of: #"about\s+([A-Za-z][A-Za-z\s']{2,40})"#, options: .regularExpression) {
-            let captured = String(t[r])
-                .replacingOccurrences(of: #"^about\s+"#, with: "", options: .regularExpression)
-            return captured.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
+
+        // Patterns tried in order of specificity. Each regex captures the
+        // entity name and stops at the first connector word (and|on|in|with|
+        // about|for) to avoid swallowing the trailing "and create a note..."
+        // tail. Group 1 is the title.
+        let stopWord = #"(?:\s+(?:and|on|in|with|about|for|to|from)\b|$|[.,?!])"#
+        let entityChunk = #"([A-Z][A-Za-z'.\-]+(?:\s+[A-Z][A-Za-z'.\-]+){0,4})"#
+        let entityChunkLoose = #"([A-Za-z][A-Za-z'.\-]+(?:\s+[A-Za-z][A-Za-z'.\-]+){0,4})"#
+
+        let patterns: [String] = [
+            // "create a note about X"
+            #"(?i)\babout\s+"# + entityChunkLoose + stopWord,
+            // "remind me for X" / "reminder for X"
+            #"(?i)\bfor\s+"# + entityChunkLoose + stopWord,
+            // "search/find/look up Capitalized Name [...]"
+            #"(?i)\b(?:search|find|look\s+up|research|tell\s+me\s+about)\s+"# + entityChunk + stopWord,
+            // "Wikipedia X" / "on Wikipedia X" (last-ditch)
+            #"(?i)\bwikipedia\s+"# + entityChunk + stopWord,
+        ]
+
+        for pattern in patterns {
+            if let r = t.range(of: pattern, options: .regularExpression) {
+                let slice = String(t[r])
+                // Strip the leading verb/preposition (case-insensitive).
+                let trimmed = slice
+                    .replacingOccurrences(
+                        of: #"(?i)^\s*(about|for|search|find|look\s+up|research|tell\s+me\s+about|wikipedia)\s+"#,
+                        with: "",
+                        options: .regularExpression
+                    )
+                    // Strip the trailing connector word captured by stopWord.
+                    .replacingOccurrences(
+                        of: #"(?i)\s+(and|on|in|with|about|for|to|from)\s*$"#,
+                        with: "",
+                        options: .regularExpression
+                    )
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return trimmed.capitalized
+                }
+            }
         }
-        // Try "for X" pattern: "remind me for X"
-        if let r = t.range(of: #"for\s+([A-Za-z][A-Za-z\s']{2,40})"#, options: .regularExpression) {
-            let captured = String(t[r])
-                .replacingOccurrences(of: #"^for\s+"#, with: "", options: .regularExpression)
-            return captured.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
-        }
+
         // Fallback: first 6 words of the prompt
         let words = t.split(separator: " ").prefix(6).joined(separator: " ")
         return words.isEmpty ? "GIGI note" : String(words).capitalized

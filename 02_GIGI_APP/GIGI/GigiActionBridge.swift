@@ -1262,13 +1262,16 @@ class GigiActionBridge {
 
     // MARK: - Create Note (GATE 6 — killer demo Tesla→note)
     //
-    // iOS Notes app has no public URL scheme that accepts body content, so
-    // we use a two-step UX:
-    //   1. Copy "Title\n\nBody" to the system clipboard.
-    //   2. Open Notes app via `mobilenotes://`.
-    // The spoken response tells the user to paste. This is best-effort but
-    // demoable; a power user can configure a Shortcuts → "Create Note"
-    // automation for one-tap.
+    // iOS Notes app has NO public URL scheme that accepts body content, so we
+    // try in order:
+    //   1. Apple Shortcut named "GIGI Create Note" via shortcuts:// URL —
+    //      one-tap auto-creation if the user installed the shortcut once
+    //      (see docs/runbooks/install-create-note-shortcut.md).
+    //   2. Clipboard fallback: copy "Title\n\nBody" to the system clipboard
+    //      and open Notes via `mobilenotes://`. User pastes with long-press.
+    // The shortcut path is preferred — it creates the note in one tap with
+    // the title pre-filled. The clipboard fallback guarantees the user never
+    // loses the content even without the shortcut installed.
     func createNote(title: String, body: String) async -> String {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBody  = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1276,8 +1279,33 @@ class GigiActionBridge {
             ? trimmedTitle
             : "\(trimmedTitle)\n\n\(trimmedBody)"
 
+        // Always stage clipboard first — guarantees no data loss if the
+        // shortcut path silently fails (e.g. user hasn't installed it).
         await MainActor.run {
             UIPasteboard.general.string = combined
+        }
+
+        // Attempt 1: dedicated Shortcut. The shortcut name is matched
+        // case-sensitively by iOS — keep "GIGI Create Note" stable across docs.
+        let shortcutName = "GIGI Create Note"
+        if let encodedName = shortcutName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let encodedInput = combined.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let shortcutURL = URL(string: "shortcuts://run-shortcut?name=\(encodedName)&input=text&text=\(encodedInput)") {
+            let opened = await MainActor.run(resultType: Bool.self) {
+                guard UIApplication.shared.canOpenURL(shortcutURL) else { return false }
+                UIApplication.shared.open(shortcutURL)
+                GigiSmartOrchestrator.shared.showBanner("📝 Creating note via Shortcut…")
+                return true
+            }
+            if opened {
+                return trimmedTitle.isEmpty
+                    ? "Note saved via Shortcut."
+                    : "Note '\(trimmedTitle)' saved via Shortcut."
+            }
+        }
+
+        // Attempt 2: clipboard + open Notes app. User pastes manually.
+        await MainActor.run {
             GigiSmartOrchestrator.shared.showBanner("📝 Note copied — opening Notes...")
             if let url = URL(string: "mobilenotes://") {
                 UIApplication.shared.open(url)

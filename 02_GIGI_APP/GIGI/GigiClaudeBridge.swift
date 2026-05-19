@@ -90,7 +90,7 @@ final class GigiClaudeBridge {
     }
 
     private func runViaHarness(task: String, context: String?) async -> ToolResult {
-        let snapshot = await buildContextSnapshot()
+        let snapshot = await buildContextSnapshot(forTask: task)
         let composedTask = composeTaskPayload(snapshot: snapshot, task: task, extra: context)
 
         ensureStreamConnected()
@@ -278,7 +278,7 @@ final class GigiClaudeBridge {
     /// Location is intentionally omitted here to avoid a fresh CoreLocation
     /// prompt mid-turn. It can be added in Phase 3 when we have a proper
     /// CLLocationManager helper that only uses cached fixes.
-    func buildContextSnapshot() async -> String {
+    func buildContextSnapshot(forTask task: String = "") async -> String {
         var sections: [String] = []
 
         // --- MVP Preferences (sub #52) — first so they sit at the top of the
@@ -313,19 +313,28 @@ final class GigiClaudeBridge {
         }
 
         // --- Memories: top N per high-value category ---
+        //
+        // Bug fix 2026-05-19: previously injected the top N alphabetical
+        // entries from each category regardless of whether they related to
+        // the current task. That pulled stale referents (e.g. "contact:sergio
+        // = my brother") into the Claude Code prompt and caused false-recall
+        // bleed in its responses. New rules:
+        //   1. SKIP entries whose key looks like garbage from fact-assertion
+        //      mis-detection (key length > 30 chars, or contains punctuation
+        //      that isn't space/underscore/dash).
+        //   2. PREFER entries whose key (stripped of `pref:`/`contact:`/
+        //      `place:` prefix) appears as a substring of the current task
+        //      lowercased. Other entries are only included when relevance
+        //      yields nothing — and even then, capped tighter.
         let prefs    = await GigiMemory.shared.recallAll(category: "pref")
         let contacts = await GigiMemory.shared.recallAll(category: "contact")
         let places   = await GigiMemory.shared.recallAll(category: "place")
-        var memLines: [String] = []
-        for (k, v) in prefs.sorted(by: { $0.key < $1.key }).prefix(4) {
-            memLines.append("- \(k) = \(v)")
-        }
-        for (k, v) in contacts.sorted(by: { $0.key < $1.key }).prefix(3) {
-            memLines.append("- \(k) = \(v)")
-        }
-        for (k, v) in places.sorted(by: { $0.key < $1.key }).prefix(3) {
-            memLines.append("- \(k) = \(v)")
-        }
+        let memLines = Self.selectMemoryLines(
+            task: task,
+            prefs: prefs,
+            contacts: contacts,
+            places: places
+        )
         if !memLines.isEmpty {
             sections.append("RECENT MEMORIES\n===============\n" + memLines.joined(separator: "\n"))
         }
@@ -338,5 +347,90 @@ final class GigiClaudeBridge {
             return String(full.prefix(8000)) + "\n\n[truncated at 8KB]"
         }
         return full
+    }
+
+    /// Filter + rank memory entries for prompt injection.
+    /// Rules: drop garbage keys (too long / weird punctuation), then take
+    /// entries whose key appears in the task text first, then top up with a
+    /// small number of generic high-signal entries.
+    static func selectMemoryLines(
+        task: String,
+        prefs: [String: String],
+        contacts: [String: String],
+        places: [String: String]
+    ) -> [String] {
+        // Tokenize the task into word set so relevance checks use word
+        // boundaries, not substring (otherwise "i" matches every utterance).
+        let taskWords: Set<String> = {
+            let separators = CharacterSet.whitespacesAndNewlines
+                .union(.punctuationCharacters)
+            return Set(
+                task.lowercased()
+                    .components(separatedBy: separators)
+                    .filter { !$0.isEmpty }
+            )
+        }()
+
+        func isGarbage(_ key: String) -> Bool {
+            // Strip the category prefix (e.g. "contact:sergio" -> "sergio").
+            let raw = key.split(separator: ":").dropFirst().joined(separator: ":")
+            if raw.isEmpty { return true }
+            if raw.count > 30 { return true }
+            // Reject too short to be meaningful (single char like "i" came
+            // from a mis-classified assertion).
+            if raw.count < 2 { return true }
+            // Allow letters / digits / space / underscore / dash / dot.
+            // Reject keys with commas, question marks, mid-sentence punctuation
+            // — those came from mis-classified assertions.
+            let allowed = CharacterSet.alphanumerics
+                .union(CharacterSet(charactersIn: " _-."))
+            if raw.unicodeScalars.contains(where: { !allowed.contains($0) }) {
+                return true
+            }
+            // Reject multi-word keys longer than 4 words — likely a sentence.
+            if raw.split(whereSeparator: { $0 == " " }).count > 4 { return true }
+            return false
+        }
+
+        func keyName(_ key: String) -> String {
+            String(key.split(separator: ":").dropFirst().joined(separator: ":"))
+        }
+
+        func isRelevant(_ key: String) -> Bool {
+            let name = keyName(key).lowercased().replacingOccurrences(of: "_", with: " ")
+            guard !name.isEmpty else { return false }
+            // Word-boundary match: every token of the key must appear as a
+            // standalone word in the task. Avoids "i" matching everything
+            // and "tesla" inside "telescope".
+            let nameTokens = name.split(whereSeparator: { $0.isWhitespace })
+                                 .map(String.init)
+            guard !nameTokens.isEmpty else { return false }
+            return nameTokens.allSatisfy { taskWords.contains($0) }
+        }
+
+        let cleanPrefs    = prefs.filter    { !isGarbage($0.key) }
+        let cleanContacts = contacts.filter { !isGarbage($0.key) }
+        let cleanPlaces   = places.filter   { !isGarbage($0.key) }
+
+        var lines: [String] = []
+        var seen = Set<String>()
+        func add(_ entry: (key: String, value: String)) {
+            guard !seen.contains(entry.key) else { return }
+            seen.insert(entry.key)
+            lines.append("- \(entry.key) = \(entry.value)")
+        }
+
+        // Pass 1 — entries explicitly mentioned in the task. No cap.
+        for e in cleanPrefs    where isRelevant(e.key) { add(e) }
+        for e in cleanContacts where isRelevant(e.key) { add(e) }
+        for e in cleanPlaces   where isRelevant(e.key) { add(e) }
+
+        // Pass 2 — generic top-up. Conservative: only a couple of preferences,
+        // and NO blind contact dump (the recurring source of false-recall).
+        if lines.count < 4 {
+            for e in cleanPrefs.sorted(by: { $0.key < $1.key }).prefix(3) { add(e) }
+        }
+
+        return lines
     }
 }

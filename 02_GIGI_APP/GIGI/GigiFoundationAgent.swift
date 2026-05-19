@@ -218,8 +218,8 @@ final class GigiFoundationAgent {
         Input: "Marco is my brother"
         Decision: path=native_tool, primaryAction="remember", slots.contact="Marco", slots.body="my brother", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion".
 
-        Input: "Sergio is my brother"
-        Decision: path=native_tool, primaryAction="remember", slots.contact="Sergio", slots.body="my brother", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion".
+        Input: "Andrea is my brother"
+        Decision: path=native_tool, primaryAction="remember", slots.contact="Andrea", slots.body="my brother", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion".
 
         Input: "My favorite restaurant is Sakura"
         Decision: path=native_tool, primaryAction="remember", slots.contact="favorite restaurant", slots.body="Sakura", complexity=5, capabilities=[], confidence=0.9, reason="preference assertion".
@@ -233,8 +233,8 @@ final class GigiFoundationAgent {
         Input: "Who's Marco?" (User memory contains "marco = my brother")
         Decision: path=native_tool, primaryAction="recall", slots.contact="Marco", complexity=5, capabilities=[], confidence=0.95, reason="memory recall hit".
 
-        Input: "Chi è Sergio" (User memory contains "sergio = my brother")
-        Decision: path=native_tool, primaryAction="recall", slots.contact="Sergio", complexity=5, capabilities=[], confidence=0.95, reason="memory recall (IT)".
+        Input: "Chi è Andrea" (User memory contains "andrea = my brother")
+        Decision: path=native_tool, primaryAction="recall", slots.contact="Andrea", complexity=5, capabilities=[], confidence=0.95, reason="memory recall (IT)".
 
         Input: "Who is Einstein?" (User memory does NOT contain einstein)
         Decision: path=delegate_local, delegatePrompt="Who is Albert Einstein?", complexity=20, capabilities=[], confidence=0.9, reason="general knowledge, not in memory".

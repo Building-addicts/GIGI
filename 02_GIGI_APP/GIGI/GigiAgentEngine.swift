@@ -368,7 +368,22 @@ final class GigiAgentEngine {
 
     static func resolveCoreferences(_ text: String, memory: GigiConversationMemory) -> String {
         var resolved = text
+        // Bug fix 2026-05-19 E2E-2: when the utterance already names an entity
+        // explicitly (e.g. "Search Valentino Rossi and tell me how many
+        // championships he won"), DO NOT substitute pronouns with stale
+        // referents — "he" obviously refers to the freshly-named subject, not
+        // to whoever happened to be lastReferent from a previous turn.
+        // Heuristic: a TitleCased multi-word proper noun (e.g. "Valentino Rossi",
+        // "Nikola Tesla", "Inter Milan") within the same utterance shadows
+        // person-kind pronoun resolution. Place/thing pronouns ("it",
+        // "there") are unaffected by this guard.
+        let personEntityRegex = #"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b"#
+        let hasExplicitPersonName = text.range(of: personEntityRegex, options: .regularExpression) != nil
+
         for (pattern, kind) in pronounToKind {
+            if kind == "person", hasExplicitPersonName {
+                continue
+            }
             guard let referent = memory.lastReferent(kind: kind), !referent.isEmpty else { continue }
             guard resolved.range(of: pattern, options: .regularExpression) != nil else { continue }
             // Whole-word, case-insensitive replacement.
