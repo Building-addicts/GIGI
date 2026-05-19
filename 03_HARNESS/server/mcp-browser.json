@@ -3,7 +3,7 @@
     "harness-browser": {
       "type": "stdio",
       "command": "node",
-      "args": ["../browser-pool/server-playwright.js"]
+      "args": ["../../browser-pool/server-playwright.js"]
     }
   }
 }
