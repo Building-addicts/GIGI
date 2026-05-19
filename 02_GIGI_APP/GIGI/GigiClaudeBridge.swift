@@ -131,7 +131,16 @@ final class GigiClaudeBridge {
         // both Claude (cloud agent) and Groq (local LLM) are unreachable.
         SoundEngine.play(.error)
         GigiDebugLogger.log("ClaudeBridge path=fallback FAILED — local Groq unreachable too")
-        return ToolResult.failure("I'm offline and can't reach my fallback brain either. Please check your connection.")
+        // Tailor the message to which leg actually failed so the user knows
+        // whether to fix WiFi/pairing (harness) or just retry (Groq hiccup).
+        let harnessDown = GigiBrainDiagnostics.shared.harnessStatus == .offline
+        let message: String
+        if harnessDown {
+            message = "Can't reach the harness — check that you're on the same WiFi as the iMac, or that the tunnel is up. (My text-only backup also didn't respond.)"
+        } else {
+            message = "My text-only backup didn't respond. The harness is reachable but this request needs the web — try again in a moment."
+        }
+        return ToolResult.failure(message)
     }
 
     // MARK: - Stream wiring

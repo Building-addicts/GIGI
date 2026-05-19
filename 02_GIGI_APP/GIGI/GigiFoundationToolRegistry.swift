@@ -125,7 +125,7 @@ struct FMSendMessageTool: Tool {
 
     @Generable
     struct Arguments {
-        @Guide(description: "Recipient's full name as it appears in Contacts. Required.")
+        @Guide(description: "Recipient's name only, exactly as in Contacts. Strip framing words like 'to', 'and', 'send', 'message', 'a'. Example: from 'send a message to fede and say hi' extract 'fede', not 'to fede and'.")
         var contact: String
 
         @Guide(description: "Verbatim message body. Strip framing words like 'saying' or 'tell them'.")

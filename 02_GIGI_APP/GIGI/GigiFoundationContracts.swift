@@ -129,7 +129,7 @@ struct ActionSlots {
 @Generable
 struct FoundationRouterDecision {
 
-    @Guide(description: "Single routing decision. native_tool = run an iOS action via Path 2 Tool calling. delegate_local = simple/medium reasoning via Path 3 Ollama on the harness. delegate_cloud = complex reasoning or browser/code via Path 4 Claude Code. ask_clarification = single short question to disambiguate. reject = politely decline (illegal, harmful, nonsensical). Pick exactly one of: native_tool, delegate_local, delegate_cloud, ask_clarification, reject.")
+    @Guide(description: "Single routing decision. native_tool = run an iOS action via Path 2 Tool calling. delegate_local = pure reasoning or chat with NO web access via Path 3 Ollama on the harness (jokes, definitions, math, opinions, explain-this-concept). delegate_cloud = anything needing the web, a browser, or external services — INCLUDING ordering/shopping/buying (food delivery, Amazon, marketplaces), web search, looking up live info, browsing sites, code generation, complex multi-step reasoning. ask_clarification = single short question to disambiguate. reject = politely decline (illegal, harmful, nonsensical). Examples: 'order a poke from Nana Poke' → delegate_cloud. 'buy a gaming mouse on Amazon' → delegate_cloud. 'what is entropy' → delegate_local. 'tell me a joke' → delegate_local. Pick exactly one of: native_tool, delegate_local, delegate_cloud, ask_clarification, reject.")
     var path: String
 
     @Guide(description: "Canonical action name when path is native_tool, otherwise empty string. Allowed values: set_timer, set_alarm, set_reminder, send_message, make_call, facetime, navigate, play_music, open_app, weather, read_calendar, find_free_slot, read_email, homekit_on, homekit_off, create_note, web_order_food.")
@@ -141,7 +141,7 @@ struct FoundationRouterDecision {
     @Guide(description: "Estimated task complexity 0-100. 0-20 = trivial native tool, 20-40 = simple reasoning suitable for local Ollama, 40-70 = multi-step reasoning, 70-100 = browser navigation or code generation needing Claude Code.")
     var complexityEstimate: Int
 
-    @Guide(description: "Capabilities the task requires, as a list of strings drawn from: browser, code, vision, memory_recall, multi_step, web_search. Empty list if the task is a one-shot native tool.")
+    @Guide(description: "Capabilities the task requires, as a list of strings drawn from: browser, code, vision, memory_recall, multi_step, web_search. Empty list if the task is a one-shot native tool. CRITICAL: include 'browser' whenever the task involves ordering, shopping, buying, navigating a website, or looking up live web info — even if you also picked delegate_cloud. Without 'browser' the downstream agent spawns without a browser tool and the order silently fails.")
     var requiredCapabilities: [String]
 
     @Guide(description: "One-line rationale, max 12 words. Examples: 'simple timer command'. 'needs web navigation to fetch result'. 'ambiguous duration field'.")
