@@ -101,6 +101,7 @@ final class GigiRequestRouter {
             CloudDowngradeTier(router: self),
             CompoundCommandTier(router: self),
             FactAssertionTier(router: self),
+            ReminderUpgradeTier(router: self),
             MessageWithoutBodyTier(router: self),
             UnresolvedContactTier(router: self),
             ClarificationDowngradeTier(router: self),

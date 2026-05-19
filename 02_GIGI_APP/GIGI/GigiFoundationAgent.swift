@@ -207,6 +207,12 @@ final class GigiFoundationAgent {
             - Otherwise → path=delegate_local with the user's question as delegatePrompt.
             - NEVER ask_clarification for who/what/when/where/why/how questions. They are answerable.
 
+        RULE-R3 (remind/remember + "me to <action>" → set_reminder, NOT remember). The verbs "remind" and "remember" are AMBIGUOUS — disambiguate by what follows:
+            - "Remind me to <action> [at <time> / <date>]" → path=native_tool, primaryAction=set_reminder, slots.taskText=<action> (strip "to "), slots.time/date if present.
+            - "Remember me to <action>" (common non-native or colloquial typo for "remind me to") → same as above, path=native_tool, primaryAction=set_reminder.
+            - "Remember <subject> is/are <value>" or bare "Remember <fact>" → RULE-R1 (remember), NOT set_reminder.
+            - The decisive cue is "<verb> me to <action_verb> ..." — that pattern is ALWAYS a reminder, never a fact assertion. NEVER pick delegate_local for this pattern (Ollama cannot create iOS reminders).
+
         EXPLICIT FEW-SHOT (learn from these — the slots field uses the schema's named keys):
 
         Input: "Marco is my brother"
@@ -235,6 +241,18 @@ final class GigiFoundationAgent {
 
         Input: "What is photosynthesis"
         Decision: path=delegate_local, delegatePrompt="What is photosynthesis?", complexity=25, capabilities=[], confidence=0.9, reason="general knowledge".
+
+        Input: "Remind me to buy milk tomorrow at 9am"
+        Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="buy milk", slots.date="tomorrow", slots.time="09:00", complexity=10, capabilities=[], confidence=0.95, reason="reminder with task and time".
+
+        Input: "Remember me to buy milk"
+        Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="buy milk", complexity=10, capabilities=[], confidence=0.9, reason="reminder (colloquial remember me to)".
+
+        Input: "Remind me to call mom in an hour"
+        Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="call mom", slots.duration="1 hour", complexity=10, capabilities=[], confidence=0.95, reason="reminder with relative time".
+
+        Input: "Remember that my password is hello123"
+        Decision: path=native_tool, primaryAction="remember", slots.contact="password", slots.body="hello123", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion (bare remember)".
 
         CAPABILITIES (requiredCapabilities — a list of strings, empty for native_tool):
         - browser: needs a real web browser to navigate, click, scrape live data

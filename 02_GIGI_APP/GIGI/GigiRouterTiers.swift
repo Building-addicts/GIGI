@@ -543,6 +543,58 @@ struct FactAssertionTier: RouterTier {
     }
 }
 
+/// Bug #12 reminder-verb upgrade — Apple FM mis-classifies "Remind me to X"
+/// and the colloquial "Remember me to X" as delegate_local because the verb
+/// "remember" overlaps with GIGI's memory verb. The NLU fast-path catches
+/// canonical "remind me to" upstream but has no trigger for "remember me to",
+/// so that phrasing always reaches the router. When FM has settled on
+/// delegate_local / ask_clarification AND the utterance starts with the
+/// reminder pattern, force native_tool(set_reminder) with taskText extracted
+/// from the suffix. Ollama cannot create iOS reminders; this override is the
+/// safety net for Apple FM's @Guide-non-binding behaviour.
+struct ReminderUpgradeTier: RouterTier {
+    let name = "reminder_upgrade"
+    unowned let router: GigiRequestRouter
+
+    private static let triggers = [
+        "remember me to ",
+        "remind me to ",
+        "ricordami di ",
+    ]
+
+    func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
+        guard let path = ctx.effectivePath,
+              path == "delegate_local" || path == "ask_clarification" else { return .pass }
+        let lowered = ctx.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trigger = Self.triggers.first(where: { lowered.hasPrefix($0) }) else { return .pass }
+
+        // Preserve original-case task body (strip the trigger length, then trim).
+        let trimmed = ctx.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = String(trimmed.dropFirst(trigger.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return .pass }
+
+        GigiDebugLogger.log("GIGI Router: reminder-verb OVERRIDE — \(path) → bridge(set_reminder). taskText='\(body)' trigger='\(trigger)'")
+        let intent = GigiIntent(
+            label: "set_reminder",
+            confidence: 1.0,
+            params: ["text": body, "raw": ctx.text]
+        )
+        let speech = await GigiActionBridge.shared.execute(intent)
+        let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Reminder set: \(body)."
+            : speech
+        GigiRouterTrace.shared.record(
+            utterance: ctx.text, tier: "regex-override",
+            tool: "set_reminder", confidence: 1.0, slot: body
+        )
+        GigiConversationMemory.shared.annotateLastTurn(
+            intent: "set_reminder", slot: body, tier: "regex-override", success: true
+        )
+        GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+        return .terminal(.actionInvoked(speech: finalSpeech, tool: "set_reminder"))
+    }
+}
+
 /// Bug #016 messaging-without-body override — "Send Marco a message" with no
 /// body gets routed by FM to delegate_local; Ollama can't send messages, so
 /// it answers with a verbose apology. Detect messaging-shape utterances
