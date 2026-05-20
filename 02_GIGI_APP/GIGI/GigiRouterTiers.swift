@@ -156,16 +156,17 @@ struct ProposalConsentTier: RouterTier {
     }
 }
 
-/// Commit 1 — propose/execute split.
-/// Consumes a `pendingWorldAction` proposal on user affirmative/negative.
-/// Sits right after ProposalConsentTier so confirmation routing happens
-/// BEFORE the FM router sees the utterance and risks re-classifying it as
-/// a fresh, unrelated request.
+/// Consumes a `pendingWorldAction` proposal staged by the world-action
+/// propose-first guard. Sits right after ProposalConsentTier so confirmation
+/// routing happens BEFORE the FM router sees the utterance and risks
+/// re-classifying it as a fresh, unrelated request.
 ///
-/// Today (commit 1) the matcher is the existing whole-word affirmative /
-/// negative detector. Commit 2 replaces this with a focused FM resolver
-/// (`resolveConfirmation`) that also understands "modify" turns
-/// ("not salmon, tuna" → reopen propose with the correction).
+/// Classification is delegated to an on-device FM call
+/// (`resolveConfirmation`) that returns one of four kinds: confirm, reject,
+/// modify, unrelated. Regex affirmative/negative matchers are kept ONLY as
+/// a fallback for when Apple FM is unavailable or errors out — they don't
+/// understand "modify" turns ("yes but make it spicy") and they reject
+/// anything > 4 words even when it's a clear confirmation.
 struct WorldActionConsentTier: RouterTier {
     let name = "world_action_consent"
     unowned let router: GigiRequestRouter
@@ -174,22 +175,66 @@ struct WorldActionConsentTier: RouterTier {
         let mem = GigiConversationMemory.shared
         guard let proposal = mem.peekPendingWorldAction() else { return .pass }
         let utterance = ctx.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Bound by word count so a long "actually, also add chips and tell
-        // the driver to ring the bell" doesn't get swallowed by a "go"
-        // substring. Commit 2's FM resolver will widen this safely.
+        guard !utterance.isEmpty else { return .pass }
+
+        // Primary path: on-device FM classification.
+        #if canImport(FoundationModels)
+        if #available(iOS 18.1, *),
+           let decision = await GigiFoundationSession.shared.resolveConfirmation(
+                userReply: utterance,
+                proposalSummary: proposal.summary
+           ) {
+            switch decision.kind {
+            case "confirm":
+                _ = mem.consumePendingWorldAction()
+                GigiDebugLogger.log("GIGI Router: world-action CONFIRM (fm) → brief='\(proposal.executionBrief.prefix(80))'")
+                return .terminal(await router.executeConfirmedWorldAction(proposal))
+            case "modify":
+                _ = mem.consumePendingWorldAction()
+                let brief = decision.modificationBrief.trimmingCharacters(in: .whitespacesAndNewlines)
+                let effectiveBrief = brief.isEmpty ? proposal.executionBrief : brief
+                GigiDebugLogger.log("GIGI Router: world-action MODIFY (fm) → brief='\(effectiveBrief.prefix(80))'")
+                let modified = GigiConversationMemory.WorldActionProposal(
+                    kind: proposal.kind,
+                    summary: proposal.summary,
+                    executionBrief: effectiveBrief,
+                    originalText: utterance,
+                    timestamp: Date()
+                )
+                return .terminal(await router.executeConfirmedWorldAction(modified))
+            case "reject":
+                mem.clearPendingWorldAction()
+                let speech = decision.directSpeech.isEmpty ? "Cancelled." : decision.directSpeech
+                mem.addModelSpeech(speech)
+                GigiDebugLogger.log("GIGI Router: world-action REJECT (fm)")
+                return .terminal(.actionInvoked(speech: speech, tool: "world_action_cancel"))
+            case "unrelated":
+                // Drop the stale proposal and let the normal pipeline handle
+                // the new request. If the user wanted both, they can repeat.
+                mem.clearPendingWorldAction()
+                GigiDebugLogger.log("GIGI Router: world-action UNRELATED (fm) — dropping pending proposal, falling through")
+                return .pass
+            default:
+                GigiDebugLogger.log("GIGI Router: world-action FM returned unknown kind='\(decision.kind)' — falling back to regex")
+            }
+        }
+        #endif
+
+        // Fallback: regex matchers (only short utterances, same constraint
+        // as ProposalConsentTier — long replies fall through so the normal
+        // pipeline can dispatch them).
         let wordCount = utterance.split { $0.isWhitespace }.count
         guard wordCount > 0 && wordCount <= 4 else { return .pass }
-
         if GigiRequestRouter.detectAffirmative(in: utterance) {
             _ = mem.consumePendingWorldAction()
-            GigiDebugLogger.log("GIGI Router: world-action CONFIRM via '\(utterance)' — executing brief='\(proposal.executionBrief.prefix(80))'")
+            GigiDebugLogger.log("GIGI Router: world-action CONFIRM (regex) → brief='\(proposal.executionBrief.prefix(80))'")
             return .terminal(await router.executeConfirmedWorldAction(proposal))
         }
         if GigiRequestRouter.detectNegative(in: utterance) {
             mem.clearPendingWorldAction()
             let speech = "Cancelled."
             mem.addModelSpeech(speech)
-            GigiDebugLogger.log("GIGI Router: world-action CANCEL via '\(utterance)'")
+            GigiDebugLogger.log("GIGI Router: world-action CANCEL (regex)")
             return .terminal(.actionInvoked(speech: speech, tool: "world_action_cancel"))
         }
         return .pass

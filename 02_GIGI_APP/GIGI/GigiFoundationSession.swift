@@ -268,6 +268,49 @@ final class GigiFoundationSession {
         }
     }
 
+    /// Interpret a user reply against a pending world-action proposal.
+    /// Replaces the regex affirmative/negative matchers in
+    /// `WorldActionConsentTier` with constrained-decoding FM classification.
+    ///
+    /// Returns a structured decision: confirm / reject / modify / unrelated.
+    /// On Apple FM failure or unavailability, returns nil so the caller can
+    /// fall back to regex matching.
+    ///
+    /// Cost: ~150-300ms per call (one FM round-trip), only paid when a
+    /// proposal is staged AND the next user turn arrives.
+    func resolveConfirmation(userReply: String, proposalSummary: String) async -> ConfirmationDecision? {
+        guard isAvailable else { return nil }
+        let s = LanguageModelSession(instructions: """
+        You are a confirmation classifier for a voice assistant. The assistant has just proposed an action and is waiting for the user's reply. Classify the reply into one of four mutually exclusive kinds:
+
+        - confirm: user accepts as proposed (yes / go / ok / sure / do it / perfect / vai / dai / procedi)
+        - reject: user declines (no / cancel / stop / never mind / annulla / lascia perdere)
+        - modify: user accepts the underlying action but changes something (size, place, ingredient, time, quantity). When kind=modify, build a self-contained instruction that combines the original proposal with the user's change.
+        - unrelated: the reply doesn't address the proposal at all — it's a completely new request (what time is it, set a timer, who's calling, weather)
+
+        Be conservative: when in doubt between confirm and modify, prefer modify so any change in the reply isn't silently lost.
+        """)
+        let prompt = """
+        Pending proposal:
+        \(proposalSummary)
+
+        User reply:
+        \(userReply)
+
+        Classify.
+        """
+        do {
+            let result = try await s.respond(to: prompt, generating: ConfirmationDecision.self)
+            let decision = result.content
+            GigiDebugLogger.log("GIGI ConfirmationResolver: '\(userReply)' → kind=\(decision.kind)" +
+                  (decision.kind == "modify" ? " brief='\(decision.modificationBrief.prefix(80))'" : ""))
+            return decision
+        } catch {
+            GigiDebugLogger.log("GIGI ConfirmationResolver error: \(error.localizedDescription) — caller will fall back to regex")
+            return nil
+        }
+    }
+
     /// Serialize a `FoundationRouterDecision` to compact JSON for the debug
     /// overlay (Settings → Debug → "Show last router decision"). Best-effort —
     /// returns a fallback marker if encoding fails.

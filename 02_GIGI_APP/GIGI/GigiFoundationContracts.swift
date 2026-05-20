@@ -157,4 +157,31 @@ struct FoundationRouterDecision {
     var delegatePrompt: String
 }
 
+// MARK: - ConfirmationDecision
+//
+// Output of the on-device FM call that interprets the user reply when a
+// world-action proposal is staged ("Got it — order a poke from just eat.
+// Say go and I'll do it, or tell me what to change."). Replaces the regex
+// matchers detectAffirmative / detectNegative that mis-classified
+// surprisingly often: a reply like "yes but make it spicy" was either
+// dropped (wordCount > 4) or treated as plain confirm without carrying
+// the modification.
+//
+// The four kinds are mutually exclusive. Constrained decoding via
+// `@Generable` guarantees the FM cannot return something outside the set.
+
+@available(iOS 18.1, *)
+@Generable
+struct ConfirmationDecision {
+
+    @Guide(description: "How the user responded to the pending proposal. Pick exactly one: confirm = user accepts as proposed (yes, go, ok, sure, do it, perfect, vai, dai); reject = user cancels (no, stop, cancel, never mind, annulla); modify = user accepts the action but changes some detail (yes but make it spicy, actually use a different place, smaller size); unrelated = the reply does NOT address the proposal at all and is a new request (what time is it, set a timer, who's calling). Be conservative: when uncertain between confirm and modify, prefer modify so the modification isn't silently dropped.")
+    var kind: String
+
+    @Guide(description: "When kind=modify, a self-contained instruction that combines the original proposal with the user's change, suitable to hand to the cloud agent fresh. Example: original proposal 'Order a poke from just eat' + user reply 'make it spicy' → 'Order a spicy poke from just eat'. Empty string for confirm / reject / unrelated.")
+    var modificationBrief: String
+
+    @Guide(description: "One short TTS-friendly line for the user when kind=reject or kind=unrelated. Empty string for confirm and modify (the system handles those silently). Natural American English, no Sure/Of course filler.")
+    var directSpeech: String
+}
+
 #endif
