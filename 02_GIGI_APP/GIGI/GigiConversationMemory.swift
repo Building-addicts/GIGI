@@ -313,6 +313,18 @@ final class GigiConversationMemory: ObservableObject {
         UserDefaults.standard.removeObject(forKey: Self.referentTSUDKey)
     }
 
+    /// Returns the most recent assistant (.gigi) message text, verbatim, if
+    /// any. Used by the router to give Apple FM a single-turn context for
+    /// follow-up disambiguation ("Go", "Yes", "Send it") without the
+    /// multi-turn topic-anchoring drift that motivated `compactHistory`
+    /// (Bug #013). One last assistant turn is enough for follow-up
+    /// interpretation and does NOT cause runaway anchoring.
+    func lastAssistantTurnVerbatim() -> String? {
+        let last = messages
+            .last(where: { $0.role == .gigi && !$0.isThinking && !$0.text.isEmpty })
+        return last?.text
+    }
+
     // Legacy string context (used by v2 path — keep until Phase 1.8 removes it)
     func contextString(maxTurns: Int = 10) -> String {
         let recent = messages

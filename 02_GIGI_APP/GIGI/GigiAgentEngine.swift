@@ -203,14 +203,20 @@ final class GigiAgentEngine {
         // contact:marco was saved a week ago). No-op when the cache is empty
         // or no key matches the current utterance.
         let memContext = await GigiMemory.shared.contextString(for: text)
-        let history: String
-        if memContext.isEmpty {
-            history = conversation
-        } else if conversation.isEmpty {
-            history = memContext
-        } else {
-            history = memContext + "\n\n" + conversation
+
+        // Task-state-aware follow-up disambiguation: pass the immediately
+        // preceding assistant turn verbatim so Apple FM can interpret short
+        // confirmations ("Go", "Yes", "Send it") as continuations of an
+        // open task. Bug #013's compactHistory still strips multi-turn
+        // history; only the single most recent assistant message is added
+        // here, which is not enough to cause topic anchoring drift.
+        var historyParts: [String] = []
+        if !memContext.isEmpty { historyParts.append(memContext) }
+        if !conversation.isEmpty { historyParts.append(conversation) }
+        if let lastAssistant = mem.lastAssistantTurnVerbatim() {
+            historyParts.append("<assistant_previous_turn>\n\(lastAssistant)\n</assistant_previous_turn>")
         }
+        let history = historyParts.joined(separator: "\n\n")
 
         let routeResult = await GigiRequestRouter.shared.route(text: text, history: history)
         let agentResult = routeResult.asAgentResult

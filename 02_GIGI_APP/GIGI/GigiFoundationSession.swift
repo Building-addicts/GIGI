@@ -182,7 +182,13 @@ final class GigiFoundationSession {
             Recent conversation:
             \(history)
 
-            Latest utterance — resolve pronouns and ellipsis from context, then route:
+            Latest utterance — route considering whether the user's reply continues an open task or starts a new one:
+
+            - If the history contains an `<assistant_previous_turn>` block AND the latest utterance is a short reply that confirms ("go", "yes", "send it", "do it"), cancels ("no", "stop"), corrects ("not salmon, tuna"), or otherwise addresses what GIGI just asked, treat it as a CONTINUATION of that task. Route to whatever path the previous turn was leading to (usually delegate_cloud for action follow-ups). Do NOT classify as ask_clarification merely because the utterance is short in isolation.
+            - If the latest utterance changes topic ("what's the weather", "set a timer"), ignore the `<assistant_previous_turn>` block and route fresh.
+            - Resolve pronouns and ellipsis from the broader conversation as usual.
+
+            User said:
             \(text)
             """
         }
