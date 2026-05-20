@@ -210,15 +210,34 @@ final class GigiAgentEngine {
         // open task. Bug #013's compactHistory still strips multi-turn
         // history; only the single most recent assistant message is added
         // here, which is not enough to cause topic anchoring drift.
+        let lastAssistant = mem.lastAssistantTurnVerbatim()
         var historyParts: [String] = []
         if !memContext.isEmpty { historyParts.append(memContext) }
         if !conversation.isEmpty { historyParts.append(conversation) }
-        if let lastAssistant = mem.lastAssistantTurnVerbatim() {
-            historyParts.append("<assistant_previous_turn>\n\(lastAssistant)\n</assistant_previous_turn>")
+        if let last = lastAssistant {
+            historyParts.append("<assistant_previous_turn>\n\(last)\n</assistant_previous_turn>")
         }
         let history = historyParts.joined(separator: "\n\n")
 
-        let routeResult = await GigiRequestRouter.shared.route(text: text, history: history)
+        // Intelligent follow-up resolution: when there is a previous assistant
+        // turn, run a small FM call to decide if the user reply continues the
+        // open task or changes topic. On continuation, the model returns a
+        // self-contained instruction (e.g. "Go" → "stage the salmon avocado
+        // edamame mango bowl with spicy mayo on rice at Nana Poke Chiavari
+        // via Just Eat"). On topic change, returns the text unchanged. This
+        // unblocks short follow-ups that the small on-device router model
+        // can't reliably interpret from history alone.
+        var routerInputText = text
+        #if canImport(FoundationModels)
+        if #available(iOS 18.1, *), lastAssistant != nil {
+            routerInputText = await GigiFoundationSession.shared.resolveFollowUp(
+                text: text,
+                lastAssistantTurn: lastAssistant
+            )
+        }
+        #endif
+
+        let routeResult = await GigiRequestRouter.shared.route(text: routerInputText, history: history)
         let agentResult = routeResult.asAgentResult
 
         // Backfill the turn annotation using the most recent router trace

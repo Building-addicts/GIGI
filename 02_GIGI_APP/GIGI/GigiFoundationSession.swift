@@ -216,6 +216,58 @@ final class GigiFoundationSession {
         }
     }
 
+    /// Resolves a potentially-ambiguous user utterance into a self-contained
+    /// instruction by looking at the immediately-preceding assistant turn.
+    /// Uses a fresh on-device FM session to decide whether the user reply is
+    /// a continuation of the assistant's previous turn or a topic change.
+    ///
+    /// Returns the resolved text (which the caller passes to the router).
+    /// On topic change or when there is no prior assistant turn, returns
+    /// `text` unchanged. On Apple FM failure, also returns `text` unchanged
+    /// — the caller falls back to standard routing.
+    ///
+    /// Cost: ~50-150ms per call (one extra FM round-trip). Only paid when a
+    /// last assistant turn exists; first user turn skips it entirely.
+    func resolveFollowUp(text: String, lastAssistantTurn: String?) async -> String {
+        guard isAvailable,
+              let last = lastAssistantTurn?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !last.isEmpty else {
+            return text
+        }
+        // Stateless: same precaution as routeRequest.
+        let s = LanguageModelSession(instructions: """
+        You are a context resolver for a voice assistant. Given the assistant's previous turn (a question or proposal awaiting user reply) and the user's current short utterance, decide whether the utterance is a CONTINUATION of that task or a TOPIC CHANGE.
+
+        - CONTINUATION: user confirms ("go", "yes", "send it"), cancels ("no", "stop"), corrects ("not salmon, tuna"), or otherwise addresses what the assistant just asked. In that case, output a self-contained instruction that combines the assistant's proposal with the user's reply, suitable for a router that has no conversation context.
+        - TOPIC CHANGE: user asks something unrelated ("what's the weather", "set a timer for ten minutes"). In that case, output the user's utterance unchanged.
+
+        Be conservative: only mark CONTINUATION when the link is obvious. Output ONLY the resolved instruction text, nothing else. No preamble, no quotes, no markdown.
+        """)
+        let prompt = """
+        Assistant's previous turn:
+        \(last)
+
+        User's current utterance:
+        \(text)
+
+        Resolved instruction:
+        """
+        do {
+            let result = try await s.respond(to: prompt)
+            let resolved = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if resolved.isEmpty {
+                return text
+            }
+            if resolved != text {
+                GigiDebugLogger.log("GIGI FollowUpResolver: '\(text)' → '\(resolved.prefix(120))'")
+            }
+            return resolved
+        } catch {
+            GigiDebugLogger.log("GIGI FollowUpResolver error (\(error.localizedDescription)) — using original text")
+            return text
+        }
+    }
+
     /// Serialize a `FoundationRouterDecision` to compact JSON for the debug
     /// overlay (Settings → Debug → "Show last router decision"). Best-effort —
     /// returns a fallback marker if encoding fails.
