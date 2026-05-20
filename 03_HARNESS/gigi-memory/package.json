@@ -1,0 +1,10 @@
+{
+  "name": "gigi-memory",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "main": "server.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
