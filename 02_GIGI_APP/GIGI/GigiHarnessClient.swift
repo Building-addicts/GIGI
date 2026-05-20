@@ -274,6 +274,31 @@ final class GigiHarnessClient {
         return r.map { $0.results }
     }
 
+    /// World-action persistent memory (commit 4). Returns recent confirmed
+    /// orders written by Claude cloud via the gigi-memory MCP server. Used
+    /// by `GigiPersistentMemory` to inject "the usual" context into the FM
+    /// router prompt at the start of each turn.
+    struct OrderEntry: Decodable, Equatable {
+        let id: String
+        let ts: String
+        let kind: String         // order | buy | book
+        let merchant: String
+        let item: String
+        let variant: String?
+        let total: String?
+        let merchantUrl: String?
+        let summary: String
+    }
+
+    func recentOrders(limit: Int = 5, kind: String? = nil) async -> Result<[OrderEntry], Error> {
+        guard let c = cfg else { return .failure(.notConfigured) }
+        var path = "/api/ios/orders/recent?limit=\(limit)"
+        if let k = kind, !k.isEmpty { path += "&kind=\(k.urlEncoded)" }
+        struct Payload: Decodable { let orders: [OrderEntry] }
+        let r: Result<Payload, Error> = await sendJSON(method: "GET", path: path, body: nil, as: Payload.self, cfg: c)
+        return r.map { $0.orders }
+    }
+
     func memoryDelete(id: String) async -> Result<Bool, Error> {
         guard let c = cfg else { return .failure(.notConfigured) }
         let path = "/api/ios/memory/\(id.urlEncoded)?deviceId=\(c.deviceId.urlEncoded)"

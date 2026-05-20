@@ -204,6 +204,13 @@ final class GigiAgentEngine {
         // or no key matches the current utterance.
         let memContext = await GigiMemory.shared.contextString(for: text)
 
+        // Persistent world-action memory (commit 4): inject the user's most
+        // recent confirmed orders / purchases / bookings so the on-device
+        // FM can propose "same as last time" without needing memory of its
+        // own. Read-only — only Claude cloud writes here, so the local FM
+        // cannot inject fabricated preferences.
+        let pastOrdersContext = await GigiPersistentMemory.shared.contextString(limit: 5)
+
         // Task-state-aware follow-up disambiguation: pass the immediately
         // preceding assistant turn verbatim so Apple FM can interpret short
         // confirmations ("Go", "Yes", "Send it") as continuations of an
@@ -213,6 +220,7 @@ final class GigiAgentEngine {
         let lastAssistant = mem.lastAssistantTurnVerbatim()
         var historyParts: [String] = []
         if !memContext.isEmpty { historyParts.append(memContext) }
+        if !pastOrdersContext.isEmpty { historyParts.append(pastOrdersContext) }
         if !conversation.isEmpty { historyParts.append(conversation) }
         if let last = lastAssistant {
             historyParts.append("<assistant_previous_turn>\n\(last)\n</assistant_previous_turn>")

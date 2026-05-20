@@ -71,12 +71,12 @@
 		4ECB09F92F8BE38A009066DD /* Exceptions for "GIGI" folder in "GIGI" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Info.plist,
 				_legacy/GigiBrainPipeline.swift,
 				_legacy/GigiDayPlanReasoner.swift,
 				_legacy/GigiPlannerEngine.swift,
 				_legacy/GigiWakeWordEngine.swift,
 				_legacy/README.md,
+				Info.plist,
 			);
 			target = 4E4F378E2F898626005EC9B5 /* GIGI */;
 		};
@@ -615,9 +615,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* GoogleSignIn package + product references removed (2026-05-11, ADR-0004 finalization).
-   Xcode may re-add empty section markers automatically on next save. */
 	};
 	rootObject = 4E4F37872F898626005EC9B5 /* Project object */;
 }

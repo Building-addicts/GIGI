@@ -360,6 +360,7 @@ final class GigiConversationMemory: ObservableObject {
         referentTimestamps.removeAll()
         pendingClarification = nil
         pendingWorldAction = nil
+        GigiPersistentMemory.shared.clearCache()
         UserDefaults.standard.removeObject(forKey: udKey)
         UserDefaults.standard.removeObject(forKey: udTimestampKey)
         UserDefaults.standard.removeObject(forKey: Self.referentUDKey)

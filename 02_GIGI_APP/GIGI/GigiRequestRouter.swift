@@ -546,7 +546,10 @@ final class GigiRequestRouter {
         let needsBrowser = decision.requiredCapabilities.contains("browser")
             || decision.requiredCapabilities.contains("web_search")
             || decision.path == "delegate_cloud"
-        let mcpServers: [String] = needsBrowser ? ["harness-browser"] : []
+        // Always attach gigi-memory alongside harness-browser: Claude needs
+        // record_order on every confirmed cart staging, and list_recent_orders
+        // is cheap to expose even when Claude doesn't need it.
+        let mcpServers: [String] = needsBrowser ? ["harness-browser", "gigi-memory"] : []
         GigiDebugLogger.log("GIGI Router → delegate_cloud mcp=\(mcpServers) caps=\(decision.requiredCapabilities)")
 
         for await event in harness.runClaudeCode(prompt: prompt, mcpServers: mcpServers) {
