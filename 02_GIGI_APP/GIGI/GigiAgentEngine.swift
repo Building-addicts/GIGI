@@ -229,7 +229,14 @@ final class GigiAgentEngine {
         // can't reliably interpret from history alone.
         var routerInputText = text
         #if canImport(FoundationModels)
-        if #available(iOS 18.1, *), lastAssistant != nil {
+        // Skip resolveFollowUp when a world-action proposal is pending: a
+        // short "go" / "yes" / "no" needs to arrive RAW at the consent tier.
+        // The FM resolver would otherwise rewrite "go" into a long instruction
+        // based on the @Guide examples, which (a) hides the affirmative from
+        // the matcher and (b) lets the FM hallucinate specifics that were
+        // never in the original user request.
+        let hasPendingWorldAction = mem.peekPendingWorldAction() != nil
+        if #available(iOS 18.1, *), lastAssistant != nil, !hasPendingWorldAction {
             routerInputText = await GigiFoundationSession.shared.resolveFollowUp(
                 text: text,
                 lastAssistantTurn: lastAssistant
