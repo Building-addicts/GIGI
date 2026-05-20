@@ -90,6 +90,7 @@ final class GigiRequestRouter {
         )
         let pipeline: [RouterTier] = [
             ProposalConsentTier(router: self),
+            WorldActionConsentTier(router: self),
             PendingClarificationTier(router: self),
             DiscoveryQueryTier(router: self),
             RegisteredAliasTier(router: self),
@@ -129,6 +130,7 @@ final class GigiRequestRouter {
         )
         let tier0: [RouterTier] = [
             ProposalConsentTier(router: self),
+            WorldActionConsentTier(router: self),
             PendingClarificationTier(router: self),
             DiscoveryQueryTier(router: self),
             RegisteredAliasTier(router: self),
@@ -299,6 +301,14 @@ final class GigiRequestRouter {
         originalText: String,
         history: String
     ) async -> RouteResult {
+        // Propose-first guard: catches world-action verbs the FM mis-routed
+        // to delegate_local. Without this, Ollama would generate a plausible
+        // but FAKE confirmation ("Staging the usual at Nana Poke…") because
+        // a free-text local LLM has no honesty constraint about whether
+        // execution actually happened.
+        if let proposed = proposeWorldActionIfApplicable(decision: decision, originalText: originalText) {
+            return proposed
+        }
         // Cost-aware safety net: if the router said delegate_local but the
         // capabilities require a browser, bump up to cloud.
         let caps = Set(decision.requiredCapabilities)
@@ -384,6 +394,97 @@ final class GigiRequestRouter {
         return .spoken(speech.isEmpty ? "I couldn't think that through. Try rephrasing." : speech)
     }
 
+    // MARK: - World-action propose-first guard (commit 1: propose/execute split)
+    //
+    // Intercepts world-actions (order/buy/book — anything that touches a 3rd
+    // party service via the browser) BEFORE Claude is spawned or Ollama is
+    // queried. Stages a `WorldActionProposal` in GigiConversationMemory and
+    // returns an honest-echo speech that asks the user to confirm.
+    //
+    // The downstream `WorldActionConsentTier` (GigiRouterTiers.swift) consumes
+    // the proposal on the next turn ("go", "yes", "procedi") and dispatches
+    // for real with reason="world_action_confirmed" — that marker lets the
+    // executor skip this guard and run.
+    //
+    // Why intercept in dispatch (not in a tier): a tier sits BEFORE the FM
+    // router, so we don't have the FM decision yet. Putting the guard here
+    // means we can use the FM's capability + slot signal AND the verb in
+    // originalText, and we catch both delegate_cloud and delegate_local
+    // misroutes uniformly.
+    static let worldActionVerbs: [String] = [
+        "order", "buy", "purchase", "book", "reserve", "shop", "schedule",
+        "ordina", "ordino", "compra", "compro", "prenota", "acquista", "acquisto"
+    ]
+
+    private func proposeWorldActionIfApplicable(
+        decision: FoundationRouterDecision,
+        originalText: String
+    ) -> RouteResult? {
+        // Skip when this dispatch is itself the confirmation execution.
+        if decision.reason == "world_action_confirmed" { return nil }
+        // Skip when there is already a pending proposal — the consent tier
+        // owns this turn. Defensive: shouldn't normally reach dispatch with
+        // a live proposal still pending.
+        if GigiConversationMemory.shared.peekPendingWorldAction() != nil { return nil }
+
+        let lower = originalText.lowercased()
+        let hasActionVerb = Self.worldActionVerbs.contains { v in
+            lower == v || lower.hasPrefix("\(v) ") || lower.contains(" \(v) ")
+        }
+        let isWorldNativeAction = ["order_food", "book_restaurant", "web_order_food"]
+            .contains(decision.primaryAction)
+        guard hasActionVerb || isWorldNativeAction else { return nil }
+
+        let kind: String = {
+            for v in ["order", "ordina", "ordino"] where lower.contains(v) { return "order" }
+            for v in ["buy", "purchase", "shop", "compra", "compro", "acquista", "acquisto"] where lower.contains(v) { return "buy" }
+            for v in ["book", "reserve", "prenota", "schedule"] where lower.contains(v) { return "book" }
+            return "world"
+        }()
+
+        let brief = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
+        let summary = "Got it — \"\(originalText)\". Say go and I'll do it, or tell me what to change."
+
+        let proposal = GigiConversationMemory.WorldActionProposal(
+            kind: kind,
+            summary: summary,
+            executionBrief: brief,
+            originalText: originalText,
+            timestamp: Date()
+        )
+        GigiConversationMemory.shared.setPendingWorldAction(proposal)
+        GigiConversationMemory.shared.addModelSpeech(summary)
+        GigiDebugLogger.log("GIGI Router: world-action propose-first kind=\(kind) brief='\(brief.prefix(80))'")
+        return .spoken(summary)
+    }
+
+    /// Called by `WorldActionConsentTier` when the user confirms a staged
+    /// proposal. Builds a synthetic FoundationRouterDecision marked with
+    /// `reason == "world_action_confirmed"` so the cloud dispatch skips the
+    /// propose-first guard and executes.
+    func executeConfirmedWorldAction(_ proposal: GigiConversationMemory.WorldActionProposal) async -> RouteResult {
+        let decision = FoundationRouterDecision(
+            path: "delegate_cloud",
+            primaryAction: "",
+            confidence: 1.0,
+            complexityEstimate: 60,
+            requiredCapabilities: ["browser"],
+            reason: "world_action_confirmed",
+            slots: ActionSlots(
+                contact: "", body: "", destination: "", date: "", time: "",
+                taskText: "", duration: "", label: "", appName: "",
+                query: "", platform: ""
+            ),
+            directSpeech: "",
+            delegatePrompt: proposal.executionBrief
+        )
+        return await dispatchDelegateCloud(
+            decision: decision,
+            originalText: proposal.executionBrief,
+            history: ""
+        )
+    }
+
     // MARK: - Dispatch: delegate_cloud (Path 4 — Claude Code)
 
     func dispatchDelegateCloud(
@@ -391,6 +492,11 @@ final class GigiRequestRouter {
         originalText: String,
         history: String
     ) async -> RouteResult {
+        // Propose-first guard. Returns non-nil when a proposal was just
+        // staged and we should wait for user confirmation before running.
+        if let proposed = proposeWorldActionIfApplicable(decision: decision, originalText: originalText) {
+            return proposed
+        }
         // Bug #014 fix (2026-05-12): prepend a [User context: …] header to
         // every delegate_cloud prompt so Claude knows the user's country,
         // locale, and timezone. Without this, Claude defaults to UK/London

@@ -97,6 +97,58 @@ final class GigiConversationMemory: ObservableObject {
         pendingClarification = nil
     }
 
+    // MARK: - Pending world-action proposal (commit 1: propose / execute split)
+    //
+    // When the user asks GIGI to act on the world (order food, buy, book), the
+    // router does NOT execute immediately. It stages a proposal here and asks
+    // the user to confirm. Next turn, an affirmative ("go", "yes") consumes
+    // the proposal and dispatches the executionBrief to delegate_cloud.
+    //
+    // Why this exists: the small on-device FM was generating fake confirmations
+    // ("Staging the usual at Nana Poke Chiavari…") for shopping verbs because
+    // the local-LLM path (Ollama) is allowed to free-text. Structurally
+    // forcing a propose-first round trip means no execution claim can come
+    // out of GIGI without an actual Claude cloud run behind it.
+    //
+    // TTL = 5 min: if the user doesn't confirm, drop the staged action so
+    // an old proposal can't hijack an unrelated later utterance.
+
+    struct WorldActionProposal {
+        let kind: String              // "order" | "buy" | "book" | "send" | "world"
+        let summary: String           // human-facing one-line "I'll … from …"
+        let executionBrief: String    // self-contained instruction for Claude cloud
+        let originalText: String      // verbatim user utterance that triggered it
+        let timestamp: Date
+    }
+
+    private var pendingWorldAction: WorldActionProposal?
+    private let pendingWorldActionTTL: TimeInterval = 300  // 5 min
+
+    func setPendingWorldAction(_ p: WorldActionProposal) {
+        pendingWorldAction = p
+    }
+
+    /// Peek without consuming. Returns nil if expired (and clears the slot).
+    func peekPendingWorldAction() -> WorldActionProposal? {
+        guard let p = pendingWorldAction else { return nil }
+        if Date().timeIntervalSince(p.timestamp) >= pendingWorldActionTTL {
+            pendingWorldAction = nil
+            return nil
+        }
+        return p
+    }
+
+    /// Return + clear the pending proposal IF still fresh.
+    func consumePendingWorldAction() -> WorldActionProposal? {
+        guard let p = peekPendingWorldAction() else { return nil }
+        pendingWorldAction = nil
+        return p
+    }
+
+    func clearPendingWorldAction() {
+        pendingWorldAction = nil
+    }
+
     // MARK: - Last-referent tracking (coreference)
     //
     // Names of the most recently mentioned entity per kind. Used by
@@ -307,6 +359,7 @@ final class GigiConversationMemory: ObservableObject {
         lastReferentByKind.removeAll()
         referentTimestamps.removeAll()
         pendingClarification = nil
+        pendingWorldAction = nil
         UserDefaults.standard.removeObject(forKey: udKey)
         UserDefaults.standard.removeObject(forKey: udTimestampKey)
         UserDefaults.standard.removeObject(forKey: Self.referentUDKey)

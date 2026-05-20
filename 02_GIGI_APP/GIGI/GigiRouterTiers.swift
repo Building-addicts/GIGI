@@ -156,6 +156,46 @@ struct ProposalConsentTier: RouterTier {
     }
 }
 
+/// Commit 1 — propose/execute split.
+/// Consumes a `pendingWorldAction` proposal on user affirmative/negative.
+/// Sits right after ProposalConsentTier so confirmation routing happens
+/// BEFORE the FM router sees the utterance and risks re-classifying it as
+/// a fresh, unrelated request.
+///
+/// Today (commit 1) the matcher is the existing whole-word affirmative /
+/// negative detector. Commit 2 replaces this with a focused FM resolver
+/// (`resolveConfirmation`) that also understands "modify" turns
+/// ("not salmon, tuna" → reopen propose with the correction).
+struct WorldActionConsentTier: RouterTier {
+    let name = "world_action_consent"
+    unowned let router: GigiRequestRouter
+
+    func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
+        let mem = GigiConversationMemory.shared
+        guard let proposal = mem.peekPendingWorldAction() else { return .pass }
+        let utterance = ctx.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Bound by word count so a long "actually, also add chips and tell
+        // the driver to ring the bell" doesn't get swallowed by a "go"
+        // substring. Commit 2's FM resolver will widen this safely.
+        let wordCount = utterance.split { $0.isWhitespace }.count
+        guard wordCount > 0 && wordCount <= 4 else { return .pass }
+
+        if GigiRequestRouter.detectAffirmative(in: utterance) {
+            _ = mem.consumePendingWorldAction()
+            GigiDebugLogger.log("GIGI Router: world-action CONFIRM via '\(utterance)' — executing brief='\(proposal.executionBrief.prefix(80))'")
+            return .terminal(await router.executeConfirmedWorldAction(proposal))
+        }
+        if GigiRequestRouter.detectNegative(in: utterance) {
+            mem.clearPendingWorldAction()
+            let speech = "Cancelled."
+            mem.addModelSpeech(speech)
+            GigiDebugLogger.log("GIGI Router: world-action CANCEL via '\(utterance)'")
+            return .terminal(.actionInvoked(speech: speech, tool: "world_action_cancel"))
+        }
+        return .pass
+    }
+}
+
 /// Bug #016 continuation — consume a slot the previous turn asked for, fill
 /// the original intent, and dispatch. Three outcomes:
 ///   - User said "no/cancel" → emit cancel speech (.terminal)
