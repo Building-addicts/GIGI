@@ -90,29 +90,37 @@ Why SUCCESS: price is real (read from the cart page via `browser_text`).
 Address is real (read from the order page). The cart actually has an
 item in it. The only thing left is the user's tap to authorize payment.
 
-### harness-browser tool names — call directly, NO ToolSearch needed
+### harness-browser tools — exact names and how to load them
 
-The harness-browser MCP server is loaded for you. Its tools are **already
-available** in your tool list — you do NOT need ToolSearch to find them.
-The full tool names use the `mcp__harness-browser__` prefix:
+The harness-browser MCP server is loaded for you. Its tools are
+**deferred** in your tool list and must be loaded via ToolSearch with
+`select:` syntax, using the FULL prefixed name. The MCP prefix is
+`mcp__harness-browser__` — the bare names (`browser_navigate`,
+`browser_text`, etc.) do NOT match. ToolSearch keyword queries also do
+NOT find these tools.
 
-- `mcp__harness-browser__browser_pages`
-- `mcp__harness-browser__browser_navigate`
-- `mcp__harness-browser__browser_text`
-- `mcp__harness-browser__browser_screenshot`
-- `mcp__harness-browser__browser_click`
-- `mcp__harness-browser__browser_fill`
-- `mcp__harness-browser__browser_press`
-- `mcp__harness-browser__browser_wait_selector`
-- `mcp__harness-browser__browser_url`
-- `mcp__harness-browser__browser_evaluate`
+**First action of every order/buy/book request** — load the tools with
+this exact ToolSearch call (one call, all tools at once):
 
-Call them directly. **Do NOT** waste turns on
-`ToolSearch query="harness browser"` or `query="mcp"` or
-`query="select:browser_navigate,..."` — those return nothing or noise.
-The tools are pre-registered; just invoke them.
+```
+ToolSearch query="select:mcp__harness-browser__browser_pages,mcp__harness-browser__browser_navigate,mcp__harness-browser__browser_text,mcp__harness-browser__browser_screenshot,mcp__harness-browser__browser_click,mcp__harness-browser__browser_fill,mcp__harness-browser__browser_press,mcp__harness-browser__browser_wait_selector,mcp__harness-browser__browser_url,mcp__harness-browser__browser_evaluate"
+```
 
-Typical ordering flow:
+After that select: call, all 10 tools appear in your tool list and you
+can call them directly by their full prefixed name.
+
+**Forbidden alternatives** (these cost time and produce worse results):
+- Writing your own Playwright script via `Write` + `Bash node ...` —
+  the MCP server already wraps Playwright correctly with leases,
+  instance management, and CDP-attached cookies. Re-implementing it
+  manually wastes 2-4 minutes per request and may not see the same
+  logged-in session.
+- `Bash` calls that `cd .../browser-pool && node ...` — same problem.
+- `ToolSearch query="harness browser"` / `query="mcp"` /
+  `query="browser navigate"` / any keyword search — returns empty
+  or unrelated tools.
+
+Typical ordering flow once tools are loaded:
 1. `mcp__harness-browser__browser_pages` — see what tabs are open. The
    user may already have the target site in a tab.
 2. `mcp__harness-browser__browser_navigate` to the site if needed
