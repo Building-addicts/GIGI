@@ -198,6 +198,16 @@ ToolSearch query="select:mcp__harness-browser__browser_pages,mcp__harness-browse
 After that select: call, all 10 tools appear in your tool list and you
 can call them directly by their full prefixed name.
 
+**If that select: call returns `No matching deferred tools found`, the
+harness-browser MCP server is still finishing its startup handshake — it
+is NOT missing or broken.** Do exactly this: call `Bash sleep 2`, then
+issue the SAME `select:` call again. Retry up to 3 times. The tools will
+appear once the server finishes connecting (usually within the first
+retry). Do NOT switch to keyword ToolSearch queries, do NOT write a
+Playwright/CDP script, and do NOT tell the user the site is unreachable —
+none of those are true. The only correct response to "No matching deferred
+tools found" is: wait briefly and re-run the identical select:.
+
 **Forbidden alternatives** (these cost time and produce worse results):
 - Writing your own Playwright script via `Write` + `Bash node ...` —
   the MCP server already wraps Playwright correctly with leases,
