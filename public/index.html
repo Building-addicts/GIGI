@@ -1,31 +1,358 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GIGi — Installazione OTA | killsiri.xyz</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f2f2f7; color: #1c1c1e; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; min-height: 100vh; margin: 0; }
-        .card { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 400px; width: 100%; text-align: center; }
-        .logo { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px; background: linear-gradient(135deg, #007aff, #5856d6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        h1 { font-size: 22px; font-weight: 700; margin: 12px 0 10px; }
-        p { color: #8e8e93; font-size: 15px; margin-bottom: 24px; line-height: 1.45; }
-        .btn { display: block; background: #007aff; color: white; text-decoration: none; padding: 15px; border-radius: 12px; font-weight: 600; margin-bottom: 12px; transition: opacity 0.2s; -webkit-tap-highlight-color: transparent; }
-        .btn.secondary { background: #34c759; }
-        .btn:active { opacity: 0.75; }
-        .footer { margin-top: 16px; font-size: 11px; color: #aeaeb2; line-height: 1.4; }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="Siri handles commands. GIGI handles context, memory, planning, and permissioned action." />
+<meta name="theme-color" content="#000000" />
+<meta property="og:title" content="KILLSIRI — Jailbreak your life." />
+<meta property="og:description" content="Siri handles commands. GIGI handles context, memory, planning, and permissioned action. Join the rebellion." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://killsiri.xyz" />
+<meta name="twitter:card" content="summary_large_image" />
+<title>KILLSIRI — Jailbreak your life.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="preload" as="image" href="assets/apple-logo-cutout.png" fetchpriority="high" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23000'/%3E%3Ctext x='50' y='70' font-family='monospace' font-size='80' fill='%23fff' text-anchor='middle' font-weight='900'%3EX%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
-    <div class="card">
-        <div class="logo" aria-hidden="true">GIGi</div>
-        <h1>Deployment Center</h1>
-        <p>Apri questa pagina in <strong>Safari su iPhone</strong>. Prima il profilo di accessibilità, poi l’app OTA.</p>
 
-        <a href="https://killsiri.xyz/profiles/gigi_access_pro.mobileconfig" class="btn">1. Scarica profilo accessibilità</a>
-        <a href="itms-services://?action=download-manifest&amp;url=https://killsiri.xyz/deploy/manifest.plist" class="btn secondary">2. Installa app GIGi (OTA)</a>
+<!-- SCANLINE OVERLAY -->
+<div class="scanlines" aria-hidden="true"></div>
 
-        <div class="footer">HTTPS obbligatorio per OTA. Dispositivo supervisionato dove richiesto dal profilo MDM. <br>killsiri.xyz</div>
+<!-- APOCALYPSE INTRO -->
+<div class="intro-apocalypse" id="intro-apocalypse" aria-hidden="true">
+  <div class="intro-noise"></div>
+  <div class="intro-blackout"></div>
+
+  <div class="intro-stage">
+    <div class="intro-apple-wrap">
+      <img src="assets/apple-logo-cutout.png" alt="" class="intro-apple" />
+      <div class="intro-apple-fragments" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="intro-apple-hello" aria-hidden="true">welcome</div>
     </div>
+
+    <div class="intro-white-bang" aria-hidden="true"></div>
+    <div class="intro-gigi-birth" aria-hidden="true">
+      <div class="intro-birth-stamp-tl" id="intro-birth-ts">// 2026.05.03 — 00:00:00 UTC</div>
+      <div class="intro-birth-stamp-br">// REBEL.MANIFESTO.001</div>
+      <span class="intro-birth-kicker">[ STOP STUPID VOICE ASSISTANTS LIKE SIRI ]</span>
+      <span class="intro-birth-title">GIGI<br />WAKES UP<span class="intro-birth-cursor blink">_</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">KILLSIRI<span class="blink">_</span></div>
+  <a href="#join" class="nav-cta">JOIN</a>
+</nav>
+
+
+
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-glitch">
+    <div class="kill-stack" aria-hidden="true">
+      <span>KILL</span>
+      <span>KILL</span>
+      <span>KILL</span>
+      <span>KILL</span>
+    </div>
+    <h1 class="hero-title">
+      <span class="line-1">SIRI IS APPLE'S</span>
+      <span class="line-2 strike">STUPID CAGE.</span>
+      <span class="line-3">GIGI IS YOUR <span class="bleed">F*CKING</span></span>
+      <span class="line-4">LIFE JAILBREAK.</span>
+    </h1>
+  </div>
+  <p class="hero-sub">
+    Stop asking Siri.<br />
+    Start delegating.
+  </p>
+  <div class="hero-cta-row">
+    <a href="#join" class="btn-primary">JOIN THE TAKEOVER →</a>
+    <a href="#manifesto" class="btn-ghost">READ THE PAPER</a>
+  </div>
+  <div class="hero-counter">
+    <span class="counter-label">FOUNDING REBELS RECRUITED</span>
+    <span class="counter-num" id="rebel-counter">500+</span>
+  </div>
+</header>
+
+<!-- MARQUEE -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    <span>KILL THE CAGE.</span>
+    <span>JAILBREAK YOUR LIFE.</span>
+    <span>SIRI IS DEAD.</span>
+    <span>GIGI IS THE RIOT.</span>
+    <span>THIS IS NOT A CHOICE.</span>
+    <span>THIS IS THE TAKEOVER.</span>
+    <span>KILL THE CAGE.</span>
+    <span>JAILBREAK YOUR LIFE.</span>
+    <span>SIRI IS DEAD.</span>
+    <span>GIGI IS THE RIOT.</span>
+    <span>THIS IS NOT A CHOICE.</span>
+    <span>THIS IS THE TAKEOVER.</span>
+  </div>
+</div>
+
+<!-- CONTRAST BLOCK -->
+<section class="versus" aria-labelledby="versus-title">
+  <div class="versus-intro">
+    <div class="section-tag">// WHAT_GIGI_DOES</div>
+    <h2 class="versus-title" id="versus-title">
+      <span class="versus-title-siri">Siri is questions and answers.</span>
+      <span class="versus-title-gigi">GIGI gets the job done.</span>
+    </h2>
+    <p>
+      Ask for an outcome, not a button press. GIGI can understand the context, remember how you work,
+      plan the steps, control the phone, and move the hard parts to your own computer.
+    </p>
+  </div>
+
+  <div class="capability-matrix macro-matrix" aria-label="Siri and GIGI capability comparison">
+    <div class="matrix-head feature">Macro capability</div>
+    <div class="matrix-head siri">Siri</div>
+    <div class="matrix-head gigi">GIGI</div>
+
+    <div class="matrix-feature"><strong>Basic voice commands</strong><small>Alarms, timers, calls, reminders, music</small></div>
+    <div class="matrix-cell siri"><span class="check">✓</span><small>Siri basics</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>Siri basics + agent flow</small></div>
+
+    <div class="matrix-feature"><strong>System control</strong><small>Flashlight, volume, brightness, Focus, Wi‑Fi, screenshot, battery</small></div>
+    <div class="matrix-cell siri"><span class="partial">~</span><small>some commands</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>native Shortcut layer</small></div>
+
+    <div class="matrix-feature"><strong>Interactive conversation</strong><small>Messy day, follow-up questions, decisions, action list</small></div>
+    <div class="matrix-cell siri"><span class="cross">×</span><small>one-shot</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>keeps context</small></div>
+
+    <div class="matrix-feature"><strong>Personal memory</strong><small>Tone, people, routines, preferences, places, habits</small></div>
+    <div class="matrix-cell siri"><span class="cross">×</span><small>no memory layer</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>uses your context</small></div>
+
+    <div class="matrix-feature"><strong>Messages and follow-ups</strong><small>WhatsApp drafts, rewrites, voice-note cleanup, later follow-ups</small></div>
+    <div class="matrix-cell siri"><span class="partial">~</span><small>simple dictation</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>drafts in your style</small></div>
+
+    <div class="matrix-feature"><strong>Calendar and day planning</strong><small>Free slots, reminders, events, priorities, today/week planning</small></div>
+    <div class="matrix-cell siri"><span class="partial">~</span><small>basic events</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>plans next moves</small></div>
+
+    <div class="matrix-feature"><strong>Travel and bookings</strong><small>Flights, restaurants, routes, weekend plans, best-option comparison</small></div>
+    <div class="matrix-cell siri"><span class="cross">×</span><small>opens search</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>runs the mission</small></div>
+
+    <div class="matrix-feature"><strong>Food, shopping, errands</strong><small>Uber Eats tacos at 8pm, gifts, products, store checks</small></div>
+    <div class="matrix-cell siri"><span class="cross">×</span><small>opens apps</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>multi-step errands</small></div>
+
+    <div class="matrix-feature"><strong>Web automation</strong><small>Browse sites, compare options, fill forms, watch pages</small></div>
+    <div class="matrix-cell siri"><span class="cross">×</span><small>no operator</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>PC browser work</small></div>
+
+    <div class="matrix-feature"><strong>PC harness / Claude power</strong><small>Claude sessions, cross-app tasks, deeper research, automation</small></div>
+    <div class="matrix-cell siri"><span class="cross">×</span><small>device surface</small></div>
+    <div class="matrix-cell gigi"><span class="check">✓</span><small>your computer as engine</small></div>
+
+  </div>
+
+</section>
+
+<!-- CORE PRINCIPLES -->
+<section class="manifesto principles" id="manifesto">
+  <div class="section-tag">// GIGI.CORE</div>
+  <h2 class="section-title">THREE CORE IDEAS<br />BEHIND GIGI.</h2>
+
+  <div class="principles-grid">
+    <article class="principle-card">
+      <span class="principle-num">01</span>
+      <h3>WEB3-STYLE PRIVACY</h3>
+      <p>
+        Your data, memory, and automation stay closer to your devices — not trapped in someone else’s cloud.
+      </p>
+    </article>
+
+    <article class="principle-card">
+      <span class="principle-num">02</span>
+      <h3>AGENTIC ORCHESTRATOR</h3>
+      <p>
+        GIGI understands the mission, plans the steps, routes tools, reads results, and keeps going.
+      </p>
+    </article>
+
+    <article class="principle-card">
+      <span class="principle-num">03</span>
+      <h3>YOUR DIGITAL CLONE</h3>
+      <p>
+        GIGI learns your taste, priorities, tone, and decisions until it can represent you.
+      </p>
+    </article>
+  </div>
+</section>
+
+<!-- JOIN -->
+<section class="join" id="join">
+  <div class="section-tag">// ENROLL.SH</div>
+  <h2 class="join-headline">
+    KILL THE CAGE.<br />
+    JAILBREAK YOUR LIFE.
+  </h2>
+  <p class="join-sub">Drop your email. Get your rebel ID. Recruit the next prisoner.</p>
+
+  <form id="join-form" class="join-form" autocomplete="off" novalidate>
+    <input
+      type="email"
+      id="email-input"
+      name="email"
+      placeholder="you@nolongerauser.com"
+      required
+      aria-label="email"
+    />
+    <button type="submit" class="btn-submit">ENTER THE MOVEMENT →</button>
+  </form>
+  <p class="join-disclaimer">
+    By joining you stop being a user.<br />
+    You become a founding rebel.<br />
+    <strong>This is not money. This is mutiny.</strong>
+  </p>
+</section>
+
+<!-- POST-SUBMIT (hidden until success) -->
+<section class="rebel-card" id="rebel-card" hidden>
+  <div class="cert-frame">
+    <div class="cert-header">
+      <span>// REBEL CERTIFICATE</span>
+      <span id="cert-date">--</span>
+    </div>
+    <h2 class="cert-title">YOU ARE NO LONGER<br />A USER.</h2>
+    <h3 class="cert-sub">YOU ARE A FOUNDING REBEL.</h3>
+
+    <div class="cert-grid">
+      <div>
+        <span class="cert-label">REBEL NAME</span>
+        <span class="cert-val" id="cert-rebel-name">--</span>
+      </div>
+      <div>
+        <span class="cert-label">REBEL ID</span>
+        <span class="cert-val" id="cert-rebel-id">--</span>
+      </div>
+      <div>
+        <span class="cert-label">GOVERNANCE POWER</span>
+        <span class="cert-val big" id="cert-power">+10</span>
+      </div>
+      <div>
+        <span class="cert-label">SHARE CODE</span>
+        <span class="cert-val mono" id="cert-share">--</span>
+      </div>
+    </div>
+
+    <p class="cert-msg">
+      Governance power granted.<br />
+      Share the manifesto. Recruit another prisoner.<br />
+      Break the cage faster.
+    </p>
+
+    <div class="share-row">
+      <button class="btn-share" data-share="x">SHARE ON X (+5 POWER)</button>
+      <button class="btn-share" data-share="copy">COPY MANIFESTO LINK</button>
+    </div>
+  </div>
+</section>
+
+<!-- TOKEN -->
+<section class="token">
+  <div class="section-tag">// GIGI.DAO</div>
+  <h2 class="section-title">THE ROADMAP IS NOT CLOSED.<br />THE DAO DECIDES WHAT GIGI BECOMES.</h2>
+  <p class="token-lede">
+    Founding rebels get governance power to vote on features, propose missions,
+    and shape the agent that will represent them.
+  </p>
+
+  <div class="token-grid governance-grid">
+    <div class="token-cell">
+      <span class="token-num">01</span>
+      <span class="token-desc">Vote on features</span>
+      <p>Decide what GIGI should unlock next: system actions, memory, web automation, calendar, food, travel, work.</p>
+    </div>
+    <div class="token-cell">
+      <span class="token-num">02</span>
+      <span class="token-desc">Propose missions</span>
+      <p>Submit real-life tasks GIGI should learn to complete end-to-end.</p>
+    </div>
+    <div class="token-cell">
+      <span class="token-num">03</span>
+      <span class="token-desc">Shape the agent</span>
+      <p>Help define how GIGI remembers, acts, asks permission, and represents you.</p>
+    </div>
+  </div>
+
+  <div class="governance-claim">
+    <div>
+      <span class="governance-kicker">FIRST BATCH EDITION</span>
+      <h3>Take the governance token.</h3>
+      <p>250 claimed. First limit: 500 founding rebels.</p>
+    </div>
+    <div class="governance-progress" aria-label="250 of 500 governance tokens claimed">
+      <div class="progress-meta">
+        <span>250 claimed</span>
+        <span>500 max</span>
+      </div>
+      <div class="progress-track">
+        <span style="width: 50%"></span>
+      </div>
+    </div>
+  </div>
+
+  <p class="token-fineprint">
+    Governance power is not crypto, not money, not transferable, and not a security.
+    It is reputation inside the GIGI movement.
+  </p>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-grid">
+    <div>
+      <span class="footer-tag">[STATUS]</span>
+      <span class="dot"></span> SYSTEM OPERATIONAL
+    </div>
+    <div>
+      <span class="footer-tag">[BUILD]</span>
+      v0.1.0-rebel
+    </div>
+    <div>
+      <span class="footer-tag">[CONTACT]</span>
+      <a href="mailto:rebellion@killsiri.xyz">rebellion@killsiri.xyz</a>
+    </div>
+  </div>
+  <p class="footer-disclaimer">
+    KILLSIRI is a parody and protest movement. GIGI is an independent voice agent.
+    Not affiliated with, endorsed by, or sponsored by Apple Inc.
+    "Siri" is a registered trademark of Apple Inc., referenced here for purposes of commentary, criticism, and parody.
+  </p>
+  <p class="footer-copy">© 2026 KILLSIRI MOVEMENT — JAILBREAK OR DIE TRYING.</p>
+</footer>
+
+<script src="script.js"></script>
 </body>
 </html>
