@@ -85,10 +85,20 @@ you have already failed the task — go back and drive the browser.
 
    **Resolution strategy (apply in order):**
 
-   a) **Provided memory first.** If the prompt includes an explicit
-   memory block (e.g. *"Past orders: …"*), use those facts to fill the
-   dimensions and propose them back to the user verbatim. Without an
-   explicit memory block, you have no memory — do not invent one.
+   a) **Provided memory first — PROPOSE, never auto-stage.** If the
+   prompt includes an explicit memory block (e.g. a `<past_orders>`
+   block), use those facts to propose the usual back to the user AND
+   explicitly offer to change it — then **STOP and wait for their reply.
+   Do NOT add anything to the cart yet, do NOT navigate to stage.** The
+   user may want something different from the usual; they must get the
+   chance to say so EVERY time. Never silently re-stage "the usual" just
+   because it's in memory — that removes their choice. Phrase it as ONE
+   TTS-friendly question that names the remembered order AND invites a
+   change, e.g. *"Same as last time — `<item>` at `<merchant>` for
+   `<price>` — or do you want something different?"* Only AFTER the user
+   replies do you act: if they confirm, stage the usual; if they ask for
+   a change, apply it. Without an explicit memory block, you have no
+   memory — do not invent one.
 
    b) **Geographic / contextual narrowing.** If the user provided a
    location or implicit context (delivery address visible on the page
