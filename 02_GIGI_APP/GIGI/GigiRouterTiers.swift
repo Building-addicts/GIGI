@@ -284,6 +284,63 @@ struct PendingClarificationTier: RouterTier {
     }
 }
 
+/// Cloud-session continuity (2026-05-22) — keeps a multi-turn delegate_cloud
+/// task on the cloud path instead of letting the per-turn router re-classify
+/// each reply from scratch.
+///
+/// Symptom this fixes (device E2E 2026-05-22): after a world-action was
+/// confirmed and the cloud agent started asking mid-order questions ("two poke
+/// spots — which one?", "cold or hot?"), a SHORT bare answer ("Yili poke") hit
+/// `GigiFallbackRouter` rule-5 ("utterance too short → ask_clarification") and
+/// was handled ON-DEVICE — never reaching the cloud agent — abandoning the
+/// order. `WorldActionConsentTier` only covers the FIRST confirmation (the
+/// pending proposal is consumed there); mid-execution follow-ups fall through.
+///
+/// Rule: if the immediately-preceding dispatch went to `delegate_cloud` AND the
+/// assistant's last line ended with a question (an OPEN cloud task awaiting the
+/// user's input), route this reply straight back to `delegate_cloud`. The
+/// harness resumes the SAME Claude session by deviceId (`continuous_session`),
+/// so the agent keeps its browser + order state and the raw reply is enough.
+///
+/// Sits AFTER WorldActionConsentTier + PendingClarificationTier (those own the
+/// first-confirmation / slot-fill turns) and before the FM router. A clear
+/// brand-new command escapes via `looksLikeNewCommand`; no-ops when the harness
+/// isn't paired. Architectural continuity fix, not a regex patch.
+struct CloudFollowUpTier: RouterTier {
+    let name = "cloud_follow_up"
+    unowned let router: GigiRequestRouter
+
+    func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
+        // Only when the previous dispatch went to the cloud.
+        guard let last = GigiRouterTrace.shared.recent(count: 1).last,
+              last.path == "delegate_cloud" else { return .pass }
+        // Only when that cloud turn left an OPEN question for the user. We test
+        // for a "?" ANYWHERE in the message, not just the suffix: the agent
+        // often asks in a declarative-confirm style ("…€13.20? Just say yes and
+        // I'll stage it.") that ends with a period. A COMPLETED cloud turn
+        // ("Staged at Yili — … Tap pay to confirm.") has no "?", so this won't
+        // over-stick past the point where the task is done.
+        guard let lastAssistant = GigiConversationMemory.shared.lastAssistantTurnVerbatim()?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              lastAssistant.contains("?") else { return .pass }
+        // A clear brand-new command escapes the open task.
+        if GigiRequestRouter.looksLikeNewCommand(ctx.text) { return .pass }
+        // Cloud needs a paired harness; otherwise let normal routing speak the error.
+        guard router.harness.isConfigured else { return .pass }
+
+        GigiDebugLogger.log("GIGI Router: cloud-follow-up CONTINUATION → delegate_cloud (reply='\(ctx.text.prefix(40))')")
+        let decision = GigiFallbackRouter.shared.cloudContinuation(prompt: ctx.text)
+        let result = await router.dispatchDelegateCloud(
+            decision: decision, originalText: ctx.text, history: ctx.history
+        )
+        GigiRouterTrace.shared.record(
+            utterance: ctx.text, tier: "cloud-follow-up",
+            tool: "ask_claude", confidence: 1.0, slot: nil, path: "delegate_cloud"
+        )
+        return .terminal(result)
+    }
+}
+
 // MARK: - Step 2 migrated tiers
 
 /// Discovery intercept — matches "what can you do?", "help", "cosa sai fare?"

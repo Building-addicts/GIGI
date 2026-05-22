@@ -92,6 +92,7 @@ final class GigiRequestRouter {
             ProposalConsentTier(router: self),
             WorldActionConsentTier(router: self),
             PendingClarificationTier(router: self),
+            CloudFollowUpTier(router: self),
             DiscoveryQueryTier(router: self),
             RegisteredAliasTier(router: self),
             MathExpressionTier(router: self),
@@ -132,6 +133,7 @@ final class GigiRequestRouter {
             ProposalConsentTier(router: self),
             WorldActionConsentTier(router: self),
             PendingClarificationTier(router: self),
+            CloudFollowUpTier(router: self),
             DiscoveryQueryTier(router: self),
             RegisteredAliasTier(router: self),
             MathExpressionTier(router: self),
@@ -636,6 +638,19 @@ final class GigiRequestRouter {
             }
         }
 
+        // Cloud-continuity marker (2026-05-22): stamp a delegate_cloud trace
+        // entry on success so CloudFollowUpTier reliably detects an in-flight
+        // cloud task NEXT turn — even when this turn reached the cloud via the
+        // world-action confirm path (executeConfirmedWorldAction →
+        // dispatchDelegateCloud) which bypasses DispatchTier and so records no
+        // trace otherwise. Without this, a short follow-up ("Yili poke") after
+        // the agent's mid-order question would slip back to on-device
+        // ask_clarification.
+        GigiRouterTrace.shared.record(
+            utterance: originalText, tier: "delegate_cloud",
+            tool: "ask_claude", confidence: Float(decision.confidence),
+            slot: nil, path: "delegate_cloud"
+        )
         GigiConversationMemory.shared.addModelSpeech(collected)
         return .actionInvoked(speech: collected, tool: "ask_claude")
     }

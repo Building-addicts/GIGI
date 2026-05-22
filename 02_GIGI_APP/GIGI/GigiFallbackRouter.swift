@@ -226,6 +226,25 @@ final class GigiFallbackRouter {
         return s
     }
 
+    // MARK: - Cloud-session continuity (2026-05-22)
+
+    /// Builds a `delegate_cloud` decision for a follow-up reply to an OPEN
+    /// cloud task (e.g. answering the agent's mid-order "cold or hot?"). The
+    /// harness resumes the SAME Claude session by deviceId (`continuous_session`),
+    /// so the agent keeps its browser + in-flight order state — the raw reply is
+    /// all it needs. Browser capability is attached so the resumed agent always
+    /// has its tools. Used by `CloudFollowUpTier`.
+    func cloudContinuation(prompt: String) -> FoundationRouterDecision {
+        decision(
+            path: "delegate_cloud",
+            confidence: 0.95,
+            complexity: 70,
+            capabilities: ["browser"],
+            reason: "cloud follow-up continuation",
+            delegatePrompt: prompt
+        )
+    }
+
     // MARK: - Helpers
 
     private func decision(
