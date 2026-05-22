@@ -3,6 +3,7 @@
 import { checkBearer, checkDevice } from './ios-auth.js';
 import * as agent from './ios-agent.js';
 import * as memory from './ios-memory.js';
+import * as orders from './ios-orders.js';
 // Phase 2 GATE 5 (2026-05-12): ios-computer-use.js (Anthropic SDK loop)
 // deprecated → see server/examples/ios-computer-use-anthropic-sdk.js.legacy.
 // Replaced by Path 4 via ios-claude-agent.js (Claude Code subprocess + MCP).
@@ -96,6 +97,9 @@ export async function handleIosRequest(req, res, ctx) {
   if (p === '/api/ios/memory/query' && m === 'POST') { await memory.handleQuery(req, res, deps); return true; }
   if (p === '/api/ios/memory/all' && m === 'GET')    { await memory.handleAll(req, res, deps); return true; }
   if (p.startsWith('/api/ios/memory/') && m === 'DELETE') { await memory.handleDelete(req, res, deps); return true; }
+
+  // orders memory (read-only — written by gigi-memory MCP server, see 03_HARNESS/gigi-memory/)
+  if (p === '/api/ios/orders/recent' && m === 'GET') { await orders.handleRecent(req, res, deps); return true; }
 
   // computer-use (DEPRECATED — see server/examples/ios-computer-use-anthropic-sdk.js.legacy)
   // Phase 2 GATE 5 (2026-05-12): the old /api/ios/computer-use/* routes are

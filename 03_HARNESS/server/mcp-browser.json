@@ -4,6 +4,11 @@
       "type": "stdio",
       "command": "node",
       "args": ["../../browser-pool/server-playwright.js"]
+    },
+    "gigi-memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["../../gigi-memory/server.js"]
     }
   }
 }

@@ -142,6 +142,16 @@ export function spawnClaude(cfg, args, onEvent, onSpawn) {
     const claudeEnv = { ...process.env };
     delete claudeEnv.ANTHROPIC_API_KEY;
 
+    // 2026-05-21 MCP STARTUP RACE FIX:
+    // In headless (-p) mode the CLI otherwise begins the agent turn before
+    // stdio MCP servers (harness-browser connects to CDP, ~1-3s) finish their
+    // handshake. The deferred-tool index is then empty, so the agent's first
+    // `ToolSearch select:mcp__harness-browser__…` returns "No matching deferred
+    // tools found" and it flails / fabricates. Force a blocking connect with a
+    // generous timeout so the tools are always indexed before turn 1.
+    claudeEnv.MCP_CONNECTION_NONBLOCKING = 'false';
+    claudeEnv.MCP_TIMEOUT = claudeEnv.MCP_TIMEOUT || '30000';
+
     // 2026-05-12 LANGUAGE-LEAK FIX:
     // Claude Code CLI auto-loads CLAUDE.md from the CWD and every parent dir
     // (walk-up). When spawned from the default harness CWD it picks up the
@@ -230,12 +240,13 @@ function injectSystemContext(baseSysPrompt) {
       if (ctx) sysPrompt += `\n\n--- CONTESTO PROGETTO ---\n${ctx}\n--- FINE CONTESTO ---`;
     }
   } catch {}
-  try {
-    if (fs.existsSync(MEMORY_FILE)) {
-      const memory = fs.readFileSync(MEMORY_FILE, 'utf8').trim();
-      if (memory) sysPrompt += `\n\n--- MEMORIA CONVERSAZIONI PRECEDENTI ---\n${memory}\n--- FINE MEMORIA ---`;
-    }
-  } catch {}
+  // 2026-05-21 ANTI-FABRICATION: memory.md injection DISABLED.
+  // memory.md is an auto-generated free-text chat summary (saveMemorySnapshot)
+  // containing unverified narrative — tried-but-failed orders, inferred
+  // preferences, restaurant names that never became a real order. Injecting it
+  // primed hallucinations ("the usual from Nana Poke"). The redesign's only
+  // verified memory is ~/.gigi-memory/orders.json, surfaced as <past_orders>.
+  // Do NOT re-enable without separating verified facts from narrative.
   return sysPrompt;
 }
 
@@ -257,7 +268,11 @@ export async function runClaude(cfg, prompt, deviceId, onEvent, onSpawn, onSessi
   const mcpServers = Array.isArray(options?.mcpServers) ? options.mcpServers : [];
   const mcpConfigPath = options?.mcp_config || cfg.claude.mcp_config || null;
 
-  const __dirname = path.dirname(new URL(import.meta.url).pathname);
+  // Use fileURLToPath (via __MODULE_DIR__), NOT new URL(...).pathname: the
+  // latter leaves %20 encoded for spaces in the path ("Last GIGI"), so the
+  // resolved mcp-browser.json path fails fs.existsSync and --mcp-config gets
+  // silently dropped → MCP tools never load → "No matching deferred tools".
+  const __dirname = __MODULE_DIR__;
 
   // Domain → MCP config (browser tools for web/research domains)
   const DOMAIN_MCP = {
