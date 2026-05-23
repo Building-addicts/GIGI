@@ -698,24 +698,100 @@ struct ReminderUpgradeTier: RouterTier {
     let name = "reminder_upgrade"
     unowned let router: GigiRequestRouter
 
-    private static let triggers = [
+    // Explicit reminder verbs (prefix match — canonical phrasing).
+    private static let prefixTriggers = [
         "remember me to ",
         "remind me to ",
         "ricordami di ",
     ]
 
+    // First-person obligation / to-do markers (substring match). Declarative
+    // statements where the user states a FUTURE task without saying "remind"
+    // ("tomorrow I have to buy milk", "I gotta call the bank"). The small
+    // on-device FM router routinely mis-routes these to delegate_local /
+    // delegate_cloud despite routerSystemPrompt RULE-R4 (Apple FM @Guide is
+    // non-binding), so this deterministic gate guarantees they reach the
+    // native reminder path. The MULTI-task split + due-date parsing stays
+    // downstream in GigiActionBridge.createRemindersFromIntent (Apple FM
+    // decomposition) — intelligence over regex stays where it matters; this
+    // is only a routing net, not a content heuristic.
+    private static let obligationMarkers = [
+        "i have got to ", "i've got to ", "i have to ", "i got to ",
+        "i gotta ", "i need to ", "i must ",
+    ]
+
+    // Continuation markers: a follow-up that adds another task ("and (to) pick
+    // up my son at 2:30", "also call grandma tomorrow"). The FM router
+    // flip-flops on these (sometimes set_reminder, sometimes delegate_local),
+    // so we catch them deterministically when we are already in a reminder
+    // context OR the continuation itself carries a date/time.
+    private static let continuationStarts = [
+        "and also ", "and to ", "also to ", "and ", "also ", "plus ", "then ",
+    ]
+
+    private static func hasDateTimeCue(_ lowered: String) -> Bool {
+        if lowered.contains("tomorrow") || lowered.contains("tonight") || lowered.contains("today") { return true }
+        let weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        if weekdays.contains(where: { lowered.contains($0) }) { return true }
+        return lowered.range(of: "\\b\\d{1,2}(:\\d{2})?\\s*(am|pm)\\b", options: .regularExpression) != nil
+            || lowered.range(of: "\\bat\\s+\\d", options: .regularExpression) != nil
+    }
+
+    private static func stripContinuationPrefix(_ text: String) -> String {
+        var t = text
+        let lower = t.lowercased()
+        for prefix in continuationStarts.sorted(by: { $0.count > $1.count }) {
+            if lower.hasPrefix(prefix) {
+                t = String(t.dropFirst(prefix.count))
+                break
+            }
+        }
+        if t.lowercased().hasPrefix("to ") {
+            t = String(t.dropFirst(3))
+        }
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
         guard let path = ctx.effectivePath,
-              path == "delegate_local" || path == "ask_clarification" else { return .pass }
-        let lowered = ctx.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let trigger = Self.triggers.first(where: { lowered.hasPrefix($0) }) else { return .pass }
+              path == "delegate_local" || path == "delegate_cloud" || path == "ask_clarification"
+        else { return .pass }
 
-        // Preserve original-case task body (strip the trigger length, then trim).
         let trimmed = ctx.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = String(trimmed.dropFirst(trigger.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+
+        // Questions ("do I have to ...?", "why do I need to ...") are not reminders.
+        if lowered.hasSuffix("?") { return .pass }
+
+        let body: String
+        if let trigger = Self.prefixTriggers.first(where: { lowered.hasPrefix($0) }) {
+            body = String(trimmed.dropFirst(trigger.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if let marker = Self.obligationMarkers.first(where: { lowered.contains($0) }),
+                  !lowered.hasPrefix("do "), !lowered.hasPrefix("why "),
+                  !lowered.hasPrefix("can "), !lowered.hasPrefix("should ") {
+            // Body fallback = text after the obligation verb phrase. The
+            // downstream FM decomposition re-parses the FULL raw utterance,
+            // so this is only used if decomposition is unavailable.
+            if let r = lowered.range(of: marker) {
+                let offset = lowered.distance(from: lowered.startIndex, to: r.upperBound)
+                let idx = trimmed.index(trimmed.startIndex, offsetBy: offset)
+                body = String(trimmed[idx...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                body = trimmed
+            }
+        } else if Self.continuationStarts.contains(where: { lowered.hasPrefix($0) }),
+                  Self.hasDateTimeCue(lowered) {
+            // Require a date/time cue so a continuation like "and play music"
+            // (no time) still falls through to the FM, while "and to pick up
+            // my son at 2:30 pm" is caught as a reminder. The day, when absent,
+            // is inherited from conversation context in createReminder.
+            body = Self.stripContinuationPrefix(trimmed)
+        } else {
+            return .pass
+        }
         guard !body.isEmpty else { return .pass }
 
-        GigiDebugLogger.log("GIGI Router: reminder-verb OVERRIDE — \(path) → bridge(set_reminder). taskText='\(body)' trigger='\(trigger)'")
+        GigiDebugLogger.log("GIGI Router: reminder OVERRIDE — \(path) → bridge(set_reminder). body='\(body)' raw='\(ctx.text)'")
         let intent = GigiIntent(
             label: "set_reminder",
             confidence: 1.0,

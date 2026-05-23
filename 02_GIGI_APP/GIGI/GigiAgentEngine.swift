@@ -244,7 +244,16 @@ final class GigiAgentEngine {
         // the matcher and (b) lets the FM hallucinate specifics that were
         // never in the original user request.
         let hasPendingWorldAction = mem.peekPendingWorldAction() != nil
-        if #available(iOS 18.1, *), lastAssistant != nil, !hasPendingWorldAction {
+        // Also skip when the utterance is ALREADY a clear, self-contained
+        // command ("send a message to ...", "set a reminder ...", "call ..."):
+        // resolveFollowUp is meant for SHORT replies ("go", "yes"). Letting it
+        // rewrite a full command lets the FM splice in the previous assistant
+        // turn (incl. its "[appleFM send_message 0.75]" debug prefix), e.g.
+        // "Send a message to Armando batta saying he is late" -> "send_message
+        // 0.75 Armando batta saying he is late", which loses the " to " marker
+        // and breaks contact extraction.
+        if #available(iOS 18.1, *), lastAssistant != nil, !hasPendingWorldAction,
+           !GigiRequestRouter.looksLikeNewCommand(text) {
             routerInputText = await GigiFoundationSession.shared.resolveFollowUp(
                 text: text,
                 lastAssistantTurn: lastAssistant
@@ -418,7 +427,16 @@ final class GigiAgentEngine {
         // person-kind pronoun resolution. Place/thing pronouns ("it",
         // "there") are unaffected by this guard.
         let personEntityRegex = #"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b"#
+        // Also treat a single capitalized name right after a recipient marker
+        // ("to Leo", "call Marco", "ask Sarah") as an explicit person, so
+        // "send a message to Leo corte asking if he's on" does NOT rewrite
+        // "he" into a stale (possibly garbled) referent — "he" obviously = Leo.
+        // The multi-word TitleCase regex above misses "Leo corte" (lowercase
+        // 2nd word), which let a bad referent ("Ready For Leo") corrupt the
+        // utterance before routing.
+        let recipientNameRegex = #"\b(?:to|call|text|message|tell|ask|with|for|of)\s+[A-Z][a-z]+"#
         let hasExplicitPersonName = text.range(of: personEntityRegex, options: .regularExpression) != nil
+            || text.range(of: recipientNameRegex, options: .regularExpression) != nil
 
         for (pattern, kind) in pronounToKind {
             if kind == "person", hasExplicitPersonName {

@@ -1,5 +1,16 @@
 import Foundation
 
+// MARK: - GigiReminderItem
+//
+// Plain (non-@Generable) reminder record so non-availability-gated code
+// (e.g. GigiActionBridge) can consume the result of FM reminder
+// decomposition without importing FoundationModels or guarding on iOS 18.1.
+struct GigiReminderItem {
+    let taskText: String
+    let date: String   // "tomorrow", "Monday", "2026-05-24", or "" if none
+    let time: String   // "HH:MM" 24h, or "" if none
+}
+
 // MARK: - GigiFoundationContracts
 //
 // Structured-output schemas (`@Generable`) used by Apple Foundation Models
@@ -111,6 +122,36 @@ struct ActionSlots {
 
     @Guide(description: "Messaging platform: whatsapp, imessage, sms, telegram. Empty if not a message action.")
     var platform: String
+}
+
+// MARK: - ReminderPlan (multi-task decomposition)
+//
+// Splits a single to-do utterance into N structured reminders. Used by
+// GigiFoundationSession.decomposeReminders so \"tomorrow I gotta buy milk
+// and go to the dentist at 5pm\" becomes two native iOS reminders, each
+// with its own due date/time. Apple FM @Generable supports arrays of
+// nested Generable structs via constrained decoding.
+
+@available(iOS 18.1, *)
+@Generable
+struct ReminderEntry {
+
+    @Guide(description: "The task, imperative and concise — e.g. buy milk, go to the dentist. STRIP obligation framing: I got to, I gotta, I have to, I need to, remind me to, leading tomorrow I. Just the action.")
+    var taskText: String
+
+    @Guide(description: "Date reference such as tomorrow, Monday, 2026-05-24. If the utterance states a date once for several tasks (e.g. tomorrow I ...), repeat it on every entry that has no date of its own. Empty string only if no date applies.")
+    var date: String
+
+    @Guide(description: "Time in HH:MM 24-hour format (e.g. 17:00 for 5 pm) ONLY if a time was stated for THIS specific task. Empty string otherwise. Do NOT inherit a time from a sibling task, and do NOT output 00:00 as a placeholder.")
+    var time: String
+}
+
+@available(iOS 18.1, *)
+@Generable
+struct ReminderPlan {
+
+    @Guide(description: "One entry per DISTINCT task the user mentioned. Split on conjunctions and commas: buy milk and go to the dentist at 5pm -> two entries. Do NOT merge unrelated tasks into one. Do NOT invent tasks the user did not say.")
+    var reminders: [ReminderEntry]
 }
 
 // MARK: - FoundationRouterDecision

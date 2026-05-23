@@ -99,8 +99,9 @@ class GigiNLUEngine {
         }
 
         // ── NAVIGATION ───────────────────────────────────────────────────────
+        // Strong, unambiguous triggers → instant fast-path (0.97).
         let navTriggers = [
-            "take me to ", "navigate to ", "directions to ", "go to ",
+            "take me to ", "navigate to ", "directions to ",
             "how do i get to ", "get directions to ", "drive to ",
             "show me how to get to ", "route to "
         ]
@@ -109,6 +110,19 @@ class GigiNLUEngine {
                 return GigiIntent(label: "navigation", confidence: 0.97,
                                   params: ["destination": dest.capitalized, "raw": original])
             }
+        }
+        // "go to X" is lexically overloaded: it covers real navigation
+        // ("go to the airport") but ALSO reminders / plans / routines
+        // ("go to the dentist at 5 pm tomorrow", "go to bed", "go to the
+        // gym"). Do NOT instant-fire navigation off it. Return a
+        // sub-fast-path confidence (< 0.95) so deterministicFastPath
+        // declines and the utterance falls through to the Apple FM router,
+        // which reasons about temporal / list context to decide nav vs
+        // reminder. Per "intelligence over regex": no temporal-exclusion
+        // regex here — we just stop trusting a weak lexical cue.
+        if let dest = extractAfter("go to ", from: text), !dest.isEmpty {
+            return GigiIntent(label: "navigation", confidence: 0.60,
+                              params: ["destination": dest.capitalized, "raw": original])
         }
 
         // ── MUSIC ─────────────────────────────────────────────────────────────

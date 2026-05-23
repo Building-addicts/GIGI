@@ -245,9 +245,18 @@ final class GigiRequestRouter {
         // Force Path (B) bridge for these — deterministic, slots-driven.
         let isCallbackSynthetic = decision.reason == "GATE 6 multi-step callback"
 
+        // send_message via the Apple FM Tool-calling path (A) tends to NARRATE
+        // ("I want to send a message to Leo asking if he is on") instead of
+        // invoking the tool, so nothing gets drafted. Force the deterministic
+        // slot bridge (B) for it — the upfront router already extracted
+        // contact/body into decision.slots.
+        let forceBridge = isCallbackSynthetic
+            || action == "send_message" || action == "make_call"
+            || action == "facetime" || action == "facetime_audio"
+
         // (A) Pure Apple FM Tool calling path.
         #if canImport(FoundationModels)
-        if #available(iOS 26.0, *), appleFMToolsEnabled(), !isCallbackSynthetic {
+        if #available(iOS 26.0, *), appleFMToolsEnabled(), !forceBridge {
             if let tool = GigiFoundationToolRegistry.tool(for: action) {
                 let prompt = decision.delegatePrompt.isEmpty ? originalText : decision.delegatePrompt
                 do {
@@ -272,7 +281,35 @@ final class GigiRequestRouter {
         #endif
 
         // (B) Slot-extracted bridge path.
-        let params = paramsFromSlots(decision.slots, action: action, originalText: originalText)
+        var slots = decision.slots
+        // The Apple FM upfront router often returns send_message with the
+        // contact filled but the BODY empty (e.g. "...asking if he's on"),
+        // which opens the message app blank. Recover the body: a focused FM
+        // rephrase of the original utterance, with a deterministic clause
+        // fallback.
+        if action == "send_message" {
+            // The Apple FM upfront router is unreliable on send_message slots:
+            // it leaves the BODY empty and sometimes garbles the CONTACT using
+            // conversation history ("Ready For Leo" from a prior "Message ready
+            // for Leo Corte"). Extract both deterministically from the original
+            // utterance; fall back to FM slots / a focused FM body rephrase.
+            let detContact = Self.messageContact(from: originalText)
+            if !detContact.isEmpty { slots.contact = detContact }
+            if slots.body.trimmingCharacters(in: .whitespaces).isEmpty {
+                let lowerSrc = originalText.lowercased()
+                let clause = Self.messageBodyClause(from: originalText)
+                let asksQuestion = lowerSrc.contains(" asking") || lowerSrc.contains(" ask ")
+                // Body recovered DETERMINISTICALLY. The on-device FM proved
+                // unreliable here — it echoed its own prompt example ("asking
+                // if he's late" -> "Are you on?", changing the content). The
+                // deterministic path flips recipient pronouns to 2nd person and
+                // forms the question WITHOUT altering the content.
+                slots.body = asksQuestion
+                    ? Self.questionFromClause(clause)
+                    : Self.capitalizeFirst(Self.flipToSecondPerson(clause))
+            }
+        }
+        let params = paramsFromSlots(slots, action: action, originalText: originalText)
         let intent = GigiIntent(label: action, confidence: max(0.9, decision.confidence), params: params)
 
         GigiDebugLogger.log("GIGI Router → native_tool[bridge]: action=\(action) params=\(params)")
@@ -805,6 +842,117 @@ final class GigiRequestRouter {
         return Self.titleCaseName(s)
     }
 
+    /// Capitalize the first character, leave the rest as-is.
+    static func capitalizeFirst(_ s: String) -> String {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let f = t.first else { return t }
+        return String(f).uppercased() + t.dropFirst()
+    }
+
+    /// Deterministic 3rd-person -> 2nd-person flip for a message body. In
+    /// "send a message to <recipient> saying he is late", "he" refers to the
+    /// recipient, so the message should read "You are late". The on-device FM
+    /// does not do this reliably, so we transform word-by-word with verb
+    /// agreement. Always flips (detecting a genuine third party needs cloud-
+    /// level context); object pronouns him/them -> you; subjects he/she/they
+    /// -> you with copula fix.
+    static func flipToSecondPerson(_ text: String) -> String {
+        var t = " " + text + " "
+        let pairs: [(String, String)] = [
+            (" he's ", " you're "), (" she's ", " you're "), (" they're ", " you're "),
+            (" he is ", " you are "), (" she is ", " you are "), (" they are ", " you are "),
+            (" he was ", " you were "), (" she was ", " you were "), (" they were ", " you were "),
+            (" he has ", " you have "), (" she has ", " you have "), (" they have ", " you have "),
+            (" he had ", " you had "), (" she had ", " you had "), (" they had ", " you had "),
+            (" he'll ", " you'll "), (" she'll ", " you'll "), (" they'll ", " you'll "),
+            (" he'd ", " you'd "), (" she'd ", " you'd "), (" they'd ", " you'd "),
+            (" he ", " you "), (" she ", " you "), (" they ", " you "),
+            (" him ", " you "), (" them ", " you "),
+        ]
+        for (a, b) in pairs {
+            t = t.replacingOccurrences(of: a, with: b, options: .caseInsensitive)
+        }
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Deterministic fallback to turn an indirect-question clause into a
+    /// message question. "if he's on" -> "Are you on?" (after pronoun flip).
+    /// Used only when the FM rephrase is unavailable or rejected.
+    static func questionFromClause(_ clause: String) -> String {
+        var c = clause.trimmingCharacters(in: .whitespacesAndNewlines)
+        for lead in ["if ", "whether "] {
+            if c.lowercased().hasPrefix(lead) { c = String(c.dropFirst(lead.count)); break }
+        }
+        c = flipToSecondPerson(c)   // "he's late" -> "you're late"
+        // Expand contractions so the auxiliary can be fronted.
+        var lc = c.lowercased()
+        for (a, b) in [("you're ", "you are "), ("you've ", "you have "),
+                       ("you'll ", "you will "), ("you'd ", "you would ")] {
+            if lc.hasPrefix(a) { c = b + c.dropFirst(a.count); lc = c.lowercased(); break }
+        }
+        // Front the auxiliary / copula to form a yes/no question.
+        let fronts: [(String, String)] = [
+            ("you are ", "Are you "), ("you were ", "Were you "),
+            ("you have ", "Have you "), ("you had ", "Had you "),
+            ("you will ", "Will you "), ("you can ", "Can you "),
+            ("you could ", "Could you "), ("you should ", "Should you "),
+            ("you would ", "Would you "), ("you did ", "Did you "), ("you do ", "Do you "),
+        ]
+        for (a, b) in fronts where lc.hasPrefix(a) {
+            var q = b + c.dropFirst(a.count)
+            if !q.hasSuffix("?") { q += "?" }
+            return q
+        }
+        c = capitalizeFirst(c)
+        if !c.isEmpty, !c.hasSuffix("?") { c += "?" }
+        return c
+    }
+
+    /// Deterministic contact extraction for send_message. The Apple FM router
+    /// is unreliable here (leaves body empty, sometimes garbles the contact
+    /// from conversation history, e.g. "Ready For Leo"). Take the text after
+    /// the recipient marker " to " and cut it at the first body introducer.
+    /// "Send a message to Leo corte asking if he's on" -> "Leo Corte".
+    /// Returns "" when no " to " marker is present (caller keeps FM contact).
+    static func messageContact(from text: String) -> String {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = t.lowercased()
+        guard let toRange = lower.range(of: " to ") else { return "" }
+        let rest = String(t[toRange.upperBound...])
+        let restLower = rest.lowercased()
+        let intros = [" asking", " saying", " telling", " tell ", " to say",
+                      " to ask", " and say", " and ask", " that says", " with the message"]
+        var cut = rest.endIndex
+        for intro in intros {
+            if let r = restLower.range(of: intro) {
+                let off = restLower.distance(from: restLower.startIndex, to: r.lowerBound)
+                let idx = rest.index(rest.startIndex, offsetBy: off)
+                if idx < cut { cut = idx }
+            }
+        }
+        return cleanContactName(String(rest[..<cut]))
+    }
+
+    /// Deterministic fallback for the message body: the clause after a body
+    /// introducer. "send a message to Leo asking if he's on" -> "he's on".
+    /// Used only when the FM router left slots.body empty.
+    static func messageBodyClause(from text: String) -> String {
+        let lower = text.lowercased()
+        let intros = ["asking if ", "asking whether ", "asking ", "saying that ",
+                      "saying ", "to say ", "to ask ", "and say ", "and ask ",
+                      "telling ", "tell ", "that says ", "with the message "]
+        for intro in intros {
+            if let r = lower.range(of: intro) {
+                let off = lower.distance(from: lower.startIndex, to: r.upperBound)
+                let idx = text.index(text.startIndex, offsetBy: off)
+                var body = String(text[idx...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                body = body.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?"))
+                return body
+            }
+        }
+        return ""
+    }
+
     /// Title Case for proper-noun-like names: each word's first letter
     /// uppercased, the rest lowercased. Preserves single-letter words
     /// and hyphenated parts. Idempotent.
@@ -844,7 +992,8 @@ final class GigiRequestRouter {
         let bodyIndicators = [
             " saying ", " telling ", " tell ", " told ",
             " to say ", " and say ", " with the message ", " that says ",
-            " writing ", " write "
+            " writing ", " write ",
+            " asking ", " ask ", " to ask ", " and ask ", " asking if ", " asking whether "
         ]
         if bodyIndicators.contains(where: { t.contains($0) }) { return false }
         if t.contains(":") || t.contains("\"") { return false }
@@ -912,7 +1061,8 @@ final class GigiRequestRouter {
         let bodyIndicators = [
             " saying ", " telling ", " tell ", " told ",
             " to say ", " and say ", " with the message ", " that says ",
-            " writing ", " write "
+            " writing ", " write ",
+            " asking ", " ask ", " to ask ", " and ask ", " asking if ", " asking whether "
         ]
         for ind in bodyIndicators where t.contains(ind) { return nil }
         if t.contains(":") || t.contains("\"") { return nil }

@@ -398,6 +398,82 @@ final class GigiFoundationSession {
         )
     }
 
+    // MARK: - Message body rephrase
+    //
+    // Focused single-purpose FM call: turn a "send a message" request into the
+    // exact text to send, in first person, flipping third-person pronouns to
+    // second person ("...asking if he's on" -> "Are you on?"). The upfront
+    // router frequently leaves slots.body empty for these, so this recovers it.
+    // Returns "" on failure so the caller can fall back to a deterministic clause.
+    func rephraseMessageBody(utterance: String) async -> String {
+        guard isAvailable else { return "" }
+        let s = LanguageModelSession(instructions: """
+        Convert a "send a message" request into the EXACT short message to send.
+        Output ONLY the message text — minimal, in the user's own words, no
+        quotes, no preamble, no greetings, no apologies, and NEVER the
+        recipient's name.
+        PRONOUN RULE: if a third-person pronoun (he/she/they/him/her) refers to
+        the message RECIPIENT, rewrite it in second person (you/your). If it
+        clearly refers to a DIFFERENT person, keep third person.
+        Examples:
+        send a message to Batta saying he is late -> You are late
+        send a message to Leo asking if he's on -> Are you on?
+        text mom saying I'll be late -> I'll be late
+        message Anna saying the meeting moved to 5 -> The meeting moved to 5
+        tell Sara that Marco called her -> Marco called you
+        """)
+        do {
+            let r = try await s.respond(to: utterance)
+            return r.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        } catch {
+            GigiDebugLogger.log("GIGI rephraseMessageBody failed: \(error.localizedDescription)")
+            return ""
+        }
+    }
+
+    // MARK: - Reminder decomposition (multi-task to-do -> N reminders)
+    //
+    // Splits a colloquial to-do utterance into structured reminders via a
+    // dedicated, stateless FM session. Strips obligation framing, splits
+    // conjunctions, and propagates a shared date across tasks. Returns []
+    // on FM error so the caller falls back to a single plain reminder.
+    // Intelligence over regex: the model does the clause splitting, not a
+    // hand-rolled tokenizer.
+    func decomposeReminders(text: String) async -> [GigiReminderItem] {
+        guard isAvailable else { return [] }
+        let s = LanguageModelSession(instructions: """
+            You convert a user to-do utterance into a list of reminders.
+            Output one entry per distinct task. Strip obligation framing
+            (I got to, I gotta, I have to, I need to, remind me to, a
+            leading tomorrow I). If a date is stated once for multiple
+            tasks (tomorrow I ...), apply it to every task that has no
+            date of its own. Times use HH:MM 24-hour format.
+            CRITICAL: a TIME (like "at 5 pm") attaches ONLY to the single
+            task it directly follows. NEVER copy a time onto other tasks.
+            If a task has no time of its own, leave its time EMPTY (do not
+            output 00:00). Example: "tomorrow I have to buy milk and go to
+            the dentist at 5pm" -> two entries: (buy milk, date=tomorrow,
+            time empty) and (go to the dentist, date=tomorrow, time=17:00).
+            NEVER invent a time: if the utterance states no time for a
+            task, that task time MUST be empty. NEVER invent tasks the
+            user did not mention.
+            """)
+        do {
+            let result = try await s.respond(to: text, generating: ReminderPlan.self)
+            let items = result.content.reminders
+                .map { GigiReminderItem(taskText: $0.taskText.trimmingCharacters(in: .whitespacesAndNewlines),
+                                        date: $0.date.trimmingCharacters(in: .whitespacesAndNewlines),
+                                        time: $0.time.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .filter { !$0.taskText.isEmpty }
+            GigiDebugLogger.log("GIGI Foundation: decomposeReminders -> \(items.count) item(s)")
+            return items
+        } catch {
+            GigiDebugLogger.log("GIGI Foundation: decomposeReminders failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
     // MARK: - Reset
 
     func resetContext() {

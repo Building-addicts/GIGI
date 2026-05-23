@@ -113,7 +113,7 @@ class GigiActionBridge {
             )
 
         case "set_reminder":
-            return await createReminder(text: intent.params["text"] ?? intent.params["raw"] ?? "")
+            return await createRemindersFromIntent(intent)
 
         case "create_event":
             return await createEvent(
@@ -592,10 +592,13 @@ class GigiActionBridge {
 
     func makeCallAutomatic(to contact: String) async -> String {
         guard !contact.isEmpty else { return "Who do you want to call?" }
+        // Strip leading fillers the FM leaves in the contact slot ("to Leo" -> "Leo").
+        let cleaned = GigiRequestRouter.cleanContactName(contact)
+        guard !cleaned.isEmpty else { return "Who do you want to call?" }
         // Relationship resolution: "my brother" → look up the saved name.
         // Applied uniformly across NLU fast-path, FM tool calling, and any
         // direct dispatcher so EVERY contact-based action benefits.
-        let contact = (await GigiRequestRouter.resolveContactFromMemory(contact)) ?? contact
+        let contact = (await GigiRequestRouter.resolveContactFromMemory(cleaned)) ?? cleaned
         guard await ensureContactsAccess() else {
             return "Turn on Contacts for GIGI in Settings → Privacy → Contacts."
         }
@@ -665,8 +668,11 @@ class GigiActionBridge {
 
     func sendMessageAutomatic(to contact: String, body: String, platform: String) async -> String {
         guard !contact.isEmpty else { return "Who should I message?" }
+        // Strip leading fillers the FM sometimes leaves in the contact slot
+        // ("to Leo corte" -> "Leo Corte") before resolving against contacts.
+        let cleaned = GigiRequestRouter.cleanContactName(contact)
         // Relationship resolution: "my brother" → saved name.
-        let contact = (await GigiRequestRouter.resolveContactFromMemory(contact)) ?? contact
+        let contact = (await GigiRequestRouter.resolveContactFromMemory(cleaned)) ?? cleaned
         // Bug #017: disambiguate when multiple matches exist — never silently
         // message the wrong contact.
         guard let picked = await disambiguateContact(query: contact, actionLabel: "message") else {
@@ -1215,8 +1221,10 @@ class GigiActionBridge {
 
     private func facetimeCall(contact: String, audio: Bool) async -> String {
         guard !contact.isEmpty else { return "Who do you want to FaceTime?" }
+        let cleaned = GigiRequestRouter.cleanContactName(contact)
+        guard !cleaned.isEmpty else { return "Who do you want to FaceTime?" }
         // Relationship resolution: "my brother" → saved name.
-        let contact = (await GigiRequestRouter.resolveContactFromMemory(contact)) ?? contact
+        let contact = (await GigiRequestRouter.resolveContactFromMemory(cleaned)) ?? cleaned
         // Bug #017: disambiguate when multiple matches exist.
         guard let picked = await disambiguateContact(
             query: contact,
@@ -2233,8 +2241,84 @@ class GigiActionBridge {
 
     // MARK: - Reminder
 
-    func createReminder(text: String) async -> String {
-        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// set_reminder dispatch: decompose the utterance into one or more
+    /// native reminders. Multi-task sentences ("buy milk and go to the
+    /// dentist at 5pm") become multiple iOS reminders, each with its own
+    /// due date/time, via Apple FM (GigiFoundationSession.decomposeReminders).
+    /// Falls back to a single reminder from the extracted slots when FM is
+    /// unavailable or returns nothing.
+    func createRemindersFromIntent(_ intent: GigiIntent) async -> String {
+        let raw      = intent.params["raw"]  ?? intent.params["text"] ?? ""
+        let slotText = intent.params["text"] ?? ""
+        let slotDate = intent.params["date"] ?? ""
+        let slotTime = intent.params["time"] ?? ""
+
+        #if canImport(FoundationModels)
+        if #available(iOS 18.1, *) {
+            let source = raw.isEmpty ? slotText : raw
+            // Only decompose when the utterance actually looks like it lists
+            // SEVERAL tasks. A single clean task ("pick up my son at school at
+            // 2:30") must NOT hit the decomposer — the small on-device model
+            // sometimes splits/duplicates a single task. Deterministic gate;
+            // the FM does the real splitting only when warranted.
+            let lower = source.lowercased()
+            let multiSignals = [" and ", " & ", ";", ", ", " then ", " plus ", " e "]
+            if multiSignals.contains(where: { lower.contains($0) }) {
+                let rawItems = await GigiFoundationSession.shared.decomposeReminders(text: source)
+                // Dedupe: the decomposer occasionally emits the SAME task twice
+                // (once with a time, once without). Collapse by case-insensitive
+                // taskText, keeping the first non-empty date/time.
+                var seen: [String: Int] = [:]
+                var items: [GigiReminderItem] = []
+                for it in rawItems {
+                    let key = it.taskText.lowercased()
+                    if let idx = seen[key] {
+                        let ex = items[idx]
+                        items[idx] = GigiReminderItem(
+                            taskText: ex.taskText,
+                            date: ex.date.isEmpty ? it.date : ex.date,
+                            time: ex.time.isEmpty ? it.time : ex.time)
+                    } else {
+                        seen[key] = items.count
+                        items.append(it)
+                    }
+                }
+                // Anti-hallucination: the FM decomposer learned from the prompt
+                // example "...go to the dentist at 5pm" and sometimes stamps
+                // 17:00 on "go to the dentist" even when NO time was said. If the
+                // source utterance has no time cue at all, force every entry's
+                // time empty so we never invent a time the user did not give.
+                let srcLower = source.lowercased()
+                let srcHasTime = srcLower.range(of: "\\d{1,2}(:\\d{2})?\\s*(am|pm)", options: .regularExpression) != nil
+                    || srcLower.range(of: "\\bat\\s+\\d", options: .regularExpression) != nil
+                    || srcLower.contains("noon") || srcLower.contains("midnight") || srcLower.contains("o'clock")
+                if !srcHasTime {
+                    items = items.map { GigiReminderItem(taskText: $0.taskText, date: $0.date, time: "") }
+                }
+                if items.count > 1 {
+                    var created: [String] = []
+                    for item in items {
+                        _ = await createReminder(text: item.taskText, date: item.date, time: item.time)
+                        created.append(item.taskText)
+                    }
+                    await MainActor.run {
+                        GigiSmartOrchestrator.shared.showBanner("📋 \(created.count) reminders set")
+                    }
+                    return "Done \u{2014} \(created.count) reminders set: \(created.joined(separator: ", "))."
+                } else if let only = items.first {
+                    return await createReminder(text: only.taskText, date: only.date, time: only.time)
+                }
+            }
+            // single task or empty decomposition -> slot-based single reminder.
+        }
+        #endif
+
+        let text = slotText.isEmpty ? raw : slotText
+        return await createReminder(text: text, date: slotDate, time: slotTime)
+    }
+
+    func createReminder(text: String, date: String = "", time: String = "") async -> String {
+        var title = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
             GigiDebugLogger.log("createReminder: empty title after trim — input was '\(text)'")
             return "What should I remind you about?"
@@ -2261,14 +2345,89 @@ class GigiActionBridge {
         }
 
         let reminder = EKReminder(eventStore: eventStore)
+
+        // Resolve the due date. PRIORITY 1: a date/time embedded in the title
+        // text itself, parsed by NSDataDetector (Apple native parser — handles
+        // "2:30 pm" -> 14:30, "tomorrow at 5", relative dates). This fixes
+        // AM/PM AND lets us strip the time phrase out of the title so it reads
+        // "pick up my son at school", not "... at 2:30 pm". PRIORITY 2: the
+        // FM-extracted date/time slots (parseDateTime). The on-device FM (esp.
+        // the iOS-26 tool path) is unreliable at AM/PM and at stripping the
+        // time from the task text, so the native detector wins when the title
+        // carries its own time. Treat "00:00" slot as "no time" (null placeholder).
+        var dueSuffix = ""
+        var due: Date? = nil
+        var hasTime = false
+        var explicitDay = false
+        if let rel = detectRelativeDate(in: title) {
+            // PRIORITY 0: relative dates NSDataDetector cannot parse
+            // ("in a week", "next month"). Date-only (no time).
+            due = rel.date
+            hasTime = false
+            explicitDay = true
+            if !rel.cleanTitle.isEmpty { title = rel.cleanTitle }
+        } else if let detected = detectDueDate(in: title) {
+            due = detected.date
+            hasTime = detected.hasTime
+            explicitDay = detected.hasDay
+            if !detected.cleanTitle.isEmpty { title = detected.cleanTitle }
+        } else {
+            let normalizedTime = (time == "00:00") ? "" : time
+            if !date.isEmpty || !normalizedTime.isEmpty {
+                hasTime = !normalizedTime.isEmpty
+                due = parseDateTime(date: date.isEmpty ? "today" : date,
+                                    time: hasTime ? normalizedTime : "09:00")
+                explicitDay = !date.isEmpty
+            }
+        }
+
+        // Strip reminder / obligation framing from the title regardless of how
+        // the date resolved ("remind me that I have to go to Milan" -> "go to Milan").
+        title = cleanReminderTitle(title)
+
+        // Context-date inheritance ("be intelligent"): if the user gave a time
+        // but did NOT name a day, inherit the day from the most recent reminder
+        // in this conversation. So "tomorrow I have to buy milk ..." then
+        // "and pick up my son at 2:30 pm" puts the pickup on TOMORROW too, not
+        // today. Backed by the 24h-TTL referent store (kind "reminder_day"), so
+        // it never leaks across days. Only when a day is absent.
+        if let d = due, !explicitDay,
+           let dayStr = GigiConversationMemory.shared.lastReferent(kind: "reminder_day"),
+           let ctxDay = Self.dayKeyFormatter.date(from: dayStr),
+           ctxDay >= Calendar.current.startOfDay(for: Date()) {
+            due = Self.applyDay(ctxDay, to: d)
+        }
+        // Remember the day we landed on so the next follow-up can inherit it —
+        // but only when the user was explicit, so a defaulted "today" never
+        // poisons the context.
+        if let d = due, explicitDay {
+            GigiConversationMemory.shared.recordReferent(Self.dayKeyFormatter.string(from: d), kind: "reminder_day")
+        }
+
         reminder.title    = title
         reminder.calendar = cal
+
+        if let due = due {
+            let fields: Set<Calendar.Component> = hasTime
+                ? [.year, .month, .day, .hour, .minute]
+                : [.year, .month, .day]
+            reminder.dueDateComponents = Calendar.current.dateComponents(fields, from: due)
+            if hasTime {
+                reminder.addAlarm(EKAlarm(absoluteDate: due))
+            }
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "en-US")
+            df.dateStyle = .medium
+            df.timeStyle = hasTime ? .short : .none
+            dueSuffix = " for \(df.string(from: due))"
+        }
+
         do {
             try eventStore.save(reminder, commit: true)
             await MainActor.run {
                 GigiSmartOrchestrator.shared.showBanner("📋 Reminder · \(title.prefix(50))")
             }
-            return "Reminder set: \(title)"
+            return "Reminder set: \(title)\(dueSuffix)"
         } catch {
             let ns = error as NSError
             GigiDebugLogger.log("createReminder save failed: \(error.localizedDescription) | domain=\(ns.domain) code=\(ns.code) | calendar='\(cal.title)' source='\(cal.source.title)'")
@@ -2684,6 +2843,131 @@ class GigiActionBridge {
     }
 
     // MARK: - Helpers
+
+    /// Parse a date/time embedded in free text using NSDataDetector (Apple's
+    /// native data parser). Returns the resolved Date, the title with the
+    /// matched date phrase removed, and whether the match carried a specific
+    /// time-of-day. Returns nil when no date/time is present in the text.
+    private static let dayKeyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    /// Replace the day (year/month/day) of `dated` with `day`, keeping its
+    /// hour/minute. Used for conversational date inheritance.
+    private static func applyDay(_ day: Date, to dated: Date) -> Date {
+        let cal = Calendar.current
+        let t = cal.dateComponents([.hour, .minute], from: dated)
+        var d = cal.dateComponents([.year, .month, .day], from: day)
+        d.hour = t.hour
+        d.minute = t.minute
+        return cal.date(from: d) ?? dated
+    }
+
+    /// Relative dates that NSDataDetector misses ("in a week", "next month",
+    /// "in 2 weeks"). NSDataDetector handles "in 3 days" but NOT "in a week" /
+    /// "next week" (verified). Returns the resolved date (date-only, no time)
+    /// and the title with the matched phrase removed, or nil if no such phrase.
+    private func detectRelativeDate(in text: String) -> (date: Date, cleanTitle: String)? {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        func compute(_ matched: String) -> Date? {
+            let m = matched.lowercased()
+            var n = 1
+            for tok in m.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+                if let v = Int(tok) { n = v; break }
+            }
+            if m.contains("day")   { return cal.date(byAdding: .day,   value: n,     to: today) }
+            if m.contains("week")  { return cal.date(byAdding: .day,   value: n * 7, to: today) }
+            if m.contains("month") { return cal.date(byAdding: .month, value: n,     to: today) }
+            if m.contains("year")  { return cal.date(byAdding: .year,  value: n,     to: today) }
+            return nil
+        }
+        let patterns = [
+            "(?i)\\b(?:in|after)\\s+(?:a|an|\\d+)\\s+(?:days?|weeks?|months?|years?)\\b",
+            "(?i)\\bnext\\s+(?:week|month|year)\\b",
+        ]
+        for p in patterns {
+            if let r = text.range(of: p, options: .regularExpression) {
+                let matched = String(text[r])
+                if let d = compute(matched) {
+                    var clean = text
+                    clean.removeSubrange(r)
+                    clean = clean.replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
+                    clean = clean.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return (d, clean)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Strip reminder / first-person obligation framing from a reminder title
+    /// so it reads as a bare task: "remind me that I have to go to Milan" ->
+    /// "go to Milan". Idempotent — a no-op on already-clean titles like
+    /// "buy milk". Runs on every reminder regardless of how the date resolved.
+    private func cleanReminderTitle(_ raw: String) -> String {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let leading = [
+            "(?i)^remind\\s+me\\s+(?:that|to)\\s+",
+            "(?i)^remember\\s+(?:me\\s+)?(?:that|to)\\s+",
+            "(?i)^please\\s+",
+            "(?i)^that\\s+",
+            "(?i)^i\\s+(?:have|need|got|gotta|must|have\\s+got|'?ve\\s+got)\\s+(?:to\\s+)?",
+            "(?i)^to\\s+",
+        ]
+        var changed = true
+        while changed {
+            changed = false
+            for p in leading {
+                let n = t.replacingOccurrences(of: p, with: "", options: .regularExpression)
+                if n != t {
+                    t = n.trimmingCharacters(in: .whitespacesAndNewlines)
+                    changed = true
+                }
+            }
+        }
+        return t.isEmpty ? raw : t
+    }
+
+    private func detectDueDate(in text: String) -> (date: Date, cleanTitle: String, hasTime: Bool, hasDay: Bool)? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else {
+            return nil
+        }
+        let ns = text as NSString
+        let matches = detector.matches(in: text, options: [], range: NSRange(location: 0, length: ns.length))
+        guard let match = matches.first, let date = match.date else { return nil }
+
+        // Did the match include a time-of-day? Inspect the matched substring.
+        let matchedText = ns.substring(with: match.range).lowercased()
+        let hasTime = matchedText.contains(":")
+            || matchedText.range(of: "\\d\\s*(am|pm)", options: .regularExpression) != nil
+            || matchedText.contains("noon") || matchedText.contains("midnight")
+            || matchedText.contains("morning") || matchedText.contains("afternoon")
+            || matchedText.contains("evening") || matchedText.contains("tonight")
+
+        // Did the match name a DAY (vs. a bare time-of-day)? Decides whether
+        // to inherit the day from conversation context downstream.
+        let dayTokens = ["today", "tomorrow", "tonight", "yesterday",
+                         "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+                         "next ", "this ", "jan", "feb", "mar", "apr", "may", "jun",
+                         "jul", "aug", "sep", "oct", "nov", "dec"]
+        let hasDay = dayTokens.contains { matchedText.contains($0) } || matchedText.contains("/")
+
+        // Strip the matched phrase, then any trailing punctuation + a now-
+        // dangling preposition so the title reads naturally (e.g.
+        // "pick up my son at school at 2:30 pm." -> "pick up my son at school").
+        var title = ns.replacingCharacters(in: match.range, with: " ")
+        title = title.replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
+        title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        title = title.replacingOccurrences(of: "[\\s.,;:!?]+$", with: "", options: .regularExpression)
+        title = title.replacingOccurrences(of: "(?i)\\s+(at|on|by|for|in|@)$", with: "", options: .regularExpression)
+        title = title.replacingOccurrences(of: "[\\s.,;:!?]+$", with: "", options: .regularExpression)
+        title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (date, title, hasTime, hasDay)
+    }
 
     private func parseDateTime(date: String, time: String) -> Date {
         var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())

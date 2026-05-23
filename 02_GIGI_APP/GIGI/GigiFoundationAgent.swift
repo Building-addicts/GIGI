@@ -213,6 +213,8 @@ final class GigiFoundationAgent {
             - "Remember <subject> is/are <value>" or bare "Remember <fact>" → RULE-R1 (remember), NOT set_reminder.
             - The decisive cue is "<verb> me to <action_verb> ..." — that pattern is ALWAYS a reminder, never a fact assertion. NEVER pick delegate_local for this pattern (Ollama cannot create iOS reminders).
 
+        RULE-R4 (first-person obligation / to-do -> set_reminder). A statement where the user says THEY must / have to / need to / "got to" / "gotta" do a FUTURE action is a REMINDER, even without the word "remind". Patterns: "I got to <action>", "I gotta <action>", "I have to <action>", "I need to <action>", "I must <action>", "tomorrow I <action>", "I should <action> [at <time>]". Pick path=native_tool, primaryAction=set_reminder. Put the cleaned action in slots.taskText (strip the obligation framing and any leading "tomorrow I"); fill slots.date / slots.time when stated. NEVER pick delegate_local for these (Ollama cannot persist a reminder, it only fakes a confirmation), and NEVER pick navigate just because the action contains "go to". If the sentence lists SEVERAL tasks ("buy milk and go to the dentist at 5pm"), STILL pick set_reminder once: a downstream step splits it into multiple reminders. Put the first task in slots.taskText and the shared date in slots.date.
+
         EXPLICIT FEW-SHOT (learn from these — the slots field uses the schema's named keys):
 
         Input: "Marco is my brother"
@@ -251,6 +253,18 @@ final class GigiFoundationAgent {
         Input: "Remind me to call mom in an hour"
         Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="call mom", slots.duration="1 hour", complexity=10, capabilities=[], confidence=0.95, reason="reminder with relative time".
 
+        Input: "Tomorrow I got to buy milk"
+        Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="buy milk", slots.date="tomorrow", complexity=10, capabilities=[], confidence=0.9, reason="first-person obligation reminder".
+
+        Input: "Tomorrow I got to buy milk and go to the dentist at 5 pm"
+        Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="buy milk", slots.date="tomorrow", complexity=12, capabilities=[], confidence=0.9, reason="multi-task to-do, split downstream".
+
+        Input: "I have to call the bank tomorrow morning"
+        Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="call the bank", slots.date="tomorrow", slots.time="09:00", complexity=10, capabilities=[], confidence=0.9, reason="obligation reminder".
+
+        Input: "I need to pick up the kids at 3"
+        Decision: path=native_tool, primaryAction="set_reminder", slots.taskText="pick up the kids", slots.time="15:00", complexity=10, capabilities=[], confidence=0.9, reason="obligation with time".
+
         Input: "Remember that my password is hello123"
         Decision: path=native_tool, primaryAction="remember", slots.contact="password", slots.body="hello123", complexity=5, capabilities=[], confidence=0.9, reason="fact assertion (bare remember)".
 
@@ -271,6 +285,7 @@ final class GigiFoundationAgent {
         - Fill every slot you can confidently extract.
         - Empty strings for slots not present in the utterance.
         - Strip framing words. "send a message to Marco saying I'll be late" → contact=Marco, body=I'll be late (NOT "saying I'll be late").
+        - The contact NEVER includes the message. "send a message to Leo Corte asking if he's on" → contact="Leo Corte", body="Are you on?" (the "asking if he's on" is the BODY — rephrase the indirect question into a direct one addressed to the recipient: "asking if he's on" → "Are you on?"; "asking when she arrives" → "When do you arrive?"). Body introducers that END the contact and START the body: saying / telling / to say / to ask / asking / ask / and ask / that says / with the message.
         - Times: extract HH:MM 24-hour if possible. "7am" → time=07:00. "7:30 in the morning" → time=07:30.
         - Dates: keep natural language ("tomorrow", "Friday", "April 15").
 
