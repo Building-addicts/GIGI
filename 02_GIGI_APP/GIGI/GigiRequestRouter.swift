@@ -88,7 +88,17 @@ final class GigiRequestRouter {
             mode: currentMode(),
             applefmAvailable: applefmAvailable
         )
-        let pipeline: [RouterTier] = [
+        let pipeline = buildPipeline()
+        return await runPipeline(pipeline, ctx: &ctx)
+            ?? .error("Router: pipeline returned no terminal — pipeline misconfigured")
+    }
+
+    /// The full declarative routing pipeline, shared by `route(text:)` and the
+    /// golden-set `classify(text:)` entry point so the two never drift. Tier
+    /// ordering is load-bearing — see the doc comment on each tier in
+    /// GigiRouterTiers.swift.
+    func buildPipeline() -> [RouterTier] {
+        [
             ProposalConsentTier(router: self),
             WorldActionConsentTier(router: self),
             PendingClarificationTier(router: self),
@@ -98,7 +108,11 @@ final class GigiRequestRouter {
             MathExpressionTier(router: self),
             BuildShortcutRegexTier(router: self),
             RunShortcutRegexTier(router: self),
-            SemanticRouterTier(router: self),
+            // SemanticRouterTier is intentionally omitted here: the engine runs
+            // the tier-0 pass (runTier0 / buildTier0Pipeline) BEFORE the memory
+            // probe, which already performs the semantic NLEmbedding match.
+            // Including it again ran that match twice per miss. classify()
+            // mirrors the engine by running the tier-0 pass first.
             FMDecisionTier(router: self),
             CloudDowngradeTier(router: self),
             CompoundCommandTier(router: self),
@@ -109,8 +123,56 @@ final class GigiRequestRouter {
             ClarificationDowngradeTier(router: self),
             DispatchTier(router: self),
         ]
-        return await runPipeline(pipeline, ctx: &ctx)
-            ?? .error("Router: pipeline returned no terminal — pipeline misconfigured")
+    }
+
+    // MARK: - Golden-set classification (dry-run)
+
+    /// One routing decision captured WITHOUT executing any action — the
+    /// assertion surface for the RouterGolden harness. Runs the SAME pipeline
+    /// as `route(text:)` with `dryRun = true`, so every terminal tier records
+    /// its decision to `GigiRouterTrace` but skips side effects, then reads back
+    /// the single trace entry the winning tier produced.
+    struct RouteClassification: Codable {
+        let tier: String
+        let tool: String
+        let path: String?
+        let slot: String?
+        let confidence: Float
+    }
+
+    func classify(text: String, history: String = "") async -> RouteClassification {
+        GigiRouterTrace.shared.clear()
+        var ctx = RouterContext(
+            text: text,
+            history: history,
+            mode: currentMode(),
+            applefmAvailable: applefmAvailable
+        )
+        ctx.dryRun = true
+        // Mirror the engine: the tier-0 pass (which owns the semantic match)
+        // runs first; only if it produces no terminal do we run the full
+        // pipeline. Keeps semantic routing exercised exactly once, like prod.
+        if await runPipeline(buildTier0Pipeline(), ctx: &ctx) == nil {
+            _ = await runPipeline(buildPipeline(), ctx: &ctx)
+        }
+        guard let e = GigiRouterTrace.shared.recent(count: 1).last else {
+            return RouteClassification(tier: "none", tool: "none", path: ctx.effectivePath, slot: nil, confidence: 0)
+        }
+        // Reflect the dispatch-time propose-first guard, which classify's dryRun
+        // skips: a world-action verb that FM routed to local/cloud is NOT run
+        // straight away in production — it is intercepted and PROPOSED (turn 1),
+        // then executed on the cloud after the user confirms (turn 2). Model
+        // that turn-1 outcome so the harness isn't blind to it. (Semantic-routed
+        // world actions like web_order_food terminate in tier-0 with no
+        // effectivePath, so they fall through here — correctly flagged as the
+        // separate legacy-web-agent issue.)
+        if let path = ctx.effectivePath,
+           path == "delegate_local" || path == "delegate_cloud",
+           Self.isWorldActionRequest(primaryAction: ctx.decision?.primaryAction ?? "", originalText: text) {
+            return RouteClassification(tier: "world_action", tool: "world_action_propose",
+                                       path: "world_action_propose", slot: e.slot, confidence: e.confidence)
+        }
+        return RouteClassification(tier: e.tier, tool: e.tool, path: e.path, slot: e.slot, confidence: e.confidence)
     }
 
     /// Refactor #6 Step 10 — Pre-FM tier-0 entry point used by
@@ -129,7 +191,15 @@ final class GigiRequestRouter {
             mode: currentMode(),
             applefmAvailable: applefmAvailable
         )
-        let tier0: [RouterTier] = [
+        return await runPipeline(buildTier0Pipeline(), ctx: &ctx)
+    }
+
+    /// The deterministic tier-0 prefix: consent/state tiers, the cheap regex
+    /// tiers, and the semantic NLEmbedding match. Shared by `runTier0` and the
+    /// golden `classify(text:)` so the (relatively costly) semantic match runs
+    /// in exactly one place per pass — `buildPipeline()` omits it.
+    func buildTier0Pipeline() -> [RouterTier] {
+        [
             ProposalConsentTier(router: self),
             WorldActionConsentTier(router: self),
             PendingClarificationTier(router: self),
@@ -141,7 +211,6 @@ final class GigiRequestRouter {
             RunShortcutRegexTier(router: self),
             SemanticRouterTier(router: self),
         ]
-        return await runPipeline(tier0, ctx: &ctx)
     }
 
     /// Internal helper — re-wraps a RouteResult with the given debug prefix
@@ -295,19 +364,14 @@ final class GigiRequestRouter {
             // utterance; fall back to FM slots / a focused FM body rephrase.
             let detContact = Self.messageContact(from: originalText)
             if !detContact.isEmpty { slots.contact = detContact }
-            if slots.body.trimmingCharacters(in: .whitespaces).isEmpty {
-                let lowerSrc = originalText.lowercased()
-                let clause = Self.messageBodyClause(from: originalText)
-                let asksQuestion = lowerSrc.contains(" asking") || lowerSrc.contains(" ask ")
-                // Body recovered DETERMINISTICALLY. The on-device FM proved
-                // unreliable here — it echoed its own prompt example ("asking
-                // if he's late" -> "Are you on?", changing the content). The
-                // deterministic path flips recipient pronouns to 2nd person and
-                // forms the question WITHOUT altering the content.
-                slots.body = asksQuestion
-                    ? Self.questionFromClause(clause)
-                    : Self.capitalizeFirst(Self.flipToSecondPerson(clause))
-            }
+            // Body: derive DETERMINISTICALLY whenever the utterance carries a
+            // body introducer clause ("...asking if he's online", "...saying
+            // I'll be late"), OVERRIDING whatever the on-device FM produced.
+            // "deterministico sempre" — the FM is unreliable here, and the old
+            // empty-only gate let the FM's garbled body through. The builder bug
+            // that yielded "You if you're online?" is fixed in questionFromClause.
+            let derivedBody = Self.deriveMessageBody(from: originalText)
+            if !derivedBody.isEmpty { slots.body = derivedBody }
         }
         let params = paramsFromSlots(slots, action: action, originalText: originalText)
         let intent = GigiIntent(label: action, confidence: max(0.9, decision.confidence), params: params)
@@ -455,6 +519,21 @@ final class GigiRequestRouter {
         "ordina", "ordino", "compra", "compro", "prenota", "acquista", "acquisto"
     ]
 
+    /// Pure predicate: does this look like a 3rd-party world action (order/buy/
+    /// book...) that the propose-first guard intercepts? Shared by
+    /// `proposeWorldActionIfApplicable` (production, with side effects) and
+    /// `classify` (golden, side-effect-free) so the harness reflects the
+    /// dispatch-time propose-first behaviour that its dry-run otherwise skips.
+    static func isWorldActionRequest(primaryAction: String, originalText: String) -> Bool {
+        let lower = originalText.lowercased()
+        let hasActionVerb = worldActionVerbs.contains { v in
+            lower == v || lower.hasPrefix("\(v) ") || lower.contains(" \(v) ")
+        }
+        let isWorldNativeAction = ["order_food", "book_restaurant", "web_order_food"]
+            .contains(primaryAction)
+        return hasActionVerb || isWorldNativeAction
+    }
+
     private func proposeWorldActionIfApplicable(
         decision: FoundationRouterDecision,
         originalText: String
@@ -466,13 +545,8 @@ final class GigiRequestRouter {
         // a live proposal still pending.
         if GigiConversationMemory.shared.peekPendingWorldAction() != nil { return nil }
 
+        guard Self.isWorldActionRequest(primaryAction: decision.primaryAction, originalText: originalText) else { return nil }
         let lower = originalText.lowercased()
-        let hasActionVerb = Self.worldActionVerbs.contains { v in
-            lower == v || lower.hasPrefix("\(v) ") || lower.contains(" \(v) ")
-        }
-        let isWorldNativeAction = ["order_food", "book_restaurant", "web_order_food"]
-            .contains(decision.primaryAction)
-        guard hasActionVerb || isWorldNativeAction else { return nil }
 
         let kind: String = {
             for v in ["order", "ordina", "ordino"] where lower.contains(v) { return "order" }
@@ -843,6 +917,19 @@ final class GigiRequestRouter {
     }
 
     /// Capitalize the first character, leave the rest as-is.
+    /// Deterministic message body from the raw utterance, or "" when there is
+    /// no body introducer clause. Single source shared by `dispatchNativeTool`
+    /// (send_message) and the golden body-composition checks.
+    static func deriveMessageBody(from originalText: String) -> String {
+        let clause = messageBodyClause(from: originalText)
+        guard !clause.isEmpty else { return "" }
+        let lower = originalText.lowercased()
+        let asksQuestion = lower.contains(" asking") || lower.contains(" ask ")
+        return asksQuestion
+            ? questionFromClause(clause)
+            : capitalizeFirst(flipToSecondPerson(clause))
+    }
+
     static func capitalizeFirst(_ s: String) -> String {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let f = t.first else { return t }
@@ -880,6 +967,13 @@ final class GigiRequestRouter {
     /// Used only when the FM rephrase is unavailable or rejected.
     static func questionFromClause(_ clause: String) -> String {
         var c = clause.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip a leading recipient pronoun left by the body-clause split, e.g.
+        // "...and ask HIM if he's online" -> clause "him if he's online". Without
+        // this the "if"/"whether" strip below misses and the result degrades to
+        // the ungrammatical "You if you're online?".
+        for lead in ["him ", "her ", "them ", "me ", "us ", "you "] {
+            if c.lowercased().hasPrefix(lead) { c = String(c.dropFirst(lead.count)); break }
+        }
         for lead in ["if ", "whether "] {
             if c.lowercased().hasPrefix(lead) { c = String(c.dropFirst(lead.count)); break }
         }
@@ -1132,9 +1226,26 @@ final class GigiRequestRouter {
     ///   these are conversational comments, not facts to persist.
     /// - Multi-clause subject: left side > 5 words or contains a comma.
     static func detectFactAssertion(in text: String) -> (subject: String, value: String)? {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return nil }
-        let lower = t.lowercased()
+        var lower = t.lowercased()
+
+        // "Remember (that) X is Y" / "Ricorda che X è Y" is a fact-assertion to
+        // store, even though "remember"/"ricorda" are also imperative starters
+        // that would bail below. Peel the memory-imperative prefix so the copula
+        // scan runs on the assertion itself. Reminder shapes ("remember me to
+        // ...") carry no copula and stay with ReminderUpgradeTier.
+        for pfx in ["remember that ", "remember ", "ricordati che ", "ricorda che ", "ricorda "] {
+            guard lower.hasPrefix(pfx) else { continue }
+            let rest = String(t.dropFirst(pfx.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let restLower = rest.lowercased()
+            let hasCopula = [" is ", " are ", " was ", " were ", " è ", " e' ", " = ", " equals ", " means "]
+                .contains { restLower.contains($0) }
+            if hasCopula, !restLower.hasPrefix("me to "), !restLower.hasPrefix("to ") {
+                t = rest; lower = restLower
+            }
+            break
+        }
 
         // Bail if it's a question — leading WH-words.
         let interrogativePrefixes = [

@@ -53,6 +53,7 @@ struct GIGIApp: App {
                 }
                 .task {
                     GigiDebugLogger.log("MainTabView .task started")
+                    await GigiGoldenRunner.runIfRequested()
                     await GigiDebugLogger.flushCrashLogs()
                     GigiDebugLogger.log("flushCrashLogs done")
                     GigiBrainDiagnostics.log()

@@ -99,10 +99,6 @@ final class GigiSemanticRouter {
             "call mom", "phone marco", "dial 555", "call my brother",
             "chiama mamma", "telefona marco", "chiamare leo corte"
         ],
-        "facetime": [
-            "facetime mom", "video call marco", "start facetime",
-            "fai una facetime con", "videochiamata"
-        ],
         // send_message REMOVED 2026-05-15 — see note above. The semantic
         // router can't reliably extract (contact, body) from short
         // embeddings; passes the full sentence as `slot`, which becomes
@@ -192,12 +188,6 @@ final class GigiSemanticRouter {
         ],
 
         // FOOD
-        "web_order_food": [
-            "order pizza", "order kebab", "i want sushi",
-            "order food from glovo", "order takeout",
-            "ordina pizza", "voglio sushi", "ordina cibo"
-        ],
-
         // PRODUCTIVITY — note append (GATE 10.A)
         //
         // NOTE: create_calendar_event INTENTIONALLY OMITTED from semantic

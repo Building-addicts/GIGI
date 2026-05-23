@@ -398,40 +398,6 @@ final class GigiFoundationSession {
         )
     }
 
-    // MARK: - Message body rephrase
-    //
-    // Focused single-purpose FM call: turn a "send a message" request into the
-    // exact text to send, in first person, flipping third-person pronouns to
-    // second person ("...asking if he's on" -> "Are you on?"). The upfront
-    // router frequently leaves slots.body empty for these, so this recovers it.
-    // Returns "" on failure so the caller can fall back to a deterministic clause.
-    func rephraseMessageBody(utterance: String) async -> String {
-        guard isAvailable else { return "" }
-        let s = LanguageModelSession(instructions: """
-        Convert a "send a message" request into the EXACT short message to send.
-        Output ONLY the message text — minimal, in the user's own words, no
-        quotes, no preamble, no greetings, no apologies, and NEVER the
-        recipient's name.
-        PRONOUN RULE: if a third-person pronoun (he/she/they/him/her) refers to
-        the message RECIPIENT, rewrite it in second person (you/your). If it
-        clearly refers to a DIFFERENT person, keep third person.
-        Examples:
-        send a message to Batta saying he is late -> You are late
-        send a message to Leo asking if he's on -> Are you on?
-        text mom saying I'll be late -> I'll be late
-        message Anna saying the meeting moved to 5 -> The meeting moved to 5
-        tell Sara that Marco called her -> Marco called you
-        """)
-        do {
-            let r = try await s.respond(to: utterance)
-            return r.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-        } catch {
-            GigiDebugLogger.log("GIGI rephraseMessageBody failed: \(error.localizedDescription)")
-            return ""
-        }
-    }
-
     // MARK: - Reminder decomposition (multi-task to-do -> N reminders)
     //
     // Splits a colloquial to-do utterance into structured reminders via a

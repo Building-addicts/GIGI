@@ -60,6 +60,14 @@ struct RouterContext {
     /// immediately before invoking the FM session, read by the telemetry
     /// emitter inside `DispatchTier`.
     var fmStart: Date?
+
+    /// When true, terminal tiers SKIP all side effects (action execution,
+    /// conversation-memory writes) and only record the routing decision to
+    /// `GigiRouterTrace`, then return a synthetic terminal. Used by
+    /// `GigiRequestRouter.classify(text:)` for the golden-set harness so a
+    /// test utterance is routed without sending messages / spawning cloud
+    /// sessions. Default false -> zero production behaviour change.
+    var dryRun: Bool = false
 }
 
 // MARK: - TierOutcome
@@ -351,6 +359,10 @@ struct DiscoveryQueryTier: RouterTier {
 
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
         guard router.detectDiscoveryQuery(in: ctx.text) else { return .pass }
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "discovery", tool: "discovery_overview", confidence: 1.0)
+            return .terminal(.actionInvoked(speech: "", tool: "discovery_overview"))
+        }
         let speech = router.discoveryOverviewResponse()
         GigiDebugLogger.log("GIGI Router: discovery intercept → curated overview")
         GigiConversationMemory.shared.addModelSpeech(speech)
@@ -367,6 +379,10 @@ struct MathExpressionTier: RouterTier {
 
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
         guard let mathExpression = router.detectMathExpression(in: ctx.text) else { return .pass }
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "regex", tool: "calculate_math", confidence: 1.0, slot: mathExpression)
+            return .terminal(.actionInvoked(speech: "", tool: "calculate_math"))
+        }
         GigiDebugLogger.log("GIGI Router: tier-0 calculate_math → '\(mathExpression)'")
         let speech = await GigiActionBridge.shared.execute(GigiIntent(
             label: "calculate_math",
@@ -399,6 +415,10 @@ struct RegisteredAliasTier: RouterTier {
 
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
         guard let registered = GigiShortcutRegistry.shared.matchAlias(ctx.text) else { return .pass }
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "alias", tool: "run_shortcut", confidence: 1.0, slot: registered.name)
+            return .terminal(.actionInvoked(speech: "", tool: "run_shortcut"))
+        }
         GigiDebugLogger.log("GIGI Router: registered-alias match → '\(registered.name)' from utterance '\(ctx.text)'")
         GigiShortcutRegistry.shared.recordUse(name: registered.name)
         let speech = await GigiActionBridge.shared.execute(GigiIntent(
@@ -431,6 +451,10 @@ struct BuildShortcutRegexTier: RouterTier {
 
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
         guard let description = router.detectBuildShortcutPattern(in: ctx.text) else { return .pass }
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "regex", tool: "build_shortcut", confidence: 1.0, slot: description, path: "harness")
+            return .terminal(.actionInvoked(speech: "", tool: "build_shortcut"))
+        }
         GigiDebugLogger.log("GIGI Router: regex tier-0 build_shortcut → '\(description)' (via harness composer)")
         let speech = await GigiActionBridge.shared.composeShortcut(rawText: ctx.text)
         let withPrefix = router.debugPrefix(
@@ -459,6 +483,10 @@ struct RunShortcutRegexTier: RouterTier {
 
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
         guard let shortcutName = router.detectRunShortcutPattern(in: ctx.text) else { return .pass }
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "regex", tool: "run_shortcut", confidence: 1.0, slot: shortcutName)
+            return .terminal(.actionInvoked(speech: "", tool: "run_shortcut"))
+        }
         GigiDebugLogger.log("GIGI Router: regex tier-0 run_shortcut → '\(shortcutName)'")
         let speech = await GigiActionBridge.shared.execute(GigiIntent(
             label: "run_shortcut",
@@ -565,6 +593,11 @@ struct DispatchTier: RouterTier {
             latencyMs: fmElapsedMs
         )
 
+        if ctx.dryRun {
+            let toolName = decision.primaryAction.isEmpty ? effectivePath : decision.primaryAction
+            return .terminal(.actionInvoked(speech: "", tool: toolName))
+        }
+
         let result: RouteResult
         switch effectivePath {
         case "native_tool":
@@ -658,6 +691,11 @@ struct FactAssertionTier: RouterTier {
         guard let path = ctx.effectivePath,
               path == "delegate_local" || path == "ask_clarification",
               let (subject, value) = GigiRequestRouter.detectFactAssertion(in: ctx.text) else { return .pass }
+        if ctx.dryRun {
+            _ = value
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "regex-override", tool: "remember", confidence: 1.0, slot: subject)
+            return .terminal(.actionInvoked(speech: "", tool: "remember"))
+        }
         GigiDebugLogger.log("GIGI Router: fact-assertion OVERRIDE — \(path) → bridge(remember). subject='\(subject)' value='\(value)'")
         let intent = GigiIntent(
             label: "remember",
@@ -753,12 +791,19 @@ struct ReminderUpgradeTier: RouterTier {
     }
 
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
-        guard let path = ctx.effectivePath,
-              path == "delegate_local" || path == "delegate_cloud" || path == "ask_clarification"
-        else { return .pass }
+        guard let path = ctx.effectivePath else { return .pass }
 
         let trimmed = ctx.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowered = trimmed.lowercased()
+
+        // An explicit "remind me to" / "remember me to" / "ricordami di" prefix
+        // is an unambiguous reminder and overrides even a native_tool misroute
+        // (Apple FM sometimes hears "remind me to CALL the bank" as make_call).
+        // The looser obligation/continuation markers below stay restricted to
+        // the non-native routing paths so they can't hijack real tool calls.
+        let hasExplicitReminderPrefix = Self.prefixTriggers.contains { lowered.hasPrefix($0) }
+        let allowedPath = path == "delegate_local" || path == "delegate_cloud" || path == "ask_clarification"
+        guard allowedPath || hasExplicitReminderPrefix else { return .pass }
 
         // Questions ("do I have to ...?", "why do I need to ...") are not reminders.
         if lowered.hasSuffix("?") { return .pass }
@@ -791,6 +836,10 @@ struct ReminderUpgradeTier: RouterTier {
         }
         guard !body.isEmpty else { return .pass }
 
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "regex-override", tool: "set_reminder", confidence: 1.0, slot: body)
+            return .terminal(.actionInvoked(speech: "", tool: "set_reminder"))
+        }
         GigiDebugLogger.log("GIGI Router: reminder OVERRIDE — \(path) → bridge(set_reminder). body='\(body)' raw='\(ctx.text)'")
         let intent = GigiIntent(
             label: "set_reminder",
@@ -918,6 +967,11 @@ struct SemanticRouterTier: RouterTier {
 
     func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
         guard let match = GigiSemanticRouter.shared.match(ctx.text) else { return .pass }
+
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(utterance: ctx.text, tier: "semantic", tool: match.toolName, confidence: match.confidence, slot: match.slot, path: match.toolName == "build_shortcut" ? "harness" : nil)
+            return .terminal(.actionInvoked(speech: "", tool: match.toolName))
+        }
 
         if match.toolName == "build_shortcut" {
             GigiDebugLogger.log("GIGI Router: semantic build_shortcut → harness composer (slot='\(match.slot)')")
