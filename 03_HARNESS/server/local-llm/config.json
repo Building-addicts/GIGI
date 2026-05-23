@@ -11,7 +11,7 @@
     "_tier_chosen_2026_05_12": "qwen3:14b is now installed and respects the system prompt (concise voice assistant). qwen3:4b too small — ignored 'don't think out loud' instruction.",
     "_tier_comment": "Auto-selects model based on detected RAM: lite (4-8GB), standard (8-16GB), default (16-32GB), pro (32GB+). Override with explicit 'model' below.",
 
-    "model": null,
+    "model": "qwen3:8b",
     "_model_comment": "When set, takes precedence over tier. Examples: qwen3:14b, qwen3:8b, qwen3.6:27b. AVOID qwen3.5:* family (Ollama Issue #14493).",
 
     "tier_models": {
