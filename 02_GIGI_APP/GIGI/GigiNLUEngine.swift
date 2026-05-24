@@ -98,6 +98,38 @@ class GigiNLUEngine {
             return GigiIntent(label: "respond", confidence: 0.99, params: ["raw": original])
         }
 
+        // ── INTENT-PREFIX PRIORITY (reminder / remember) ──────────────────────
+        // An explicit "remind me to ..." / "remember to ..." / "remember that
+        // X is Y" prefix names the intent up front. It MUST win before the
+        // substring action checks below (make_call grabs the inner "call",
+        // toggle_wifi grabs "wifi"), otherwise "remind me to call the bank"
+        // dials the bank and "remember that my wifi password is X" toggles
+        // wi-fi. Hoisted here so the prefix decides, not the inner verb.
+        // ("remember me to ..." is the common colloquial form of "remind me".)
+        let reminderTriggers = ["remind me to ", "remind me that ", "set a reminder to ",
+                                "set a reminder for ", "remember me to ", "remember to "]
+        for trigger in reminderTriggers {
+            if let body = extractAfter(trigger, from: text), !body.isEmpty {
+                return GigiIntent(label: "set_reminder", confidence: 0.95,
+                                  params: ["text": body, "raw": original])
+            }
+        }
+        // Fact assertion: "remember X is Y" (copula required so we don't catch
+        // the "remember to ..." reminders handled just above) or an explicit
+        // "remember that ..." / "note that ..." prefix.
+        let rememberCopula = #"^remember\s+\S+.*?(?:\s+is\s+|\s+are\s+|\s+=\s+|\s+equals\s+|\s+means\s+)"#
+        if text.range(of: rememberCopula, options: .regularExpression) != nil,
+           let body = extractAfter("remember ", from: text), !body.isEmpty {
+            return GigiIntent(label: "remember", confidence: 0.97,
+                              params: ["text": body, "raw": original])
+        }
+        for trigger in ["remember that ", "note that ", "keep in mind that ", "save that "] {
+            if let body = extractAfter(trigger, from: text), !body.isEmpty {
+                return GigiIntent(label: "remember", confidence: 0.97,
+                                  params: ["text": body, "raw": original])
+            }
+        }
+
         // ── NAVIGATION ───────────────────────────────────────────────────────
         // Strong, unambiguous triggers → instant fast-path (0.97).
         let navTriggers = [
@@ -107,7 +139,7 @@ class GigiNLUEngine {
         ]
         for trigger in navTriggers {
             if let dest = extractAfter(trigger, from: text), !dest.isEmpty {
-                return GigiIntent(label: "navigation", confidence: 0.97,
+                return GigiIntent(label: "navigate", confidence: 0.97,
                                   params: ["destination": dest.capitalized, "raw": original])
             }
         }
@@ -121,7 +153,7 @@ class GigiNLUEngine {
         // reminder. Per "intelligence over regex": no temporal-exclusion
         // regex here — we just stop trusting a weak lexical cue.
         if let dest = extractAfter("go to ", from: text), !dest.isEmpty {
-            return GigiIntent(label: "navigation", confidence: 0.60,
+            return GigiIntent(label: "navigate", confidence: 0.60,
                               params: ["destination": dest.capitalized, "raw": original])
         }
 
@@ -130,7 +162,9 @@ class GigiNLUEngine {
         let hasMusicAction = text.contains("play ") || text.contains("put on ") ||
                              text.contains("listen to ")
 
-        if hasSpotify || hasMusicAction {
+        // Require a real music action verb — the bare service name ("spotify")
+        // must NOT route here, so "open spotify" reaches the OPEN APP block.
+        if hasMusicAction {
             let query = extractMusicQuery(from: text) ?? ""
             var params: [String: String] = ["raw": original]
             if !query.isEmpty { params["query"] = query }
@@ -192,16 +226,6 @@ class GigiNLUEngine {
         if ["what day is it", "what's today's date", "what's the date", "today's date"]
             .contains(where: { text.contains($0) }) {
             return GigiIntent(label: "ask_date", confidence: 0.99, params: ["raw": original])
-        }
-
-        // ── REMINDER ─────────────────────────────────────────────────────────
-        let reminderTriggers = ["remind me to ", "remind me that ", "set a reminder to ",
-                                "set a reminder for "]
-        for trigger in reminderTriggers {
-            if let body = extractAfter(trigger, from: text), !body.isEmpty {
-                return GigiIntent(label: "set_reminder", confidence: 0.95,
-                                  params: ["text": body, "raw": original])
-            }
         }
 
         // ── CALENDAR EVENT ────────────────────────────────────────────────────
@@ -469,22 +493,9 @@ class GigiNLUEngine {
             return GigiIntent(label: "homekit_unlock", confidence: 0.91, params: ["raw": original])
         }
 
-        // ── MEMORY ────────────────────────────────────────────────────────────
-        // Permissive: "remember X is Y" / "remember mom = Giovanna" — no "that"
-        // required. Requires a copula (is/are/=/equals/means) so we don't
-        // catch every "remember to ..." (those are reminders, handled earlier).
-        let rememberCopula = #"^remember\s+\S+.*?(?:\s+is\s+|\s+are\s+|\s+=\s+|\s+equals\s+|\s+means\s+)"#
-        if text.range(of: rememberCopula, options: .regularExpression) != nil,
-           let body = extractAfter("remember ", from: text), !body.isEmpty {
-            return GigiIntent(label: "remember", confidence: 0.97,
-                              params: ["text": body, "raw": original])
-        }
-        for trigger in ["remember that ", "note that ", "keep in mind that ", "save that "] {
-            if let body = extractAfter(trigger, from: text), !body.isEmpty {
-                return GigiIntent(label: "remember", confidence: 0.97,
-                                  params: ["text": body, "raw": original])  // "text" matches pipeline taskText
-            }
-        }
+        // ── MEMORY (recall) ───────────────────────────────────────────────────
+        // Fact assertion ("remember X is Y" / "remember that ...") is hoisted
+        // to the INTENT-PREFIX PRIORITY block near the top of classifyRules.
         // Recall triggers — include contractions ("who's", "what's") and the
         // bare "X?" form ("Marco?" after a previous recall). The recall
         // confidence stays 0.90 so the memory-recall probe in GigiAgentEngine
@@ -738,7 +749,7 @@ class GigiNLUEngine {
             if let s = extractDuration(from: text) { params["seconds"] = String(s) }
         case "open_app", "social_media", "food_delivery", "ride_share":
             if let app = extractAppName(from: text) { params["app"] = app }
-        case "navigation", "find_nearby":
+        case "navigation", "navigate", "find_nearby":
             if let dest = extractDestination(from: text) { params["destination"] = dest }
         case "play_music":
             if let q = extractMusicQuery(from: text) { params["query"] = q }

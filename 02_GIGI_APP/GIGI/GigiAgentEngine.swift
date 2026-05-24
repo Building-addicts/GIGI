@@ -508,6 +508,20 @@ final class GigiAgentEngine {
         return s
     }
 
+    /// Dry-run mirror of `deterministicFastPath`'s gating — returns the
+    /// NLU intent that WOULD short-circuit this utterance to the bridge
+    /// BEFORE Apple FM, or nil. Same threshold + `fastPathIntents` set as
+    /// the live fast-path, so the two never drift. Pure: no dispatch, no
+    /// side effects. Used by `GigiRequestRouter.classify` so the golden
+    /// harness exercises the NLU layer (which sits between tier-0 and FM
+    /// in `process`) instead of jumping straight to FM.
+    static func nluFastPathProbe(for text: String) -> GigiIntent? {
+        let intent = GigiNLUEngine.shared.classify(text)
+        guard intent.confidence >= 0.95,
+              fastPathIntents.contains(intent.label) else { return nil }
+        return intent
+    }
+
     static func looksLikeBuildShortcut(_ text: String) -> Bool {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !t.isEmpty else { return false }

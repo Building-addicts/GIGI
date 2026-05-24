@@ -78,9 +78,9 @@ enum GigiGoldenRunner {
         .init("send him a message", tool: "ask_clarification", note: "unresolved contact -> ask who"),
         .init("send a message to Armando Bata and ask him if he is online", tool: "send_message", slotContains: "armando", note: "Item C regression: contact extracted; body should be 'Are you online?'"),
         .init("remind me to buy milk tomorrow", tool: "set_reminder"),
-        .init("remember me to call the bank at 3pm", tool: "set_reminder", note: "colloquial -> reminder, not memory"),
+        .init("remember me to call the bank at 3pm", tool: "set_reminder", note: "NLU PREEMPT: nlu_fast make_call fires before FM/ReminderUpgrade; consolidation must let reminder win"),
         .init("ricordami di chiamare il dentista", tool: "set_reminder"),
-        .init("remember that my wifi password is hunter2", tool: "remember", note: "fact assertion -> memory"),
+        .init("remember that my wifi password is hunter2", tool: "remember", note: "NLU PREEMPT: substring wifi -> nlu_fast toggle_wifi before FactAssertion/FM; consolidation must let remember win"),
         .init("who is Albert Einstein", path: "delegate_local", note: "open knowledge -> local LLM"),
         .init("explain how photosynthesis works", path: "delegate_local"),
         .init("order a margherita pizza from Just Eat", tool: "world_action_propose", note: "order verb -> propose-first then cloud (legacy web_order_food retired)"),
@@ -91,13 +91,30 @@ enum GigiGoldenRunner {
         .init("set a timer for 5 minutes", tool: "set_timer"),
         .init("call mom", tool: "make_call"),
         .init("what can you do", tool: "discovery_overview", note: "capability discovery"),
-        .init("take me to Roma Termini", tool: "navigate", note: "concrete destination; \"navigate home\" correctly asks when no home saved"),
+        .init("take me to Roma Termini", tool: "navigate", note: "LABEL MISMATCH: NLU emits navigation, canonical/semantic/FM use navigate; consolidation must unify the label"),
         // web-search class coverage (radius measured 2026-05-23 on real FM:
         // only the "iPhone reviews" phrasing misroutes to make_call; the rest
         // route correctly, so #2 is an isolated quirk, not a broken class)
         .init("search the web for the best pizza in Rome", path: "delegate_cloud"),
         .init("look up the latest news online", path: "delegate_cloud"),
         .init("what is the latest news about AI", path: "delegate_cloud"),
+
+        // --- NLU fast-path boundary (2026-05-24) — mapping consolidation
+        // target (a): NLU substring layer vs SemanticRouter vs FM. The
+        // harness now exercises the NLU deterministic fast-path (>=0.95 +
+        // fastPathIntents) that sits between tier-0 and FM in process().
+        // Cases marked "NLU PREEMPT" are real prod misroutes the old
+        // harness masked (it skipped NLU and reported the FM result).
+        .init("remind me to call mom tomorrow", tool: "set_reminder", note: "NLU PREEMPT: substring 'call' -> nlu_fast make_call before ReminderUpgrade/FM; reminder must win"),
+        .init("what time is it", tool: "ask_time", note: "clean NLU fast-path"),
+        .init("what is the date today", tool: "ask_date", note: "clean NLU fast-path"),
+        .init("open spotify", tool: "open_app", note: "clean NLU fast-path / semantic"),
+        .init("play despacito", tool: "play_music", note: "NLU/semantic music"),
+        .init("facetime my brother", tool: "facetime", note: "clean NLU fast-path"),
+        .init("skip this song", tool: "media_next", note: "NLU-only (no semantic catalog entry)"),
+        .init("turn off the living room lights", tool: "homekit_off", note: "homekit NOT in fastPathIntents -> must reach semantic/FM, not NLU"),
+        .init("flashlight off", tool: "toggle_flashlight", note: "NLU label torch_off vs canonical toggle_flashlight; semantic should catch"),
+        .init("what's my battery level", tool: "get_device_battery", note: "NOT in fastPathIntents -> semantic/FM, not NLU"),
     ]
 
     static let bodyChecks: [(String, String)] = [

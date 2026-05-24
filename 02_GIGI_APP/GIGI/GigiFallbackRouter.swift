@@ -36,7 +36,7 @@ final class GigiFallbackRouter {
         ("make_call",      ["call ", "phone ", "dial ", "ring "]),
         ("facetime",       ["facetime"]),
         ("navigate",       ["navigate to", "directions to", "take me to", "drive to", "route to"]),
-        ("play_music",     ["play ", "music", "song", "playlist", "spotify"]),
+        ("play_music",     ["play ", "music", "song", "playlist"]),  // "spotify" removed: a bare service name is not a play verb (open spotify -> open_app)
         ("open_app",       ["open ", "launch ", "start the app"]),
         ("weather",        ["weather", "forecast", "temperature outside", "is it raining"]),
         ("read_calendar",  ["calendar", "my schedule", "what's on today", "my events"]),

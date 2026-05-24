@@ -149,11 +149,26 @@ final class GigiRequestRouter {
             applefmAvailable: applefmAvailable
         )
         ctx.dryRun = true
-        // Mirror the engine: the tier-0 pass (which owns the semantic match)
-        // runs first; only if it produces no terminal do we run the full
-        // pipeline. Keeps semantic routing exercised exactly once, like prod.
-        if await runPipeline(buildTier0Pipeline(), ctx: &ctx) == nil {
+        // Mirror `GigiAgentEngine.process` exactly so the harness measures
+        // what production routes, not a subset:
+        //   Gate 0.5  looksLikeBuildShortcut -> bypass tier-0 + NLU, go to FM
+        //   else      tier-0 pass (owns the semantic NLEmbedding match)
+        //             -> NLU deterministic fast-path (>=0.95 + fastPathIntents)
+        //             -> full FM pipeline
+        // (memoryRecallProbe is omitted: the golden runner clears memory per
+        // case so it always misses; recall cases need seeded memory to test.)
+        if GigiAgentEngine.looksLikeBuildShortcut(text) {
             _ = await runPipeline(buildPipeline(), ctx: &ctx)
+        } else if await runPipeline(buildTier0Pipeline(), ctx: &ctx) == nil {
+            if let nlu = GigiAgentEngine.nluFastPathProbe(for: text) {
+                // Reflect the live fast-path record() (no path — bridge dispatch).
+                let slot = nlu.params["contact"] ?? nlu.params["query"] ?? nlu.params["text"]
+                GigiRouterTrace.shared.record(
+                    utterance: text, tier: "nlu_fast", tool: nlu.label,
+                    confidence: Float(nlu.confidence), slot: slot)
+            } else {
+                _ = await runPipeline(buildPipeline(), ctx: &ctx)
+            }
         }
         guard let e = GigiRouterTrace.shared.recent(count: 1).last else {
             return RouteClassification(tier: "none", tool: "none", path: ctx.effectivePath, slot: nil, confidence: 0)
