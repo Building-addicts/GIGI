@@ -129,7 +129,7 @@ enum GigiGoldenRunner {
         // already catch build phrasings before the NLU torch over-match?
         .init("build me a shortcut that turns the flashlight on, waits 5 seconds, then turns it off", tool: "build_shortcut", note: "the EXACT phrasing that motivated Gate 0.5 (NLU torch over-match)"),
         .init("make a shortcut that turns on the torch", tool: "build_shortcut", note: "torch in a build phrasing"),
-        .init("build a new shortcut", tool: "build_shortcut", note: "KNOWN BUG (separate from Gate 0.5): no description -> BuildShortcutRegexTier misses (requires desc), RunShortcutRegexTier grabs it -> run_shortcut. Fails identically with/without Gate 0.5."),
+        .init("build a new shortcut", tool: "build_shortcut", note: "no-description build request -> build_shortcut (composer handles the vague case). Fixed 2026-05-24: detectBuildShortcutPattern desc now optional + RunShortcut guards against build verbs."),
     ]
 
     static let bodyChecks: [(String, String)] = [

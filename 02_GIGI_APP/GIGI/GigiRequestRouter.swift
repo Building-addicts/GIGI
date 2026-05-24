@@ -2083,18 +2083,22 @@ final class GigiRequestRouter {
         //   make/create/design/compose/generate/costruisci/fammi/crea/...
         //
         // Group 2 captures the description (rest of the utterance).
-        let pattern = #"^(?:build|make|create|compose|design|generate|costruisci|crea|fammi|componi|genera)\s+(?:\w+\s+){0,2}(?:short ?cut|scorciatoia)s?\s+(?:that\s+|which\s+|to\s+|for\s+|per\s+|che\s+)?(.+)$"#
+        let pattern = #"^(?:build|make|create|compose|design|generate|costruisci|crea|fammi|componi|genera)\s+(?:\w+\s+){0,2}(?:short ?cut|scorciatoia)s?(?:\s+(?:that\s+|which\s+|to\s+|for\s+|per\s+|che\s+)?(.+))?$"#
 
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
             return nil
         }
         let nsRange = NSRange(t.startIndex..<t.endIndex, in: t)
-        guard let match = regex.firstMatch(in: t, options: [], range: nsRange),
-              let descRange = Range(match.range(at: 1), in: t) else {
+        guard let match = regex.firstMatch(in: t, options: [], range: nsRange) else {
             return nil
         }
-        let desc = String(t[descRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-        return desc.isEmpty ? nil : desc
+        // Description (group 1) is OPTIONAL: "build a new shortcut" has none.
+        // Return "" (a build match without a description) rather than nil so
+        // the request enters the build flow instead of being grabbed by
+        // RunShortcutRegexTier. composeShortcut receives the full ctx.text and
+        // handles the underspecified case.
+        guard let descRange = Range(match.range(at: 1), in: t) else { return "" }
+        return String(t[descRange]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Tier-0 regex intercepts (HYBRID with GigiSemanticRouter — GATE 15 fix)
@@ -2149,12 +2153,20 @@ final class GigiRequestRouter {
             }
         }
 
-        // Trailing keyword pattern: "<name> shortcut" / "<name> scorciatoia"
-        let trailingKeywords = [" shortcut", " scorciatoia"]
-        for kw in trailingKeywords {
-            if t.hasSuffix(kw), t.count > kw.count {
-                let raw = String(t.dropLast(kw.count))
-                return cleanShortcutName(raw)
+        // Trailing keyword pattern: "<name> shortcut" / "<name> scorciatoia".
+        // Guard: a build-verb-led phrasing ("build/make/create … shortcut") is
+        // a BUILD request, not a run — BuildShortcutRegexTier (which runs first)
+        // handles it, incl. the no-description form. Don't let the trailing
+        // match grab it and run a phantom shortcut.
+        let buildVerbs = ["build ", "make ", "create ", "compose ", "design ",
+                          "generate ", "costruisci ", "crea ", "fammi ", "componi ", "genera "]
+        if !buildVerbs.contains(where: { t.hasPrefix($0) }) {
+            let trailingKeywords = [" shortcut", " scorciatoia"]
+            for kw in trailingKeywords {
+                if t.hasSuffix(kw), t.count > kw.count {
+                    let raw = String(t.dropLast(kw.count))
+                    return cleanShortcutName(raw)
+                }
             }
         }
 
