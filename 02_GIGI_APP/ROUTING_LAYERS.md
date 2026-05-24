@@ -44,15 +44,12 @@ facetime, facetime_audio.
 
 ## Open reconciliation items (documented, NOT yet fixed — need care)
 
-1. **Flashlight has two representations.** NLU emits direction-explicit
-   `torch_on`/`torch_off`; the SemanticRouter catalog + Apple FM use
-   `toggle_flashlight`. `GigiActionBridge` handles all three. The FM tool
-   passes a `state` arg ("on"/"off"/empty) so the FM path is direction-aware;
-   the **semantic path passes no state → blind toggle** (latent bug: "turn off
-   the flashlight" when already off turns it on). Reconcile to ONE canonical
-   (decide torch_on/off vs toggle_flashlight, preserve direction on every
-   path, update `fastPathIntents` + the golden expectation accordingly). Not a
-   trivial relabel — direction semantics differ.
+1. **Flashlight — RESOLVED 2026-05-24 (commit b7d8d80).** Reconciled to one
+   canonical: `toggle_flashlight` with a `state` param. NLU now emits it with
+   state on/off (was `torch_on`/`torch_off`); the direction-blind semantic
+   catalog entry was removed; Apple FM already carried a `state` arg.
+   `fastPathIntents` updated. The legacy `torch_on`/`torch_off` bridge cases
+   are now unused (left in place for safety).
 
 2. **Low-value semantic backstops.** The catalog lists make_call, set_timer,
    set_alarm, open_app, navigate, read_calendar, find_free_slot, play_music —
