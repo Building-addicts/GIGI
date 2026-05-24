@@ -86,7 +86,7 @@ enum GigiGoldenRunner {
         .init("order a margherita pizza from Just Eat", tool: "world_action_propose", note: "order verb -> propose-first then cloud (legacy web_order_food retired)"),
         .init("compra le batterie AA su Amazon", tool: "world_action_propose", note: "propose-first turn 1, cloud on confirm"),
         .init("book a table for two at Sushi Zen tonight", tool: "world_action_propose", note: "propose-first turn 1, cloud on confirm"),
-        .init("search the web for the latest iPhone reviews", path: "delegate_cloud", note: "KNOWN FAIL: Apple FM misroutes to make_call; fix = FM operator-prompt few-shot"),
+        .init("search the web for the latest iPhone reviews", path: "delegate_cloud", note: "FIXED 2026-05-24: was NLU make_call (substring 'phone' inside 'iphone'), NOT an FM quirk as long believed; word-boundary fix -> FM routes to delegate_cloud. Device-verified."),
         .init("turn on the flashlight", tool: "toggle_flashlight"),
         .init("set a timer for 5 minutes", tool: "set_timer"),
         .init("call mom", tool: "make_call"),
@@ -115,6 +115,14 @@ enum GigiGoldenRunner {
         .init("turn off the living room lights", tool: "homekit_off", note: "homekit NOT in fastPathIntents -> must reach semantic/FM, not NLU"),
         .init("flashlight off", tool: "toggle_flashlight", note: "NLU label torch_off vs canonical toggle_flashlight; semantic should catch"),
         .init("what's my battery level", tool: "get_device_battery", note: "NOT in fastPathIntents -> semantic/FM, not NLU"),
+
+        // --- ML-territory (2026-05-24) — rule MISSES on purpose, so pre-Option-B
+        // these fell to MobileBERT/MaxEnt. Used to A/B the ML removal: do they
+        // still route sensibly via semantic/FM (device) / fallback (sim)?
+        .init("give mom a call", tool: "make_call", note: "ML-territory + FM GAP: rule misses ('call' at end); device FM routes to delegate_local not make_call. Future: FM few-shot / rule coverage."),
+        .init("put some music on", tool: "play_music", note: "rule misses ('put on' not contiguous)"),
+        .init("remind me about the dentist tomorrow", tool: "set_reminder", note: "ML-territory + FM GAP: rule misses ('remind me about'); device FM routes to delegate_local not set_reminder."),
+        .init("I'd love to hear some jazz", tool: "play_music", note: "ML-territory + FM GAP: rule misses (no play verb); device FM routes to delegate_local not play_music."),
     ]
 
     static let bodyChecks: [(String, String)] = [

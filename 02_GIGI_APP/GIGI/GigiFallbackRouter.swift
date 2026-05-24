@@ -72,6 +72,21 @@ final class GigiFallbackRouter {
     /// Map a user utterance to a `FoundationRouterDecision` without
     /// involving Apple FM. Confidence is lower than Apple FM (0.55-0.85),
     /// reflecting that this is a degraded path.
+    /// Substring match that requires a word boundary before the keyword, so
+    /// "phone " does not match inside "iphone" (the keyword table is full of
+    /// short verbs like call/phone/ring/music that otherwise hit inside
+    /// longer words). Mirrors GigiNLUEngine.extractAfterWord.
+    static func containsAtWordBoundary(_ text: String, _ keyword: String) -> Bool {
+        var start = text.startIndex
+        while let r = text.range(of: keyword, range: start..<text.endIndex) {
+            if r.lowerBound == text.startIndex || !text[text.index(before: r.lowerBound)].isLetter {
+                return true
+            }
+            start = text.index(after: r.lowerBound)
+        }
+        return false
+    }
+
     func classifyRequest(text: String) -> FoundationRouterDecision {
         let lower = text.lowercased()
 
@@ -87,7 +102,7 @@ final class GigiFallbackRouter {
 
         // 2. Native tool keyword match.
         for entry in Self.nativeKeywordTable {
-            if entry.keywords.contains(where: { lower.contains($0) }) {
+            if entry.keywords.contains(where: { Self.containsAtWordBoundary(lower, $0) }) {
                 let slots = extractSlots(from: text, action: entry.action)
                 return decision(
                     path: "native_tool",

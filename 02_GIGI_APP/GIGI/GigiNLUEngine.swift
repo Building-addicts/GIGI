@@ -63,22 +63,15 @@ class GigiNLUEngine {
             return rule
         }
 
-        // 2. MobileBERT
-        if let result = classifyWithTransformer(lower) {
-            GigiDebugLogger.log("GIGI NLU [BERT]: '\(lower)' → \(result.label) (\(Int(result.confidence * 100))%)")
-            let params = extractParams(from: lower, intent: result.label)
-            return GigiIntent(label: result.label, confidence: result.confidence, params: params)
-        }
-
-        // 3. Maximum Entropy fallback
-        if let result = classifyWithFallback(lower) {
-            GigiDebugLogger.log("GIGI NLU [ME]: '\(lower)' → \(result.label) (\(Int(result.confidence * 100))%)")
-            let params = extractParams(from: lower, intent: result.label)
-            return GigiIntent(label: result.label, confidence: result.confidence, params: params)
-        }
-
-        // 4. Ultra-fallback
-        GigiDebugLogger.log("GIGI NLU: fallback ask_cloud")
+        // 2. No explicit rule matched. The opaque on-device ML classifiers
+        // (MobileBERT + MaxEnt) were removed here on 2026-05-24 (Option B):
+        // they emitted an over-confident label for EVERY input (e.g. a web
+        // search -> make_call at >=0.95), firing the deterministic fast-path
+        // on garbage and duplicating the SemanticRouter + Apple FM layers.
+        // Returning ask_cloud (0.5) keeps NLU below the fast-path threshold so
+        // unmatched utterances fall through to the smarter semantic / FM
+        // routing, which have full-sentence semantics and memory context.
+        GigiDebugLogger.log("GIGI NLU: no rule match → ask_cloud (ML classifiers removed)")
         return GigiIntent(label: "ask_cloud", confidence: 0.5, params: ["raw": cleaned])
     }
 
@@ -175,7 +168,9 @@ class GigiNLUEngine {
         // ── CALL ─────────────────────────────────────────────────────────────
         let callTriggers = ["call ", "phone ", "dial ", "ring "]
         for trigger in callTriggers {
-            if let contact = extractAfter(trigger, from: text), !contact.isEmpty {
+            // word-boundary match: "phone " must not fire inside "iphone",
+            // "call " inside "recall", "ring " inside "during".
+            if let contact = extractAfterWord(trigger, from: text), !contact.isEmpty {
                 return GigiIntent(label: "make_call", confidence: 0.97,
                                   params: ["contact": cleanContactName(contact), "raw": original])
             }
@@ -543,6 +538,26 @@ class GigiNLUEngine {
         guard let range = text.range(of: trigger) else { return nil }
         let rest = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
         return rest.isEmpty ? nil : rest
+    }
+
+    /// Like extractAfter but only matches the trigger at a WORD boundary
+    /// (start of string or preceded by a non-letter), so "phone " does not
+    /// match inside "iphone", "call " inside "recall", "ring " inside
+    /// "during". Returns the trimmed remainder after the first valid match.
+    private func extractAfterWord(_ trigger: String, from text: String) -> String? {
+        var searchStart = text.startIndex
+        while let range = text.range(of: trigger, range: searchStart..<text.endIndex) {
+            let before = range.lowerBound
+            let boundaryOK = before == text.startIndex
+                || !text[text.index(before: before)].isLetter
+            if boundaryOK {
+                let rest = String(text[range.upperBound...])
+                    .trimmingCharacters(in: .whitespaces)
+                return rest.isEmpty ? nil : rest
+            }
+            searchStart = text.index(after: range.lowerBound)
+        }
+        return nil
     }
 
     private func cleanContactName(_ raw: String) -> String {
