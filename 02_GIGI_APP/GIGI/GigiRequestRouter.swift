@@ -151,15 +151,13 @@ final class GigiRequestRouter {
         ctx.dryRun = true
         // Mirror `GigiAgentEngine.process` exactly so the harness measures
         // what production routes, not a subset:
-        //   Gate 0.5  looksLikeBuildShortcut -> bypass tier-0 + NLU, go to FM
-        //   else      tier-0 pass (owns the semantic NLEmbedding match)
-        //             -> NLU deterministic fast-path (>=0.95 + fastPathIntents)
-        //             -> full FM pipeline
-        // (memoryRecallProbe is omitted: the golden runner clears memory per
-        // case so it always misses; recall cases need seeded memory to test.)
-        if GigiAgentEngine.looksLikeBuildShortcut(text) {
-            _ = await runPipeline(buildPipeline(), ctx: &ctx)
-        } else if await runPipeline(buildTier0Pipeline(), ctx: &ctx) == nil {
+        //   tier-0 pass (owns the semantic NLEmbedding match)
+        //   -> NLU deterministic fast-path (>=0.95 + fastPathIntents)
+        //   -> full FM pipeline
+        // (Gate 0.5 looksLikeBuildShortcut removed 2026-05-24 — tier-0 catches
+        // build phrasings before the NLU probe. memoryRecallProbe is omitted:
+        // the golden runner clears memory per case so it always misses.)
+        if await runPipeline(buildTier0Pipeline(), ctx: &ctx) == nil {
             if let nlu = GigiAgentEngine.nluFastPathProbe(for: text) {
                 // Reflect the live fast-path record() (no path — bridge dispatch).
                 let slot = nlu.params["contact"] ?? nlu.params["query"] ?? nlu.params["text"]

@@ -134,43 +134,30 @@ final class GigiAgentEngine {
         }
         #endif
 
-        // === Gate 0.5: build_shortcut intent escape hatch ===
+        // Refactor #6 Step 10 — deterministic tier-0 pipeline (math, alias,
+        // discovery, regex shortcuts, semantic catalog) runs BEFORE the memory
+        // probe and the NLU fast-path, so the rightful tier wins (e.g. math is
+        // not intercepted as a garbage recall key).
         //
-        // The NLU fast-path matches "flashlight on" / "torch on" as
-        // SUBSTRINGS. So "Build me a shortcut that turns the flashlight on,
-        // waits 5 seconds, then turn it off" gets misclassified as
-        // torch_on (confidence 0.99) and dispatched to bridge BEFORE the
-        // proper router can detect the build_shortcut intent.
-        //
-        // Cheap escape: if the prompt contains an explicit build-shortcut
-        // verb + the word "shortcut", skip the fast-path and go straight
-        // to route() which has the canonical regex + composeShortcut.
-        if Self.looksLikeBuildShortcut(text) {
-            GigiDebugLogger.log("GIGI Agent: bypass fast-path — text looks like build_shortcut")
-        } else {
-            // Refactor #6 Step 10 — Run the deterministic tier-0 pipeline
-            // (math, alias, discovery, regex shortcuts, semantic catalog)
-            // BEFORE the memory probe. Architectural fix for the over-match
-            // bug where "what is 42 times 11" was intercepted by a garbage
-            // memory key `contact:42 times 11`. Math is categorically NOT a
-            // recall query — its rightful tier (MathExpressionTier) now wins
-            // because tier-0 runs first.
-            if let tier0 = await GigiRequestRouter.shared.runTier0(text: text) {
-                return tier0.asAgentResult
-            }
+        // Gate 0.5 ("looksLikeBuildShortcut" escape hatch) removed 2026-05-24:
+        // it pre-dated this ordering and existed only because the NLU fast-path
+        // then ran first and substring-matched "flashlight on" -> torch_on on
+        // build-shortcut phrasings. Now BuildShortcutRegexTier + Semantic in
+        // tier-0 catch those before the NLU probe — verified redundant by the
+        // golden build-shortcut cases.
+        if let tier0 = await GigiRequestRouter.shared.runTier0(text: text) {
+            return tier0.asAgentResult
+        }
 
-            // Memory recall probe: if utterance is a "who is X / what is X /
-            // tell me about X / recall X" query AND we have that X stored,
-            // answer from memory directly. The user's own statement is
-            // authoritative — never delegate to an LLM that may hallucinate
-            // over our facts. On memory miss, fall through to the normal
-            // routing pipeline so the LLM can still answer generic knowledge.
-            if let memHit = await memoryRecallProbe(for: text) {
-                return memHit
-            }
-            if let fastPath = await deterministicFastPath(for: text) {
-                return fastPath
-            }
+        // Memory recall probe: if utterance is a "who is X / what is X /
+        // tell me about X / recall X" query AND we have that X stored, answer
+        // from memory directly. On memory miss, fall through to the normal
+        // routing pipeline so the LLM can still answer generic knowledge.
+        if let memHit = await memoryRecallProbe(for: text) {
+            return memHit
+        }
+        if let fastPath = await deterministicFastPath(for: text) {
+            return fastPath
         }
 
         // === Gate 2: 5-path router (GATE 2 lands here) ===
@@ -522,12 +509,6 @@ final class GigiAgentEngine {
         return intent
     }
 
-    static func looksLikeBuildShortcut(_ text: String) -> Bool {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !t.isEmpty else { return false }
-        let pattern = #"^(?:build|make|create|compose|design|generate|costruisci|crea|fammi|componi|genera)\s+(?:\w+\s+){0,2}(?:short ?cut|scorciatoia)s?\b"#
-        return t.range(of: pattern, options: .regularExpression) != nil
-    }
 
     // MARK: - Memory recall probe
     //
