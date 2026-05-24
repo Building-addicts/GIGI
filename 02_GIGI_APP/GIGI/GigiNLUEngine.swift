@@ -156,6 +156,19 @@ class GigiNLUEngine {
         }
 
         // ── CALL ─────────────────────────────────────────────────────────────
+        // Indirect "give/get <contact> a call" — the contact precedes the
+        // verb, so the <verb> <contact> loop below misses it. "a ring" is
+        // intentionally excluded ("get her a ring" is jewelry, not a call).
+        for pre in ["give ", "get "] {
+            if text.hasPrefix(pre), text.hasSuffix(" a call") {
+                let contact = String(text.dropFirst(pre.count).dropLast(" a call".count))
+                    .trimmingCharacters(in: .whitespaces)
+                if !contact.isEmpty {
+                    return GigiIntent(label: "make_call", confidence: 0.96,
+                                      params: ["contact": cleanContactName(contact), "raw": original])
+                }
+            }
+        }
         let callTriggers = ["call ", "phone ", "dial ", "ring "]
         for trigger in callTriggers {
             // word-boundary match: "phone " must not fire inside "iphone",
@@ -208,7 +221,9 @@ class GigiNLUEngine {
             .contains(where: { text.contains($0) }) {
             return GigiIntent(label: "ask_time", confidence: 0.99, params: ["raw": original])
         }
-        if ["what day is it", "what's today's date", "what's the date", "today's date"]
+        if ["what day is it", "what's today's date", "what's the date", "today's date",
+             "what is the date", "what's the date today", "the date today",
+             "what is today's date", "what day is today"]
             .contains(where: { text.contains($0) }) {
             return GigiIntent(label: "ask_date", confidence: 0.99, params: ["raw": original])
         }

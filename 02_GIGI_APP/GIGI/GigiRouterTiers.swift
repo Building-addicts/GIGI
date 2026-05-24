@@ -740,6 +740,9 @@ struct ReminderUpgradeTier: RouterTier {
     private static let prefixTriggers = [
         "remember me to ",
         "remind me to ",
+        "remind me about ",
+        "remember me about ",
+        "set a reminder about ",
         "ricordami di ",
     ]
 

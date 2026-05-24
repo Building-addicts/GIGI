@@ -119,10 +119,10 @@ enum GigiGoldenRunner {
         // --- ML-territory (2026-05-24) — rule MISSES on purpose, so pre-Option-B
         // these fell to MobileBERT/MaxEnt. Used to A/B the ML removal: do they
         // still route sensibly via semantic/FM (device) / fallback (sim)?
-        .init("give mom a call", tool: "make_call", note: "ML-territory + FM GAP: rule misses ('call' at end); device FM routes to delegate_local not make_call. Future: FM few-shot / rule coverage."),
+        .init("give mom a call", tool: "make_call", note: "indirect call (contact before verb) — deterministic give/get X a call detector"),
         .init("put some music on", tool: "play_music", note: "rule misses ('put on' not contiguous)"),
         .init("remind me about the dentist tomorrow", tool: "set_reminder", note: "ML-territory + FM GAP: rule misses ('remind me about'); device FM routes to delegate_local not set_reminder."),
-        .init("I'd love to hear some jazz", tool: "play_music", note: "ML-territory + FM GAP: rule misses (no play verb); device FM routes to delegate_local not play_music."),
+        .init("I'd love to hear some jazz", tool: "play_music", note: "KNOWN GAP (documented): FM routes to delegate_local. NOT safely fixable deterministically (a hear-some-X trigger would over-match hear some news/ideas/feedback); FM few-shots tried + reverted (small on-device FM ignores @Guide)."),
 
         // --- Gate 0.5 probe (2026-05-24) — does looksLikeBuildShortcut still
         // earn its keep, or does tier-0 (BuildShortcutRegexTier + Semantic)
