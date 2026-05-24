@@ -41,7 +41,7 @@ final class GigiAgentEngine {
     //
     // Removed 2026-05-15: send_message, set_reminder.
     private static let fastPathIntents: Set<String> = [
-        "ask_time", "ask_date", "torch_on", "torch_off", "make_call",
+        "ask_time", "ask_date", "toggle_flashlight", "make_call",
         "navigate", "navigation", "set_timer", "set_alarm",
         "toggle_wifi", "toggle_bluetooth", "media_play_pause", "media_next", "media_previous",
         "play_music", "open_app", "read_calendar", "read_week_calendar", "find_free_slot",

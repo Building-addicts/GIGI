@@ -54,7 +54,7 @@ extension GigiActionDispatcher {
             return .media
         case "remember", "recall":
             return .memory
-        case "torch_on", "torch_off", "toggle_wifi", "toggle_bluetooth",
+        case "torch_on", "torch_off", "toggle_flashlight", "toggle_wifi", "toggle_bluetooth",
              "weather", "search_web", "ask_time", "ask_date":
             return .system
         case "homekit_on", "homekit_off", "homekit_dim", "homekit_temp",

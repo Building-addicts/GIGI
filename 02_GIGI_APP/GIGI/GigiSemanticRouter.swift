@@ -244,12 +244,11 @@ final class GigiSemanticRouter {
             "quanta batteria", "livello batteria", "sto caricando",
             "il telefono è in carica"
         ],
-        "toggle_flashlight": [
-            "turn on the flashlight", "flashlight on", "turn off torch",
-            "torch off", "turn on the torch", "switch on the flashlight",
-            "accendi la torcia", "spegni la torcia", "torcia accesa",
-            "torcia spenta"
-        ],
+        // toggle_flashlight REMOVED 2026-05-24: the semantic path dispatched
+        // without a `state`, so it blind-toggled (turning the torch ON when
+        // asked to turn it OFF). NLU now emits toggle_flashlight WITH state for
+        // the canonical phrasings, and Apple FM's tool carries a state arg, so
+        // both remaining paths preserve direction. See ROUTING_LAYERS.md.
 
         // META — Shortcut AUTHORING via Cherri (Phase 2)
         // Note: tier-0 regex `detectBuildShortcutPattern` is the primary path

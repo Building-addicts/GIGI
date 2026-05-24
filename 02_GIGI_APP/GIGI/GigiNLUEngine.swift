@@ -271,18 +271,21 @@ class GigiNLUEngine {
         }
 
         // ── FLASHLIGHT ───────────────────────────────────────────────────────
+        // Canonical: toggle_flashlight with a direction in `state`
+        // ("on"/"off"); empty state = toggle (bare "flashlight"). One label
+        // across NLU / FM / bridge — see ROUTING_LAYERS.md.
         if ["turn on flashlight", "flashlight on", "turn on the flashlight",
             "torch on", "turn on torch", "open flashlight"]
             .contains(where: { text.contains($0) }) {
-            return GigiIntent(label: "torch_on", confidence: 0.99, params: ["raw": original])
+            return GigiIntent(label: "toggle_flashlight", confidence: 0.99, params: ["state": "on", "raw": original])
         }
         if ["turn off flashlight", "flashlight off", "turn off the flashlight",
             "torch off", "turn off torch", "close flashlight"]
             .contains(where: { text.contains($0) }) {
-            return GigiIntent(label: "torch_off", confidence: 0.99, params: ["raw": original])
+            return GigiIntent(label: "toggle_flashlight", confidence: 0.99, params: ["state": "off", "raw": original])
         }
         if text == "flashlight" || text == "torch" {
-            return GigiIntent(label: "torch_on", confidence: 0.90, params: ["raw": original])
+            return GigiIntent(label: "toggle_flashlight", confidence: 0.90, params: ["state": "", "raw": original])
         }
 
         // ── ALARM ─────────────────────────────────────────────────────────────
