@@ -1,5 +1,4 @@
 import Foundation
-import CoreML
 import NaturalLanguage
 
 // MARK: - GigiIntent
@@ -30,26 +29,17 @@ struct GigiEntities {
 }
 
 // MARK: - GigiNLUEngine
-// 3-level classification pipeline:
-//   1. English rule-based (highest priority — fast, reliable)
-//   2. MobileBERT transformer (if loaded)
-//   3. GigiNLU Maximum Entropy (fallback)
-//   4. ask_cloud (ultra-fallback)
+// Rules-only classification (the MobileBERT + MaxEnt ML classifiers were
+// removed 2026-05-24 — they duplicated the SemanticRouter + Apple FM and
+// over-matched; see Option B):
+//   1. English rule-based fast-path (deterministic)
+//   2. ask_cloud — everything else falls through to semantic / Apple FM
 class GigiNLUEngine {
     static let shared = GigiNLUEngine()
 
-    private var transformerModel: MLModel?
-    private var fallbackClassifier: NLModel?
-    private var labels: [String] = []
-    private let maxLen = 64
-    private var vocab: [String: Int] = [:]
     private lazy var entityNLTagger = NLTagger(tagSchemes: [.nameType, .lexicalClass, .language])
 
-    private init() {
-        loadTransformer()
-        loadFallback()
-        loadLabels()
-    }
+    private init() {}
 
     // MARK: - Classificazione principale
 
@@ -647,225 +637,7 @@ class GigiNLUEngine {
         return ""
     }
 
-    // MARK: - Caricamento modelli
-
-    private func loadTransformer() {
-        guard let url = Bundle.main.url(forResource: "GigiNLU_Transformer", withExtension: "mlpackage") ??
-                        Bundle.main.url(forResource: "GigiNLU_Transformer", withExtension: "mlmodelc")
-        else {
-            // Opzionale: aggiungi `GigiNLU_Transformer.mlpackage` al target per classificazione BERT on-device.
-            return
-        }
-        do {
-            let config = MLModelConfiguration()
-            config.computeUnits = .all
-            transformerModel = try MLModel(contentsOf: url, configuration: config)
-            GigiDebugLogger.log("GIGI NLU: MobileBERT caricato ✓")
-        } catch { GigiDebugLogger.log("GIGI NLU: Transformer error — \(error)") }
-    }
-
-    private func loadFallback() {
-        do {
-            let config = MLModelConfiguration()
-            let mlModel = try GigiNLU(configuration: config)
-            fallbackClassifier = try NLModel(mlModel: mlModel.model)
-            GigiDebugLogger.log("GIGI NLU: Fallback GigiNLU caricato ✓")
-        } catch { GigiDebugLogger.log("GIGI NLU: Fallback error — \(error)") }
-    }
-
-    private func loadLabels() {
-        if let url  = Bundle.main.url(forResource: "gigi_labels", withExtension: "json"),
-           let data = try? Data(contentsOf: url),
-           let dec  = try? JSONDecoder().decode([String].self, from: data) {
-            labels = dec
-            GigiDebugLogger.log("GIGI NLU: \(labels.count) labels caricate ✓")
-            return
-        }
-        labels = [
-            "ask_cloud","create_event","create_note","find_nearby",
-            "food_delivery","make_call","music_control","navigation",
-            "open_app","open_settings","open_settings_vpn",
-            "phone_system","play_music","read_calendar","read_email",
-            "read_messages","ride_share","search_web","send_email",
-            "send_message","set_alarm","set_brightness_down",
-            "set_brightness_up","set_reminder","set_timer",
-            "social_media","take_photo","toggle_bluetooth",
-            "toggle_do_not_disturb","toggle_wifi","torch_off",
-            "torch_on","weather"
-        ]
-    }
-
-    // MARK: - MobileBERT inference
-
-    private func classifyWithTransformer(_ text: String) -> (label: String, confidence: Double)? {
-        guard let model = transformerModel else { return nil }
-        let tokens = tokenize(text)
-        guard !tokens.isEmpty else { return nil }
-        do {
-            let inputIds = try MLMultiArray(shape: [1, NSNumber(value: maxLen)], dataType: .int32)
-            let attnMask = try MLMultiArray(shape: [1, NSNumber(value: maxLen)], dataType: .int32)
-            inputIds[0] = 101; attnMask[0] = 1
-            for (i, tok) in tokens.prefix(maxLen - 2).enumerated() {
-                inputIds[i + 1] = NSNumber(value: tok); attnMask[i + 1] = 1
-            }
-            let sepIdx = min(tokens.count + 1, maxLen - 1)
-            inputIds[sepIdx] = 102; attnMask[sepIdx] = 1
-            let provider = try MLDictionaryFeatureProvider(dictionary: [
-                "input_ids": MLFeatureValue(multiArray: inputIds),
-                "attention_mask": MLFeatureValue(multiArray: attnMask)
-            ])
-            let output = try model.prediction(from: provider)
-            guard let logits = output.featureValue(for: "logits")?.multiArrayValue else { return nil }
-            var scores = (0..<labels.count).map { Double(truncating: logits[$0]) }
-            let maxScore = scores.max() ?? 0
-            scores = scores.map { exp($0 - maxScore) }
-            let sum = scores.reduce(0, +)
-            scores = scores.map { $0 / sum }
-            let bestIdx = scores.indices.max(by: { scores[$0] < scores[$1] }) ?? 0
-            return (labels[bestIdx], scores[bestIdx])
-        } catch { GigiDebugLogger.log("GIGI NLU transformer error: \(error)"); return nil }
-    }
-
-    // MARK: - Maximum Entropy fallback
-
-    private func classifyWithFallback(_ text: String) -> (label: String, confidence: Double)? {
-        guard let clf = fallbackClassifier else { return nil }
-        let label = clf.predictedLabel(for: text) ?? "ask_cloud"
-        let conf  = clf.predictedLabelHypotheses(for: text, maximumCount: 3)[label] ?? 0.5
-        return (label, conf)
-    }
-
-    // MARK: - Tokenizer
-
-    private func tokenize(_ text: String) -> [Int] {
-        let words = text.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        return words.compactMap { word -> Int? in
-            if let id = vocab[word] { return id }
-            var hash = 5381
-            for char in word.unicodeScalars { hash = ((hash << 5) &+ hash) &+ Int(char.value) }
-            return abs(hash) % 30522
-        }
-    }
-
-    // MARK: - Estrazione parametri (English — usata solo dai modelli ML)
-
-    func extractParams(from text: String, intent: String) -> [String: String] {
-        var params: [String: String] = ["raw": text]
-        switch intent {
-        case "send_message", "make_call", "send_email":
-            if let name = extractName(from: text) { params["contact"] = name }
-            if let body = extractBody(from: text) { params["body"] = body }
-            if let platform = extractPlatform(from: text) { params["platform"] = platform }
-        case "create_event", "set_alarm":
-            if let time = extractTime(from: text) { params["time"] = time }
-            if let date = extractDate(from: text) { params["date"] = date }
-            if let title = extractEventTitle(from: text) { params["title"] = title }
-        case "set_timer":
-            if let s = extractDuration(from: text) { params["seconds"] = String(s) }
-        case "open_app", "social_media", "food_delivery", "ride_share":
-            if let app = extractAppName(from: text) { params["app"] = app }
-        case "navigation", "navigate", "find_nearby":
-            if let dest = extractDestination(from: text) { params["destination"] = dest }
-        case "play_music":
-            if let q = extractMusicQuery(from: text) { params["query"] = q }
-        case "set_reminder":
-            params["text"] = text
-        default: break
-        }
-        return params
-    }
-
-    // MARK: - English extractors (legacy — solo per ML fallback)
-
-    private func extractName(from text: String) -> String? {
-        let triggers = ["to ", "call ", "message ", "text ", "email ", "from ", "with "]
-        for trigger in triggers {
-            if let range = text.range(of: trigger) {
-                var remainder = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-                for p in ["on whatsapp","on telegram","on imessage","saying","that"] {
-                    if let r = remainder.range(of: " " + p) { remainder = String(remainder[..<r.lowerBound]) }
-                }
-                let name = remainder.components(separatedBy: " ").prefix(2).joined(separator: " ")
-                if name.count > 1 { return name }
-            }
-        }
-        return nil
-    }
-
-    private func extractBody(from text: String) -> String? {
-        let triggers = ["saying ", "that says ", "tell him ", "tell her ", "with the message "]
-        for t in triggers {
-            if let range = text.range(of: t) {
-                return String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return nil
-    }
-
-    private func extractPlatform(from text: String) -> String? {
-        let lower = text.lowercased()
-        if lower.contains("whatsapp") || lower.contains("wa") { return "whatsapp" }
-        if lower.contains("telegram") { return "telegram" }
-        if lower.contains("imessage") || lower.contains("sms") { return "imessage" }
-        return nil
-    }
-
-    private func extractTime(from text: String) -> String? {
-        let patterns = ["at\\s+(\\d{1,2}:\\d{2})\\s*(am|pm)?",
-                        "at\\s+(\\d{1,2})\\s*(am|pm)",
-                        "(\\d{1,2}:\\d{2})\\s*(am|pm)?"]
-        for p in patterns {
-            if let m = text.range(of: p, options: .regularExpression) {
-                return String(text[m]).replacingOccurrences(of: "at ", with: "").trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return nil
-    }
-
-    private func extractDate(from text: String) -> String? {
-        if text.contains("tomorrow") { return "tomorrow" }
-        if text.contains("today") { return "today" }
-        for day in ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"] {
-            if text.contains(day) { return day }
-        }
-        return "today"
-    }
-
-    private func extractEventTitle(from text: String) -> String? {
-        let kw = ["doctor","dentist","gym","lunch","dinner","meeting","interview","appointment"]
-        return kw.first(where: { text.contains($0) })?.capitalized
-    }
-
-    private func extractDuration(from text: String) -> Int? {
-        let patterns: [(String, Int)] = [("(\\d+)\\s*hour", 3600), ("(\\d+)\\s*minute", 60), ("(\\d+)\\s*second", 1)]
-        for (p, mult) in patterns {
-            if let m = text.range(of: p, options: .regularExpression) {
-                let digits = String(text[m]).filter { $0.isNumber }
-                if let n = Int(digits) { return n * mult }
-            }
-        }
-        return nil
-    }
-
-    private func extractAppName(from text: String) -> String? {
-        let apps = ["spotify","instagram","tiktok","twitter","youtube","netflix","whatsapp",
-                    "telegram","uber","doordash","gmail","slack","zoom","notion","discord",
-                    "snapchat","facebook","reddit","linkedin","facetime","maps","waze"]
-        return apps.first(where: { text.lowercased().contains($0) })?.capitalized
-    }
-
-    private func extractDestination(from text: String) -> String? {
-        let triggers = [
-            "take me to ", "navigate to ", "directions to ", "go to ", "get me to ",
-            "drive to ", "head to ",
-        ]
-        for t in triggers {
-            if let range = text.range(of: t) {
-                return String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return nil
-    }
+    // MARK: - Music query extraction (used by the MUSIC rule)
 
     private func extractMusicQuery(from text: String) -> String? {
         let triggers = [
