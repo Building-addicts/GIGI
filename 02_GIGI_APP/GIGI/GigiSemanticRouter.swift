@@ -418,7 +418,8 @@ final class GigiSemanticRouter {
             ],
             "navigate": [
                 "navigate to ", "directions to ", "take me to ",
-                "go to ", "portami a ", "indicazioni per ", "navigate "
+                "go to ", "drive to ", "portami a ", "indicazioni per ",
+                "vai a ", "navigate "
             ],
             "define_word": [
                 "define the word ", "define ",
@@ -454,6 +455,15 @@ final class GigiSemanticRouter {
                 "fammi uno shortcut ", "crea uno shortcut ",
                 "componi uno shortcut che ", "costruisci uno shortcut che ",
                 "genera uno shortcut che "
+            ],
+            "make_call": [
+                "call ", "phone ", "dial ", "ring ", "give a call to ",
+                "telephone ", "chiama ", "telefona a ", "telefona ",
+                "chiamare ", "fai una chiamata a "
+            ],
+            "facetime": [
+                "facetime audio ", "facetime with ", "facetime ",
+                "video call ", "videochiama ", "videochiamata a "
             ],
             "add_to_note": [
                 "add to my note ", "add to my notes ",

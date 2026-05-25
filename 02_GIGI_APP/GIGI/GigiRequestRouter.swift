@@ -118,6 +118,7 @@ final class GigiRequestRouter {
             CompoundCommandTier(router: self),
             FactAssertionTier(router: self),
             ReminderUpgradeTier(router: self),
+            CalendarEventUpgradeTier(router: self),
             MessageWithoutBodyTier(router: self),
             UnresolvedContactTier(router: self),
             ClarificationDowngradeTier(router: self),
@@ -539,6 +540,10 @@ final class GigiRequestRouter {
     /// dispatch-time propose-first behaviour that its dry-run otherwise skips.
     static func isWorldActionRequest(primaryAction: String, originalText: String) -> Bool {
         let lower = originalText.lowercased()
+        // Calendar events ("schedule/book a meeting") are a NATIVE action, never
+        // a 3rd-party world action — even though "schedule"/"book" are world-
+        // action verbs. CalendarEventUpgradeTier owns these.
+        if detectCalendarCreation(in: originalText) { return false }
         let hasActionVerb = worldActionVerbs.contains { v in
             lower == v || lower.hasPrefix("\(v) ") || lower.contains(" \(v) ")
         }
@@ -1134,6 +1139,164 @@ final class GigiRequestRouter {
     /// asked for. Heuristic: prefix matches a strong command verb /
     /// question word. When true, the pending clarification is dropped
     /// and the new utterance is processed via the normal pipeline.
+    // MARK: - Calendar-event creation detection (CalendarEventUpgradeTier)
+
+    /// Stricter form used to SUPPRESS the NLU substring fast-path: only true for
+    /// an explicit creation COMMAND (creation verb or explicit phrase) so a
+    /// title like "called call Marco" can't dial Marco — while a non-creation
+    /// utterance that merely mentions a meeting ("set a timer for my 3pm
+    /// meeting") still reaches its normal fast-path.
+    static func looksLikeCalendarCreationForFastPath(_ text: String) -> Bool {
+        guard detectCalendarCreation(in: text) else { return false }
+        let t = text.lowercased()
+        let explicit = ["add to calendar", "add to my calendar", "create event",
+                        "create an event", "add event", "add an event",
+                        "new event", "new meeting"]
+        if explicit.contains(where: { t.contains($0) }) { return true }
+        let verbs = ["add a ", "add an ", "schedule a ", "schedule an ",
+                     "create a ", "create an ", "book a ", "book an ",
+                     "put a ", "put an ", "set up a ", "set up an "]
+        return verbs.contains { t.contains($0) }
+    }
+
+    /// Parse an event duration in MINUTES from natural language. Default 60.
+    static func parseDurationMinutes(_ text: String) -> Int {
+        let t = text.lowercased()
+        if t.contains("hour and a half") || t.contains("90 min") || t.contains("ninety min") { return 90 }
+        if t.contains("half an hour") || t.contains("half hour") || t.contains("30 min") || t.contains("thirty min") { return 30 }
+        if t.contains("15 min") || t.contains("quarter of an hour") || t.contains("fifteen min") { return 15 }
+        if t.contains("45 min") || t.contains("forty-five min") || t.contains("forty five min") { return 45 }
+        if let r = t.range(of: "(\\d+)\\s*(hours?|hrs?)", options: .regularExpression) {
+            let n = Int(String(t[r]).filter { $0.isNumber }) ?? 1
+            return max(n, 1) * 60
+        }
+        if let r = t.range(of: "(\\d+)\\s*(minutes?|mins?)", options: .regularExpression) {
+            let n = Int(String(t[r]).filter { $0.isNumber }) ?? 60
+            return max(n, 1)
+        }
+        if t.contains("two hour") || t.contains("2 hour") { return 120 }
+        if t.contains("an hour") || t.contains("one hour") || t.contains("1 hour") || t.contains("hour long") { return 60 }
+        return 60
+    }
+
+
+
+    /// True when the utterance asks to CREATE a calendar event/meeting.
+    /// Excludes reading ("what's on my calendar"), and modifying an existing
+    /// event ("cancel/move/reschedule my meeting"). "remind"/reminders are
+    /// owned by ReminderUpgradeTier which runs first.
+    static func detectCalendarCreation(in text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !t.isEmpty, !t.hasSuffix("?") else { return false }
+
+        // Read / modify-existing / reminder phrasings are NOT a creation.
+        let excluded = ["what", "when", "which", "show ", "check ", "list ",
+                        "cancel", "reschedul", "delete", "remove", "move my",
+                        "do i have", "is my", "remind"]
+        if excluded.contains(where: { t.contains($0) }) { return false }
+
+        let explicit = ["add to calendar", "add to my calendar", "create event",
+                        "create an event", "add event", "add an event",
+                        "new event", "new meeting"]
+        if explicit.contains(where: { t.contains($0) }) { return true }
+
+        let nouns = ["meeting", "appointment", "event", "class", "exam",
+                     "interview", "standup", "sync", "one on one", "one-on-one",
+                     "1:1", "call with", "catch up", "catch-up"]
+        let hasNoun = nouns.contains { t.contains($0) }
+
+        let verbs = ["add a ", "add an ", "schedule a ", "schedule an ",
+                     "create a ", "create an ", "book a ", "book an ",
+                     "put a ", "put an ", "set up a ", "set up an ", "new "]
+        let hasVerb = verbs.contains { t.contains($0) }
+
+        // "I have a doctor appointment tomorrow at 12"
+        let implicit = ["i have a doctor", "i have an appointment", "i have a meeting",
+                        "i have a class", "i have an exam", "i have a job interview"]
+        if implicit.contains(where: { t.contains($0) }) { return true }
+
+        if hasNoun && (hasVerb || Self.utteranceHasDateTimeCue(t)) { return true }
+        return false
+    }
+
+    /// Light date/time cue probe shared by calendar detection.
+    static func utteranceHasDateTimeCue(_ lowered: String) -> Bool {
+        if lowered.contains("today") || lowered.contains("tomorrow") || lowered.contains("tonight") { return true }
+        let weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        if weekdays.contains(where: { lowered.contains($0) }) { return true }
+        return lowered.range(of: "\\b\\d{1,2}(:\\d{2})?\\s*[ap]\\.?m\\b", options: .regularExpression) != nil
+            || lowered.range(of: "\\b(at|from|by)\\s+\\d", options: .regularExpression) != nil
+    }
+
+    /// Best-effort title extraction. Returns nil when only framing/temporal
+    /// words remain (the caller then asks the user for a title).
+    static func extractEventTitle(from text: String) -> String? {
+        let lower = text.lowercased()
+
+        // Strongest signal: an explicit "called / titled / named X".
+        for marker in [" called ", " titled ", " named "] {
+            if let r = lower.range(of: marker) {
+                let rest = String(text[r.upperBound...])
+                let cleaned = stripTitleNoise(rest)
+                return cleaned.isEmpty ? nil : cleaned
+            }
+        }
+
+        // Otherwise strip the creation framing and temporal/time/duration noise.
+        var t = lower
+        let framings = ["add to my calendar", "add to calendar", "create an event",
+                        "create event", "add an event", "add event", "new event",
+                        "new meeting", "schedule a meeting", "add a meeting",
+                        "create a meeting", "book a meeting", "set up a meeting",
+                        "put a meeting", "schedule a", "schedule an", "add an",
+                        "add a", "create an", "create a", "book an", "book a",
+                        "set up an", "set up a", "put an", "put a",
+                        "remember me", "i have an", "i have a", "new "]
+            .sorted { $0.count > $1.count }
+        for f in framings where t.contains(f) {
+            t = t.replacingOccurrences(of: f, with: " ")
+        }
+        t = stripTitleNoise(t)
+        let generic: Set<String> = ["meeting", "event", "appointment", "class",
+                                     "exam", "interview", "dinner", "lunch",
+                                     "reservation", "sync", "standup", ""]
+        if generic.contains(t) { return nil }
+        if t.count < 2 { return nil }
+        return t
+    }
+
+    /// Remove temporal words, clock times and durations from a candidate title.
+    private static func stripTitleNoise(_ raw: String) -> String {
+        var t = raw.lowercased()
+        let noise = ["today's", "todays", "today", "tonight", "tomorrow",
+                     "this morning", "this afternoon", "this evening",
+                     "monday", "tuesday", "wednesday", "thursday", "friday",
+                     "saturday", "sunday", "an hour long", "one hour long",
+                     "half an hour", "for an hour", "hour long", "long"]
+        for n in noise { t = t.replacingOccurrences(of: n, with: " ") }
+        t = t.replacingOccurrences(of: "\\b(at|from|by|for)\\s+\\d{1,2}([:.]\\d{2})?\\s*([ap]\\.?m)?",
+                                    with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: "\\b\\d{1,2}\\s*[ap]\\.?m\\b",
+                                    with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: "\\b\\d+\\s*(minutes?|mins?|hours?|hrs?)\\b",
+                                    with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        for filler in ["a ", "an ", "the ", "my ", "of ", "for ", "with "] where t.hasPrefix(filler) {
+            t = String(t.dropFirst(filler.count))
+        }
+        // Drop dangling prepositions / temporal-residue tokens so leftovers like
+        // "for" (from "... an hour long for today ...") never become the title.
+        let stop: Set<String> = ["for", "at", "on", "to", "by", "from", "in", "of",
+                                 "with", "the", "a", "an", "and", "hour", "hours",
+                                 "hr", "hrs", "minute", "minutes", "min", "mins",
+                                 "long", "today", "tomorrow", "tonight", "am", "pm"]
+        t = t.split(separator: " ").map(String.init)
+             .filter { !stop.contains($0) }
+             .joined(separator: " ")
+        return t.trimmingCharacters(in: .whitespaces)
+    }
+
     static func looksLikeNewCommand(_ text: String) -> Bool {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let starters = [

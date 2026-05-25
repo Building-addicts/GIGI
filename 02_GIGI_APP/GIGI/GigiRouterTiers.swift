@@ -269,7 +269,7 @@ struct PendingClarificationTier: RouterTier {
             GigiConversationMemory.shared.addModelSpeech(speech)
             return .terminal(.actionInvoked(speech: speech, tool: "\(pending.intent)_cancel"))
         }
-        if GigiRequestRouter.looksLikeNewCommand(ctx.text) {
+        if !pending.freeTextSlot, GigiRequestRouter.looksLikeNewCommand(ctx.text) {
             GigiDebugLogger.log("GIGI Router: pending clarification SUPERSEDED by new command — falling through")
             return .pass
         }
@@ -862,6 +862,98 @@ struct ReminderUpgradeTier: RouterTier {
         )
         GigiConversationMemory.shared.addModelSpeech(finalSpeech)
         return .terminal(.actionInvoked(speech: finalSpeech, tool: "set_reminder"))
+    }
+}
+
+/// Calendar-event creation override (2026-05-25) — the small on-device FM
+/// routinely routes "add a meeting / schedule a meeting" to delegate_local
+/// (Ollama), which cannot touch EventKit and instead confabulates a "browser
+/// is down / can't reach the calendar" excuse (observed in 3 device runs).
+/// Apple FM @Guide few-shots do not bind on the on-device model, so this
+/// deterministic net forces calendar-creation phrasings to the native
+/// create_event path. When no title is present we ask for one (free-text
+/// pending clarification); date/time are parsed natively by GigiActionBridge.
+/// Sits AFTER ReminderUpgradeTier (so "remind me … meeting" stays a reminder)
+/// and only fires on the delegate / ask_clarification paths — never hijacks a
+/// correct native_tool create_event the FM already produced.
+struct CalendarEventUpgradeTier: RouterTier {
+    let name = "calendar_event_upgrade"
+    unowned let router: GigiRequestRouter
+
+    func evaluate(_ ctx: inout RouterContext) async -> TierOutcome {
+        let path    = ctx.effectivePath ?? ""
+        let primary = ctx.decision?.primaryAction ?? ""
+
+        // If Apple FM already routed to the native create_event tool, it owns the
+        // turn (its slot extraction is fine) — don't interfere.
+        if path == "native_tool", primary == "create_event" { return .pass }
+
+        // An explicit creation COMMAND ("add a meeting … called call Marco")
+        // must win over ANY mis-route — including a native make_call the FM /
+        // FallbackRouter picked because the title embeds "call". A looser
+        // creation (calendar noun + time, no creation verb) only overrides the
+        // give-up paths (delegate / ask_clarification) to stay conservative.
+        let isCreationCommand = GigiRequestRouter.looksLikeCalendarCreationForFastPath(ctx.text)
+        let delegated = path == "delegate_local" || path == "delegate_cloud"
+            || path == "ask_clarification" || path.isEmpty
+        guard isCreationCommand || (delegated && GigiRequestRouter.detectCalendarCreation(in: ctx.text))
+        else { return .pass }
+
+        let trimmed = ctx.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title   = GigiRequestRouter.extractEventTitle(from: trimmed)
+
+        // No usable title → ask for one. The reply may legitimately start with a
+        // command verb ("Call ecom duro"), so mark the slot free-text.
+        if title == nil {
+            let directSpeech = "What should I title the event?"
+            GigiDebugLogger.log("GIGI Router: calendar-event OVERRIDE — \(path) → ask title. raw='\(ctx.text)'")
+            GigiConversationMemory.shared.setPendingClarification(.init(
+                intent: "create_event",
+                slot: "title",
+                partialParams: ["date": trimmed, "time": "",
+                                "durationMinutes": String(GigiRequestRouter.parseDurationMinutes(trimmed))],
+                timestamp: Date(),
+                freeTextSlot: true
+            ))
+            GigiRouterTrace.shared.record(
+                utterance: ctx.text, tier: "regex-override",
+                tool: "ask_clarification", confidence: 1.0, slot: nil
+            )
+            if ctx.dryRun { return .terminal(.spoken(directSpeech)) }
+            GigiConversationMemory.shared.annotateLastTurn(
+                intent: "ask_clarification", slot: nil, tier: "regex-override", success: true
+            )
+            GigiConversationMemory.shared.addModelSpeech(directSpeech)
+            return .terminal(.spoken(directSpeech))
+        }
+
+        // Title present → create directly.
+        if ctx.dryRun {
+            GigiRouterTrace.shared.record(
+                utterance: ctx.text, tier: "regex-override",
+                tool: "create_event", confidence: 1.0, slot: title
+            )
+            return .terminal(.actionInvoked(speech: "", tool: "create_event"))
+        }
+        GigiDebugLogger.log("GIGI Router: calendar-event OVERRIDE — \(path) → bridge(create_event). title='\(title ?? "")' raw='\(ctx.text)'")
+        let intent = GigiIntent(
+            label: "create_event",
+            confidence: 1.0,
+            params: ["title": title ?? "Event", "date": trimmed, "time": "", "raw": ctx.text,
+                     "durationMinutes": String(GigiRequestRouter.parseDurationMinutes(trimmed))]
+        )
+        let speech = await GigiActionBridge.shared.execute(intent)
+        let finalSpeech = speech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Event added." : speech
+        GigiRouterTrace.shared.record(
+            utterance: ctx.text, tier: "regex-override",
+            tool: "create_event", confidence: 1.0, slot: title
+        )
+        GigiConversationMemory.shared.annotateLastTurn(
+            intent: "create_event", slot: title, tier: "regex-override", success: true
+        )
+        GigiConversationMemory.shared.addModelSpeech(finalSpeech)
+        return .terminal(.actionInvoked(speech: finalSpeech, tool: "create_event"))
     }
 }
 

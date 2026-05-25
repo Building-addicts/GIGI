@@ -72,6 +72,9 @@ final class GigiConversationMemory: ObservableObject {
         let slot: String                    // e.g. "body"
         let partialParams: [String: String] // already-extracted slots (contact, platform)
         let timestamp: Date
+        // When true, the user's NEXT reply is taken verbatim as the slot value
+        // even if it looks like a command (e.g. a calendar title "Call ecom duro").
+        var freeTextSlot: Bool = false
     }
 
     private var pendingClarification: PendingClarification?

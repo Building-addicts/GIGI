@@ -130,6 +130,18 @@ enum GigiGoldenRunner {
         .init("build me a shortcut that turns the flashlight on, waits 5 seconds, then turns it off", tool: "build_shortcut", note: "the EXACT phrasing that motivated Gate 0.5 (NLU torch over-match)"),
         .init("make a shortcut that turns on the torch", tool: "build_shortcut", note: "torch in a build phrasing"),
         .init("build a new shortcut", tool: "build_shortcut", note: "no-description build request -> build_shortcut (composer handles the vague case). Fixed 2026-05-24: detectBuildShortcutPattern desc now optional + RunShortcut guards against build verbs."),
+
+        // --- Calendar-event creation (2026-05-25) — device FM mis-routed these
+        // to delegate_local -> Ollama confabulated a "browser is down" excuse.
+        // CalendarEventUpgradeTier now forces native create_event; title-less
+        // utterances ask for a title first (free-text pending clarification).
+        .init("add a meeting today at 11 am", tool: "ask_clarification", note: "SCREENSHOT REPRO: title-less -> ask title (device FM routes to delegate_local; override catches). If device FM ever routes native_tool, create_event is also acceptable."),
+        .init("schedule a meeting an hour long for today at 11 am", tool: "ask_clarification", note: "SCREENSHOT REPRO: title-less -> ask title."),
+        .init("add a dentist appointment tomorrow at 2 pm", tool: "create_event", slotContains: "dentist", note: "title present (dentist appointment) -> create directly"),
+        .init("schedule a meeting called standup tomorrow at 3 pm", tool: "create_event", slotContains: "standup", note: "explicit 'called X' title -> create directly"),
+        .init("add a half an hour meeting today at 2pm called call Marco", tool: "create_event", slotContains: "call marco", note: "REGRESSION (device): title contains 'call' -> must NOT dial; NLU fast-path suppressed for calendar-creation commands."),
+        .init("add a half an hour meeting today at 2pm called sentire Marco", tool: "create_event", slotContains: "sentire marco", note: "explicit title with embedded name"),
+        .init("Call mamma", tool: "make_call", slotContains: "mamma", note: "REGRESSION (device): semantic make_call slot must strip the 'call' verb (was 'Call mamma' -> contact not found)."),
     ]
 
     static let bodyChecks: [(String, String)] = [

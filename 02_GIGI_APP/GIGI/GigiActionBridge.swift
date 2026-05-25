@@ -116,10 +116,13 @@ class GigiActionBridge {
             return await createRemindersFromIntent(intent)
 
         case "create_event":
+            let durMin = Int(intent.params["durationMinutes"] ?? "")
+                ?? GigiRequestRouter.parseDurationMinutes(intent.params["raw"] ?? "")
             return await createEvent(
                 title: intent.params["title"] ?? "Event",
                 date:  intent.params["date"]  ?? "today",
-                time:  intent.params["time"]  ?? "12:00"
+                time:  intent.params["time"]  ?? "12:00",
+                durationMinutes: durMin
             )
 
         case "navigate", "navigation":
@@ -2440,7 +2443,7 @@ class GigiActionBridge {
 
     // MARK: - Event (create)
 
-    func createEvent(title: String, date: String, time: String) async -> String {
+    func createEvent(title: String, date: String, time: String, durationMinutes: Int = 60) async -> String {
         // GATE 10.A polish — show banner immediately so the user gets visual
         // feedback that the event creation is in progress, before the
         // EventKit save + permission prompt.
@@ -2458,7 +2461,7 @@ class GigiActionBridge {
         event.calendar  = eventStore.defaultCalendarForNewEvents
         let startDate   = parseDateTime(date: date, time: time)
         event.startDate = startDate
-        event.endDate   = startDate.addingTimeInterval(3600)
+        event.endDate   = startDate.addingTimeInterval(TimeInterval(max(durationMinutes, 1) * 60))
 
         // Always add a 30-minute-before reminder so the user actually gets notified
         event.alarms = [EKAlarm(relativeOffset: -1800)]
@@ -2970,16 +2973,53 @@ class GigiActionBridge {
     }
 
     private func parseDateTime(date: String, time: String) -> Date {
-        var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-        let dateLower = date.lowercased()
-        if dateLower.contains("tomorrow") {
+        // Robust natural-language parse (2026-05-25). Accepts the raw utterance
+        // in either argument; combines them so "11am", "10:30 pm", "15:00",
+        // "at 3", weekday names and today/tonight/tomorrow all resolve.
+        let cal  = Calendar.current
+        var comps = cal.dateComponents([.year, .month, .day], from: Date())
+        let blob = (date + " " + time).lowercased()
+
+        // ── Day offset ───────────────────────────────────────────────────
+        if blob.contains("tomorrow") {
             comps.day = (comps.day ?? 0) + 1
+        } else if let r = blob.range(of: "in\\s+(\\d+)\\s+day", options: .regularExpression) {
+            let n = Int(blob[r].filter { $0.isNumber }) ?? 0
+            comps.day = (comps.day ?? 0) + n
+        } else {
+            let weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+            for (i, name) in weekdays.enumerated() where blob.contains(name) {
+                let target = i + 1                                   // Calendar: Sunday = 1
+                let todayWd = cal.component(.weekday, from: Date())
+                var delta = (target - todayWd + 7) % 7
+                if delta == 0 { delta = 7 }                          // "monday" = next monday
+                comps.day = (comps.day ?? 0) + delta
+                break
+            }
         }
-        if let colon = time.firstIndex(of: ":") {
-            comps.hour   = Int(time[..<colon]) ?? 12
-            comps.minute = Int(time[time.index(after: colon)...].prefix(2)) ?? 0
+
+        // ── Time of day ──────────────────────────────────────────────────
+        var hour = 12, minute = 0
+        if let m = blob.range(of: "(\\d{1,2})(:\\d{2})?\\s*[ap]\\.?m", options: .regularExpression) {
+            let token  = String(blob[m])
+            let digits = token.prefix { $0.isNumber || $0 == ":" }
+            let parts  = digits.split(separator: ":")
+            hour   = Int(parts.first ?? "12") ?? 12
+            minute = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+            let pm = token.contains("p")
+            if pm && hour < 12 { hour += 12 }
+            if !pm && hour == 12 { hour = 0 }                        // 12am = midnight
+        } else if let m = blob.range(of: "(\\d{1,2}):(\\d{2})", options: .regularExpression) {
+            let parts = String(blob[m]).split(separator: ":")
+            hour   = Int(parts[0]) ?? 12
+            minute = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+        } else if let m = blob.range(of: "(at|from|by)\\s+(\\d{1,2})", options: .regularExpression) {
+            let n = Int(String(blob[m]).filter { $0.isNumber }) ?? 12
+            hour = (n >= 1 && n <= 7) ? n + 12 : n                   // bare "at 3" → afternoon
         }
-        return Calendar.current.date(from: comps) ?? Date()
+        comps.hour   = hour
+        comps.minute = minute
+        return cal.date(from: comps) ?? Date()
     }
 }
 

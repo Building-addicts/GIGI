@@ -503,6 +503,7 @@ final class GigiAgentEngine {
     /// harness exercises the NLU layer (which sits between tier-0 and FM
     /// in `process`) instead of jumping straight to FM.
     static func nluFastPathProbe(for text: String) -> GigiIntent? {
+        if GigiRequestRouter.looksLikeCalendarCreationForFastPath(text) { return nil }
         let intent = GigiNLUEngine.shared.classify(text)
         guard intent.confidence >= 0.95,
               fastPathIntents.contains(intent.label) else { return nil }
@@ -623,6 +624,14 @@ final class GigiAgentEngine {
     }
 
     private func deterministicFastPath(for text: String) async -> AgentResult? {
+        // A calendar-creation COMMAND whose title embeds an action word
+        // ("add a meeting ... called call Marco") must NOT be grabbed by the
+        // NLU substring fast-path (it would dial Marco). Let it fall through to
+        // Apple FM + CalendarEventUpgradeTier.
+        if GigiRequestRouter.looksLikeCalendarCreationForFastPath(text) {
+            GigiDebugLogger.log("GIGI fast-path: SKIP — calendar-creation command (let FM/override handle)")
+            return nil
+        }
         let intent = GigiNLUEngine.shared.classify(text)
         guard intent.confidence >= 0.95,
               Self.fastPathIntents.contains(intent.label) else {
